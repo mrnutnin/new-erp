@@ -1,0 +1,9 @@
+@extends('Wms::layout')
+@section('title','ตั้งค่า Min/Max Stock | WMS')
+@section('content')
+<div class="container-fluid px-3 px-lg-4 py-4">
+    <div class="d-flex justify-content-between align-items-start mb-4"><div><p class="eyebrow mb-2">WMS / POLICY</p><h1 class="h3 mb-1">ตั้งค่า Min/Max Stock</h1><p class="text-secondary mb-0">กำหนดจุดต่ำสุด สูงสุด และจำนวนเติมสินค้าแยกตามคลังที่เลือก</p></div>@if(auth()->user()->hasPermission('wms.stock-policies.create'))<a class="btn btn-dark" href="{{route('wms.stock-policies.create')}}"><i class="bx bx-plus me-1" aria-hidden="true"></i>เพิ่มนโยบาย</a>@endif</div>
+    <div class="card border-0 shadow-sm"><div class="card-body p-4"><div class="table-responsive"><table class="table table-hover align-middle w-100" id="stock-policies-table" data-url="{{route('wms.stock-policies.data')}}"><thead><tr><th>สินค้า</th><th>คลัง</th><th>ต่ำสุด</th><th>สูงสุด</th><th>จำนวนเติม</th><th>สถานะ</th><th>จัดการ</th></tr></thead></table></div></div></div>
+</div>
+@endsection
+@push('scripts')<script>$(function(){var t=$('#stock-policies-table'),x=$.fn.dataTable.render.text();t.DataTable($.extend(true,{},window.erpDataTableDefaults,{ajax:t.data('url'),buttons:[window.erpExcelButton(t)],columns:[{data:'item_label',render:x.display},{data:'warehouse_label',render:x.display},{data:'min_quantity',render:x.display},{data:'max_quantity',render:x.display},{data:'reorder_quantity',render:x.display},{data:'status_label',render:x.display},{data:null,orderable:false,searchable:false,render:function(v,z,r){var h='';if(r.edit_url)h+='<a class="btn btn-sm btn-outline-dark me-1" href="'+x.display(r.edit_url)+'" title="แก้ไข"><i class="bx bx-edit-alt" aria-hidden="true"></i></a>';if(r.delete_url)h+='<button class="btn btn-sm btn-outline-danger" data-erp-delete="'+x.display(r.delete_url)+'" title="ลบ"><i class="bx bx-trash" aria-hidden="true"></i></button>';return h;}}]}));});</script>@endpush

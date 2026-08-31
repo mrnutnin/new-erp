@@ -1,0 +1,58 @@
+{
+    "bootstrap": {
+        "version": "5.3.8",
+        "source": "https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/",
+        "files": {
+            "bootstrap.min.css": "sha256-d85327d99c7a3ee1f9b5d0500d1370acea3ad2db39c163c2f51f232baedbdede",
+            "bootstrap.bundle.min.js": "sha256-e4fd49181388c48ec5040bd3fe66f57c29c8e67fcd8502b3354b96ec7ab47cc7"
+        }
+    },
+    "jquery": {
+        "version": "3.7.1",
+        "source": "https://cdn.jsdelivr.net/npm/jquery@3.7.1/dist/",
+        "files": {
+            "jquery-3.7.1.min.js": "sha256-fc9a93dd241f6b045cbff0481cf4e1901becd0e12fb45166a8f17f95823f0b1a"
+        }
+    },
+    "select2": {
+        "version": "4.0.13",
+        "source": "https://cdn.jsdelivr.net/npm/select2@4.0.13/dist/",
+        "files": {
+            "select2.min.css": "sha256-15d6ad4dfdb43d0affad683e70029f97a8f8fc8637a28845009ee0542dccdf81",
+            "select2.min.js": "sha256-00501810e93307a8882a74d864e7547fd1458deea539361dc1124ac133799a4b"
+        }
+    },
+    "datatables": {
+        "version": "2.3.5",
+        "buttons_version": "3.2.5",
+        "jszip_version": "3.10.1",
+        "source": "https://cdn.datatables.net/2.3.5/",
+        "buttons_source": "https://cdn.datatables.net/buttons/3.2.5/",
+        "jszip_source": "https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/",
+        "files": {
+            "dataTables.bootstrap5.min.css": "sha256-e09c415c34bb9f0fd050010a68a2760c57b43c3207453f23bf20e8e49895abb2",
+            "dataTables.min.js": "sha256-4ed9cba7221afc108f6a2c864848325ac5458b75e39462cc347a77aed80a6542",
+            "dataTables.bootstrap5.min.js": "sha256-5adfe8c7957aaec56ef0403aa9e1fcdf7165785f092c34bb55c9075ea660ddbc",
+            "buttons.bootstrap5.min.css": "sha256-29a082ee1c05aac8eac50e71a1861cde10144c352a289c7ae3ad8dd0e44439b7",
+            "dataTables.buttons.min.js": "sha256-99f8ab4ea1bfe1d463f6c5ad57a2783c569f5b0269be2acc6143edea063c453e",
+            "buttons.bootstrap5.min.js": "sha256-d1226be18a69c4cedce0014596e3cdfdb158a76c10a9ad1257aafdde24d959e1",
+            "jszip.min.js": "sha256-acc7e41455a80765b5fd9c7ee1b8078a6d160bbbca455aeae854de65c947d59e",
+            "buttons.html5.min.js": "sha256-2f280fd87f054531185b516cea01798cec9225693b3831b9a69968754ff6a2ed"
+        }
+    },
+    "sweetalert2": {
+        "version": "11.26.17",
+        "source": "https://cdn.jsdelivr.net/npm/sweetalert2@11.26.17/dist/",
+        "files": {
+            "sweetalert2.min.css": "sha256-56a05a8123da870ce3930f3f134280636dc098566e601c57e9feae543818d6b8",
+            "sweetalert2.all.min.js": "sha256-dece79c79aef9e61d79ea2e5320d2ff3f60eb1e68c35d89317a23f08ac5c4151"
+        }
+    },
+    "chartjs": {
+        "version": "4.5.1",
+        "source": "https://cdn.jsdelivr.net/npm/chart.js@4.5.1/dist/",
+        "files": {
+            "chart.umd.min.js": "sha256-48444a82d4edcb5bec0f1965faacdde18d9c17db3063d042abada2f705c9f54a"
+        }
+    }
+}

@@ -1,0 +1,5 @@
+<style>body{font-family:sans-serif;font-size:10.5pt;color:#20252b}table{width:100%;border-collapse:collapse}th,td{border:1px solid #b8c0ca;padding:6px;vertical-align:top}.right{text-align:right}</style>
+<h1>{{ $companyName }}</h1>
+<h2 style="text-align:center">ใบรับเงินล่วงหน้า</h2>
+<table><tr><td>เลขที่: <b>{{ $advanceDeposit->document_number }}</b></td><td>วันที่: {{ $advanceDeposit->document_date?->format($dateFormat) }}</td><td>สถานะ: {{ $advanceDeposit->status }}</td></tr><tr><td colspan="3">ลูกค้า: {{ $advanceDeposit->party?->code }} · {{ $advanceDeposit->party?->name }}<br>VAT: {{ $advanceDeposit->prices_include_vat ? 'ราคารวม VAT' : 'ไม่รวม VAT' }}</td></tr></table>
+<br><table><tr><th>ยอดรับ</th><th>หัก ณ ที่จ่าย</th><th>ยอดสุทธิ</th></tr><tr><td class="right">{{ number_format((float)$advanceDeposit->original_amount,2) }}</td><td class="right">{{ number_format((float)($advanceDeposit->withholding_amount ?? 0),2) }}</td><td class="right">{{ number_format((float)$advanceDeposit->original_amount-(float)($advanceDeposit->withholding_amount ?? 0),2) }}</td></tr></table>

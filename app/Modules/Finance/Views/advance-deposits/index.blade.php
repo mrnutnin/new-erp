@@ -1,0 +1,13 @@
+@extends('Finance::layout')
+@section('title', 'เงินล่วงหน้า / เงินมัดจำ | Finance')
+@section('content')
+<div class="container-fluid px-3 px-lg-4 py-4">
+    <p class="eyebrow mb-2">FINANCE / ADVANCE & DEPOSIT</p><h1 class="h3 mb-2">เงินล่วงหน้า / เงินมัดจำ</h1>
+    <p class="text-secondary mb-4">ดูรายการที่มาจาก Settlement ที่ลงบัญชีแล้ว และนำไปตัดกับเอกสารของคู่ค้าโดยไม่ใช้ AR/AP allocation โดยตรง</p>
+    <div class="alert alert-warning">หน้านี้ใช้สำหรับตรวจสอบและนำเงินล่วงหน้า/เงินมัดจำไปตัดเอกสารเท่านั้น การสร้างรายการเริ่มจาก Settlement ที่ลงบัญชีแล้ว และระบบจะเชื่อม Journal ให้โดยอัตโนมัติ</div>
+    <div class="card border-0 shadow-sm"><div class="card-body p-4"><div class="table-responsive"><table id="advance-deposits-table" class="table table-hover align-middle w-100" data-url="{{ route('finance.advance-deposits.data') }}"><thead><tr><th>เลขที่</th><th>ประเภท</th><th>ทิศทาง</th><th>คู่ค้า</th><th>วันที่ Post</th><th class="text-end">ยอดตั้งต้น</th><th class="text-end">ตัดแล้ว</th><th class="text-end">คงเหลือ</th><th>สถานะ</th><th>จัดการ</th></tr></thead></table></div></div></div>
+</div>
+@endsection
+@push('scripts')
+<script>$(function(){var $t=$('#advance-deposits-table'),text=$.fn.dataTable.render.text(),amount=$.fn.dataTable.render.number(',', '.', 2);$t.DataTable($.extend(true,{},window.erpDataTableDefaults,{ajax:$t.data('url'),order:[[4,'desc']],buttons:[window.erpExcelButton($t)],columns:[{data:'document_number',render:text.display},{data:'instrument_label',render:text.display},{data:'direction_label',render:text.display},{data:'party_label',render:text.display},{data:'posting_date_label',render:text.display},{data:'original_amount',className:'text-end',render:amount},{data:'applied_amount',className:'text-end',render:amount},{data:null,className:'text-end',render:function(v,type,r){var remain=(parseFloat(r.original_amount)||0)-(parseFloat(r.applied_amount)||0);return type==='display'?remain.toLocaleString('th-TH',{minimumFractionDigits:2,maximumFractionDigits:2}):remain;}},{data:'status_label',render:function(v,type,r){return type==='display'?'<span class="badge '+text.display(r.status_class||'app-status-neutral')+'">'+text.display(v)+'</span>':v;}},{data:null,orderable:false,searchable:false,className:'text-end text-nowrap',render:function(v,type,r){if(type!=='display')return '';var html='<a class="btn btn-sm btn-app-soft" href="'+text.display(r.show_url)+'" title="ดูรายละเอียด" aria-label="ดูรายละเอียด"><i class="bx bx-show" aria-hidden="true"></i></a>';if(r.apply_url)html+=' <a class="btn btn-sm btn-app-soft" href="'+text.display(r.apply_url)+'" title="ตัดกับเอกสาร" aria-label="ตัดกับเอกสาร"><i class="bx bx-link" aria-hidden="true"></i></a>';return html;}}] }));});</script>
+@endpush
