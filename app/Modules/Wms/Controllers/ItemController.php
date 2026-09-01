@@ -4,6 +4,7 @@ namespace App\Modules\Wms\Controllers;
 
 use App\Http\Controllers\Controller;
 use App\Modules\Accounting\Models\Account;
+use App\Modules\Asset\Models\AssetCategory;
 use App\Modules\Platform\Services\AuditLogger;
 use App\Modules\Wms\Models\Item;
 use App\Modules\Wms\Models\ItemCategory;
@@ -25,7 +26,7 @@ class ItemController extends Controller
 
     public function data(): JsonResponse
     {
-        return DataTables::eloquent(Item::query()->with(['category', 'baseUom']))->addColumn('category_label', fn ($r) => $r->category?->code.' · '.$r->category?->name)->addColumn('base_uom_label', fn ($r) => $r->baseUom?->code.' · '.$r->baseUom?->name ?: $r->base_uom)->addColumn('status_label', fn ($r) => $r->is_active ? 'ใช้งาน' : 'ปิดใช้งาน')->addColumn('edit_url', fn ($r) => auth()->user()->hasPermission('wms.items.update') ? route('wms.items.edit', $r) : null)->toJson();
+        return DataTables::eloquent(Item::query()->with(['category', 'baseUom', 'defaultAssetCategory']))->addColumn('category_label', fn ($r) => $r->category?->code.' · '.$r->category?->name)->addColumn('base_uom_label', fn ($r) => $r->baseUom?->code.' · '.$r->baseUom?->name ?: $r->base_uom)->addColumn('asset_capitalization_label', fn ($r) => $r->is_asset_capitalizable ? 'ได้ · '.($r->defaultAssetCategory?->name ?? '-') : 'ไม่ได้')->addColumn('status_label', fn ($r) => $r->is_active ? 'ใช้งาน' : 'ปิดใช้งาน')->addColumn('edit_url', fn ($r) => auth()->user()->hasPermission('wms.items.update') ? route('wms.items.edit', $r) : null)->toJson();
     }
 
     public function categoryOptions(Request $request): JsonResponse
@@ -44,6 +45,14 @@ class ItemController extends Controller
         $rows = Account::query()->join('account_types', 'account_types.id', '=', 'accounts.account_type_id')->whereIn('account_types.code', $codes)->where('accounts.is_active', true)->where('accounts.is_postable', true)->whereNull('accounts.control_account_type')->when($q, fn ($x) => $x->where(fn ($y) => $y->where('accounts.code', 'like', "%$q%")->orWhere('accounts.name', 'like', "%$q%")))->orderBy('accounts.code')->forPage(max(1, $request->integer('page', 1)), 31)->get(['accounts.id', 'accounts.code', 'accounts.name']);
 
         return response()->json(['results' => $rows->take(30)->map(fn ($r) => ['id' => $r->id, 'text' => $r->code.' · '.$r->name])->values(), 'pagination' => ['more' => $rows->count() > 30]]);
+    }
+
+    public function assetCategoryOptions(Request $request): JsonResponse
+    {
+        $q = trim((string) $request->input('q'));
+        $rows = AssetCategory::query()->where('is_active', true)->when($q, fn ($query) => $query->where(fn ($nested) => $nested->where('code', 'like', "%{$q}%")->orWhere('name', 'like', "%{$q}%")))->orderBy('code')->forPage(max(1, $request->integer('page', 1)), 31)->get();
+
+        return response()->json(['results' => $rows->take(30)->map(fn ($row) => ['id' => $row->id, 'text' => $row->code.' · '.$row->name])->values(), 'pagination' => ['more' => $rows->count() > 30]]);
     }
 
     public function uomOptions(Request $request): JsonResponse
@@ -113,6 +122,7 @@ class ItemController extends Controller
             'item' => $item,
             'selectedCategory' => $item->category_id ? ItemCategory::query()->find($item->category_id) : null,
             'selectedUom' => $item->base_uom_id ? Uom::query()->find($item->base_uom_id) : null,
+            'selectedAssetCategory' => $item->default_asset_category_id ? AssetCategory::query()->find($item->default_asset_category_id) : null,
             'accounts' => Account::query()->whereKey(collect([$item->inventory_account_id, $item->sales_account_id, $item->cogs_account_id])->filter())->get(['id', 'code', 'name'])->keyBy('id'),
         ];
     }

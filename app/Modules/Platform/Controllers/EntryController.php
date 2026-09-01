@@ -26,6 +26,7 @@ class EntryController extends Controller
 
         return redirect()->route($selection->nextRoute(
             $program?->id,
+            $program?->requires_branch ?? true,
             $program?->requires_warehouse ?? true,
             $request->session()->get('selected_branch_id'),
             $this->canonicalEntryRoute($program?->code, $program?->entry_route ?? 'dashboard'),

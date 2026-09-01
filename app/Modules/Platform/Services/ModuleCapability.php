@@ -9,6 +9,8 @@ final class ModuleCapability
 {
     public const PRODUCTION = 'production';
 
+    public const ASSET = 'asset';
+
     public function __construct(private readonly GlobalSettings $settings) {}
 
     public function businessProfile(): string
@@ -20,16 +22,20 @@ final class ModuleCapability
 
     public function isEnabled(string $module): bool
     {
-        if ($module !== self::PRODUCTION) {
-            throw new InvalidArgumentException("Unknown module capability [{$module}].");
-        }
-
-        return $this->businessProfile() === 'MANUFACTURING'
-            && $this->settings->value('production_enabled') === true;
+        return match ($module) {
+            self::PRODUCTION => $this->businessProfile() === 'MANUFACTURING'
+                && $this->settings->value('production_enabled') === true,
+            self::ASSET => $this->settings->value('asset_enabled') === true,
+            default => throw new InvalidArgumentException("Unknown module capability [{$module}]."),
+        };
     }
 
     public function isProgramAvailable(string $program): bool
     {
-        return $program === self::PRODUCTION ? $this->isEnabled(self::PRODUCTION) : true;
+        return match ($program) {
+            self::PRODUCTION => $this->isEnabled(self::PRODUCTION),
+            self::ASSET => $this->isEnabled(self::ASSET),
+            default => true,
+        };
     }
 }

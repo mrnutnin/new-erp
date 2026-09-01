@@ -46,15 +46,15 @@ class DatabaseSeeder extends Seeder
         ]);
 
         $programs = collect([
-            ['code' => 'settings', 'name' => 'Global Setting', 'description' => 'ตั้งค่าระบบและข้อมูลบริษัท', 'requires_warehouse' => false, 'entry_route' => 'settings.index'],
-            ['code' => 'wms', 'name' => 'Purchasing', 'description' => 'บริหารจัดซื้อ', 'requires_warehouse' => true, 'entry_route' => 'purchasing.index'],
-            ['code' => 'inventory', 'name' => 'WMS', 'description' => 'บริหารคลังสินค้าและสต็อก', 'requires_warehouse' => true, 'entry_route' => 'wms.index'],
-            ['code' => 'pos', 'name' => 'POS', 'description' => 'ขายและคำสั่งซื้อ', 'requires_warehouse' => true, 'entry_route' => 'pos.index'],
-            ['code' => 'production', 'name' => 'Production', 'description' => 'บริหารการผลิต', 'requires_warehouse' => true, 'entry_route' => 'dashboard'],
-            ['code' => 'finance', 'name' => 'Finance', 'description' => 'บริหารการเงิน', 'requires_warehouse' => true, 'entry_route' => 'finance.index'],
-            ['code' => 'accounting', 'name' => 'Accounting', 'description' => 'บัญชีและรายงานการเงิน', 'requires_warehouse' => true, 'entry_route' => 'accounting.index'],
-            ['code' => 'logistics', 'name' => 'Logistics', 'description' => 'บริหารการขนส่ง', 'requires_warehouse' => true, 'entry_route' => 'dashboard'],
-            ['code' => 'asset', 'name' => 'Asset', 'description' => 'บริหารสินทรัพย์', 'requires_warehouse' => true, 'entry_route' => 'dashboard'],
+            ['code' => 'settings', 'name' => 'Global Setting', 'description' => 'ตั้งค่าระบบและข้อมูลบริษัท', 'requires_branch' => false, 'requires_warehouse' => false, 'entry_route' => 'settings.index'],
+            ['code' => 'wms', 'name' => 'Purchasing', 'description' => 'บริหารจัดซื้อ', 'requires_branch' => true, 'requires_warehouse' => true, 'entry_route' => 'purchasing.index'],
+            ['code' => 'inventory', 'name' => 'WMS', 'description' => 'บริหารคลังสินค้าและสต็อก', 'requires_branch' => true, 'requires_warehouse' => true, 'entry_route' => 'wms.index'],
+            ['code' => 'pos', 'name' => 'POS', 'description' => 'ขายและคำสั่งซื้อ', 'requires_branch' => true, 'requires_warehouse' => true, 'entry_route' => 'pos.index'],
+            ['code' => 'production', 'name' => 'Production', 'description' => 'บริหารการผลิต', 'requires_branch' => true, 'requires_warehouse' => true, 'entry_route' => 'dashboard'],
+            ['code' => 'finance', 'name' => 'Finance', 'description' => 'บริหารการเงิน', 'requires_branch' => true, 'requires_warehouse' => true, 'entry_route' => 'finance.index'],
+            ['code' => 'accounting', 'name' => 'Accounting', 'description' => 'บัญชีและรายงานการเงิน', 'requires_branch' => true, 'requires_warehouse' => true, 'entry_route' => 'accounting.index'],
+            ['code' => 'logistics', 'name' => 'Logistics', 'description' => 'บริหารการขนส่ง', 'requires_branch' => true, 'requires_warehouse' => true, 'entry_route' => 'dashboard'],
+            ['code' => 'asset', 'name' => 'Asset', 'description' => 'บริหารสินทรัพย์', 'requires_branch' => true, 'requires_warehouse' => false, 'entry_route' => 'asset.index'],
         ])->map(function (array $attributes, int $index) {
             return Program::query()->updateOrCreate(['code' => $attributes['code']], [
                 ...$attributes,
@@ -161,6 +161,18 @@ class DatabaseSeeder extends Seeder
             'effective_from' => now()->toDateString(),
             'updated_by' => $user->id,
         ])->refresh();
+
+        foreach ([
+            ['ASSET_REGISTER', 'รหัสสินทรัพย์', 'FA'], ['ASSET_CAPITALIZATION', 'ใบรับรู้สินทรัพย์', 'AC'],
+            ['ASSET_TRANSFER', 'ใบโอน/ย้ายสินทรัพย์', 'AT'], ['ASSET_COUNT', 'ใบตรวจนับสินทรัพย์', 'FC'],
+            ['ASSET_MAINTENANCE', 'ใบแจ้งซ่อมสินทรัพย์', 'MR'], ['ASSET_DEPRECIATION', 'ชุดคำนวณค่าเสื่อม', 'DP'],
+            ['ASSET_IMPAIRMENT', 'ใบบันทึกด้อยค่าสินทรัพย์', 'IM'], ['ASSET_DISPOSAL', 'ใบจำหน่าย/ตัดออก', 'AD'],
+        ] as [$type, $name, $prefix]) {
+            DocumentSequence::query()->updateOrCreate(['warehouse_id' => null, 'document_type' => $type], [
+                'name' => $name, 'prefix' => $prefix, 'number_format' => '{PREFIX}{BRANCH}{YYMM}{NUMBER:6}',
+                'reset_rule' => 'MONTHLY', 'next_number' => 1, 'is_active' => true, 'number_reuse_policy' => 'NEVER_REUSE', 'created_by' => $user->id,
+            ]);
+        }
 
         DB::table('company_setting_versions')->insertOrIgnore([
             'company_setting_id' => $setting->id,

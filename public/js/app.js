@@ -33,6 +33,16 @@
         });
     }
 
+    window.erpAjaxError = function (xhr) {
+        var response = (xhr && xhr.responseJSON) || {};
+
+        return Swal.fire({
+            icon: 'error',
+            title: 'ไม่สามารถดำเนินการได้',
+            text: response.msg || response.message || 'กรุณาลองใหม่'
+        });
+    };
+
     window.erpAjaxForm = function (options) {
         var settings = $.extend({
             form: null,

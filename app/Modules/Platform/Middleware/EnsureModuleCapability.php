@@ -18,7 +18,8 @@ final class EnsureModuleCapability
             return $next($request);
         }
 
-        $message = 'ยังไม่ได้เปิดใช้โมดูลนี้สำหรับประเภทธุรกิจของบริษัท กรุณาติดต่อผู้ดูแลระบบเพื่อเปิดใช้งาน Production';
+        $label = $module === ModuleCapability::ASSET ? 'Asset' : 'Production';
+        $message = "ยังไม่ได้เปิดใช้โมดูล {$label} สำหรับบริษัท กรุณาติดต่อผู้ดูแลระบบเพื่อเปิดใช้งาน";
 
         if ($request->expectsJson()) {
             return new JsonResponse(['status' => false, 'msg' => $message], 403);

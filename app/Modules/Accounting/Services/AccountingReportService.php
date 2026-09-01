@@ -66,15 +66,18 @@ class AccountingReportService
             ->first();
     }
 
-    public function generalLedgerQuery(FiscalPeriod $period, Warehouse|array $warehouse, int $accountId): Builder
+    public function generalLedgerQuery(FiscalPeriod $period, Warehouse|array $warehouse, ?int $accountId = null, ?int $assetBranchId = null): Builder
     {
         return JournalEntryLine::query()
             ->join('journal_entries as entries', 'entries.id', '=', 'journal_entry_lines.journal_entry_id')
             ->join('journal_books as books', 'books.id', '=', 'entries.journal_book_id')
             ->join('accounts', 'accounts.id', '=', 'journal_entry_lines.account_id')
-            ->whereIn('entries.warehouse_id', $this->warehouseIds($warehouse))
+            ->when($assetBranchId !== null,
+                fn ($query) => $query->whereNull('entries.warehouse_id')->where('entries.branch_id', $assetBranchId)->where('entries.source_type', 'ASSET'),
+                fn ($query) => $query->whereIn('entries.warehouse_id', $this->warehouseIds($warehouse)),
+            )
             ->where('entries.status', 'POSTED')
-            ->where('journal_entry_lines.account_id', $accountId)
+            ->when($accountId, fn ($query) => $query->where('journal_entry_lines.account_id', $accountId))
             ->whereBetween('entries.entry_date', [$period->start_date, $period->end_date])
             ->select([
                 'journal_entry_lines.id',
@@ -87,6 +90,8 @@ class AccountingReportService
                 'journal_entry_lines.description as line_description',
                 'journal_entry_lines.subledger_type',
                 'journal_entry_lines.subledger_id',
+                'accounts.code as account_code',
+                'accounts.name as account_name',
                 'journal_entry_lines.debit',
                 'journal_entry_lines.credit',
             ])
@@ -95,13 +100,16 @@ class AccountingReportService
             ->orderBy('journal_entry_lines.line_number');
     }
 
-    public function generalLedgerSummary(FiscalPeriod $period, Warehouse|array $warehouse, int $accountId): object
+    public function generalLedgerSummary(FiscalPeriod $period, Warehouse|array $warehouse, ?int $accountId = null, ?int $assetBranchId = null): object
     {
         $base = DB::table('journal_entry_lines as lines')
             ->join('journal_entries as entries', 'entries.id', '=', 'lines.journal_entry_id')
-            ->whereIn('entries.warehouse_id', $this->warehouseIds($warehouse))
+            ->when($assetBranchId !== null,
+                fn ($query) => $query->whereNull('entries.warehouse_id')->where('entries.branch_id', $assetBranchId)->where('entries.source_type', 'ASSET'),
+                fn ($query) => $query->whereIn('entries.warehouse_id', $this->warehouseIds($warehouse)),
+            )
             ->where('entries.status', 'POSTED')
-            ->where('lines.account_id', $accountId);
+            ->when($accountId, fn ($query) => $query->where('lines.account_id', $accountId));
         $opening = (clone $base)->where('entries.entry_date', '<', $period->start_date)->selectRaw('COALESCE(SUM(lines.debit - lines.credit), 0) AS balance')->value('balance');
         $movement = (clone $base)->whereBetween('entries.entry_date', [$period->start_date, $period->end_date])->selectRaw('COALESCE(SUM(lines.debit), 0) AS debit, COALESCE(SUM(lines.credit), 0) AS credit')->first();
         $opening = (string) ($opening ?? '0.00');

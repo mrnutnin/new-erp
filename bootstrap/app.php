@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Middleware\EnsurePermission;
+use App\Modules\Platform\Middleware\EnsureBranchSelected;
 use App\Modules\Platform\Middleware\EnsureModuleCapability;
 use App\Modules\Platform\Middleware\EnsureProgramSelected;
 use App\Modules\Platform\Middleware\EnsureWarehouseSelected;
@@ -18,6 +19,7 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->alias([
             'permission' => EnsurePermission::class,
             'program' => EnsureProgramSelected::class,
+            'branch' => EnsureBranchSelected::class,
             'capability' => EnsureModuleCapability::class,
             'warehouse' => EnsureWarehouseSelected::class,
         ]);

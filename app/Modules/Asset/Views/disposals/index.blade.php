@@ -1,0 +1,23 @@
+@extends('Asset::layout')
+@section('title', 'จำหน่ายสินทรัพย์ | New ERP')
+@section('content')
+<div class="container-fluid px-3 px-lg-4 py-4">
+    <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-end gap-3 mb-4">
+        <div><p class="eyebrow mb-2">ASSET / DISPOSAL</p><h1 class="h3 mb-1">จำหน่ายสินทรัพย์</h1><p class="text-secondary mb-0">ขายหรือตัดจำหน่ายสินทรัพย์ พร้อมคำนวณกำไรหรือขาดทุน</p></div>
+        @if(auth()->user()->hasPermission('asset.disposals.create'))<a class="btn btn-dark" href="{{ route('asset.disposals.create') }}"><i class="bx bx-plus me-1" aria-hidden="true"></i>สร้างเอกสาร</a>@endif
+    </div>
+    <div class="card border-0 shadow-sm mb-4"><div class="card-body p-4"><h2 class="h6 mb-3">ตัวกรอง</h2><div class="row g-3 align-items-end">
+        <div class="col-12 col-md-3"><label class="form-label" for="disposal-filter-status">สถานะ</label><select class="form-select" id="disposal-filter-status"><option value="">ทุกสถานะ</option><option value="DRAFT">ร่าง</option><option value="SUBMITTED">รออนุมัติ</option><option value="APPROVED">อนุมัติแล้ว</option><option value="POSTED">ลงบัญชีแล้ว</option><option value="CANCELLED">ยกเลิก</option></select></div>
+        <div class="col-12 col-md-3"><label class="form-label" for="disposal-filter-type">ประเภท</label><select class="form-select" id="disposal-filter-type"><option value="">ทุกประเภท</option><option value="SALE">ขาย</option><option value="WRITE_OFF">ตัดจำหน่าย</option></select></div>
+        <div class="col-12 col-md-3"><label class="form-label" for="disposal-filter-from">วันที่ตั้งแต่</label><input class="form-control" id="disposal-filter-from" type="date"></div>
+        <div class="col-12 col-md-3"><label class="form-label" for="disposal-filter-to">วันที่ถึง</label><input class="form-control" id="disposal-filter-to" type="date"></div>
+        <div class="col-12 col-md-3 ms-auto"><button class="btn btn-outline-secondary w-100" id="disposal-filter-reset" type="button"><i class="bx bx-reset me-1" aria-hidden="true"></i>ล้างตัวกรอง</button></div>
+    </div></div></div>
+    <div class="card border-0 shadow-sm"><div class="card-body p-4"><div class="table-responsive"><table class="table table-hover align-middle w-100" id="disposals-table" data-url="{{ route('asset.disposals.data') }}"><thead class="table-light"><tr><th>เลขที่เอกสาร</th><th>วันที่</th><th>ประเภท</th><th>รายการ</th><th class="text-end">เงินรับ</th><th>สถานะ</th><th class="text-end">จัดการ</th></tr></thead></table></div></div></div>
+</div>
+@endsection
+@push('scripts')
+<script>
+$(function () { var $table=$('#disposals-table'), text=$.fn.dataTable.render.text(), labels={DRAFT:'ร่าง',SUBMITTED:'รออนุมัติ',APPROVED:'อนุมัติแล้ว',POSTED:'ลงบัญชีแล้ว',CANCELLED:'ยกเลิก'}, badges={DRAFT:'app-badge-soft',SUBMITTED:'app-badge-info',APPROVED:'app-badge-info',POSTED:'app-badge-success',CANCELLED:'app-status-danger'}, types={SALE:'ขาย',WRITE_OFF:'ตัดจำหน่าย'}, money=function(v){return Number(v||0).toLocaleString('th-TH',{minimumFractionDigits:2,maximumFractionDigits:2});}; var table=$table.DataTable($.extend(true,{},window.erpDataTableDefaults,{ajax:{url:$table.data('url'),data:function(d){d.status=$('#disposal-filter-status').val();d.disposal_type=$('#disposal-filter-type').val();d.disposal_date_from=$('#disposal-filter-from').val();d.disposal_date_to=$('#disposal-filter-to').val();}},order:[[1,'desc']],buttons:[window.erpExcelButton($table)],columns:[{data:'document_number',render:text.display},{data:'disposal_date',name:'disposal_date',render:function(v,t){if(t!=='display')return v;return v?String(v).slice(0,10).split('-').reverse().join('/'):'-';}},{data:'disposal_type',render:function(v,t){return t==='display'?text.display(types[v]||v):v;}},{data:'lines_count',render:text.display},{data:'proceeds',className:'text-end',render:function(v,t){return t==='display'?money(v):v;}},{data:'status',render:function(v,t){return t==='display'?'<span class="badge '+(badges[v]||'app-status-neutral')+'">'+text.display(labels[v]||v)+'</span>':v;}},{data:'show_url',orderable:false,searchable:false,className:'text-end',render:function(v,t){return t==='display'?'<a class="btn btn-sm btn-outline-dark" href="'+text.display(v)+'">ดูรายละเอียด</a>':'';}}]})); $('#disposal-filter-status,#disposal-filter-type,#disposal-filter-from,#disposal-filter-to').on('change',function(){table.ajax.reload();}); $('#disposal-filter-reset').on('click',function(){$('#disposal-filter-status,#disposal-filter-type,#disposal-filter-from,#disposal-filter-to').val('');table.ajax.reload();}); });
+</script>
+@endpush

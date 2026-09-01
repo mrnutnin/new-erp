@@ -26,6 +26,12 @@ final class PostingEvent
         'production.material_issue' => 'GENERAL',
         'production.finished_receipt' => 'GENERAL',
         'asset.depreciation' => 'GENERAL',
+        'asset.capitalization' => 'GENERAL',
+        'asset.addition' => 'GENERAL',
+        'asset.impairment' => 'GENERAL',
+        'asset.disposal' => 'GENERAL',
+        'asset.write_off' => 'GENERAL',
+        'asset.branch_transfer' => 'GENERAL',
         'accounting.period_adjustment' => 'GENERAL',
     ];
 

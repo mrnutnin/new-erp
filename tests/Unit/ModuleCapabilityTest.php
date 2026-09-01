@@ -59,6 +59,17 @@ class ModuleCapabilityTest extends TestCase
         $this->assertFalse($capability->isProgramAvailable('production'));
     }
 
+    public function test_asset_requires_explicit_enablement(): void
+    {
+        $settings = Mockery::mock(GlobalSettings::class);
+        $settings->shouldReceive('value')->with('asset_enabled')->andReturn(true);
+
+        $capability = new ModuleCapability($settings);
+
+        $this->assertTrue($capability->isEnabled(ModuleCapability::ASSET));
+        $this->assertTrue($capability->isProgramAvailable('asset'));
+    }
+
     public function test_unknown_capability_is_rejected(): void
     {
         $settings = Mockery::mock(GlobalSettings::class);

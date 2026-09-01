@@ -51,4 +51,9 @@ class SettingRegistryTest extends TestCase
 
         (new SettingRegistry)->definition('unknown');
     }
+
+    public function test_asset_depreciation_defaults_to_daily_proration(): void
+    {
+        self::assertSame('DAILY', (new SettingRegistry)->definition('asset_depreciation_proration')['default']);
+    }
 }

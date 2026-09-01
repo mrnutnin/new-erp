@@ -14,6 +14,7 @@ class Program extends Model
         'code',
         'name',
         'description',
+        'requires_branch',
         'requires_warehouse',
         'entry_route',
         'is_enabled',
@@ -23,6 +24,7 @@ class Program extends Model
     protected function casts(): array
     {
         return [
+            'requires_branch' => 'boolean',
             'requires_warehouse' => 'boolean',
             'is_enabled' => 'boolean',
         ];

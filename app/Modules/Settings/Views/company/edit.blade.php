@@ -182,6 +182,20 @@
                             </div>
 
                             <hr class="my-4">
+                            <h2 class="h5 mb-3">สินทรัพย์</h2>
+                            <div class="row g-3">
+                                <div class="col-12 col-md-6">
+                                    <label class="form-label" for="asset_depreciation_proration">วิธีปันส่วนค่าเสื่อม <span class="text-danger">*</span></label>
+                                    <select class="form-select" id="asset_depreciation_proration" name="asset_depreciation_proration" required @disabled(! $canUpdate)>
+                                        <option value="DAILY" @selected(old('asset_depreciation_proration', $setting->asset_depreciation_proration ?? 'DAILY') === 'DAILY')>รายวัน (แนะนำ)</option>
+                                        <option value="FULL_MONTH" @selected(old('asset_depreciation_proration', $setting->asset_depreciation_proration) === 'FULL_MONTH')>เต็มเดือน</option>
+                                    </select>
+                                    <div class="form-text">ระบบ snapshot ค่านี้ในชุดคำนวณแล้ว การเปลี่ยนภายหลังจึงไม่กระทบเอกสารเดิม</div>
+                                    <div class="invalid-feedback" data-error-for="asset_depreciation_proration"></div>
+                                </div>
+                            </div>
+
+                            <hr class="my-4">
                             <h2 class="h5 mb-3">การเก็บข้อมูลและการมีผล</h2>
                             <div class="row g-3">
                                 <div class="col-12 col-md-6">

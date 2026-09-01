@@ -7,6 +7,7 @@ Artisan::command('inspire', function () {
     $this->comment(Inspiring::quote());
 })->purpose('Display an inspiring quote');
 use App\Models\User;
+use App\Modules\Asset\Models\AssetMaintenanceSchedule;
 use App\Modules\Wms\Jobs\DispatchPendingInventoryRecost;
 use App\Modules\Wms\Models\CostAllocation;
 use App\Modules\Wms\Services\CostAllocationReviewService;
@@ -85,3 +86,12 @@ Schedule::job(new DispatchPendingInventoryRecost(100))
     ->everyFiveMinutes()
     ->withoutOverlapping()
     ->onOneServer();
+
+Artisan::command('asset:maintenance-alerts', function (): void {
+    $today = today();
+    $schedules = AssetMaintenanceSchedule::query()->where('is_active', true)->whereDate('next_due_date', '<=', $today->copy()->addDays(7))->get();
+    $schedules->each(fn (AssetMaintenanceSchedule $schedule) => $schedule->update(['last_alerted_at' => now()]));
+    $this->info("Maintenance alerts: {$schedules->count()}");
+})->purpose('บันทึกการตรวจแผนบำรุงรักษาที่ใกล้ครบกำหนดหรือเกินกำหนด โดยไม่สร้างใบแจ้งซ่อม');
+
+Schedule::command('asset:maintenance-alerts')->dailyAt('08:00')->withoutOverlapping()->onOneServer();

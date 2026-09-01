@@ -57,12 +57,11 @@ class AccountingReportController extends Controller
     public function generalLedgerIndex(AccountingReportService $reports): View
     {
         $selectedAccountId = (int) request('account_id');
+        $assetScope = request()->boolean('asset_scope');
 
         return view('Accounting::reports.general-ledger', [
             'periods' => $reports->periods(),
-            'selectedAccount' => $selectedAccountId > 0
-                ? Account::query()->withTrashed()->find($selectedAccountId)
-                : Account::query()->withTrashed()->orderBy('code')->first(),
+            'selectedAccount' => $selectedAccountId > 0 ? Account::query()->withTrashed()->find($selectedAccountId) : null,
         ]);
     }
 
@@ -91,12 +90,10 @@ class AccountingReportController extends Controller
     public function generalLedgerData(Request $request, AccountingReportService $reports, GlobalSettings $settings): JsonResponse
     {
         $period = $this->period($request);
-        $accountId = (int) $request->input('account_id');
-        if ($accountId < 1) {
-            throw ValidationException::withMessages(['account_id' => 'กรุณาเลือกบัญชี']);
-        }
+        $accountId = $request->integer('account_id') ?: null;
         $warehouseIds = $this->authorizedWarehouseIds($request);
-        $query = $reports->generalLedgerQuery($period, $warehouseIds, $accountId);
+        $assetBranchId = $request->boolean('asset_scope') ? (int) $request->attributes->get('selectedBranch')->id : null;
+        $query = $reports->generalLedgerQuery($period, $warehouseIds, $accountId, $assetBranchId);
 
         $dateFormat = (string) $settings->value('date_format');
 
@@ -105,18 +102,18 @@ class AccountingReportController extends Controller
             ->order(fn (Builder $query) => $this->applyLedgerOrder($query, $request))
             ->addColumn('entry_date_label', fn ($line) => Carbon::parse($line->entry_date)->format($dateFormat))
             ->addColumn('entry_url', fn ($line) => route('accounting.journal-entries.show', $line->journal_entry_id))
-            ->with('summary', $reports->generalLedgerSummary($period, $warehouseIds, $accountId))
+            ->with('summary', $reports->generalLedgerSummary($period, $warehouseIds, $accountId, $assetBranchId))
             ->toJson();
     }
 
     public function generalLedgerExport(Request $request, AccountingReportService $reports, GlobalSettings $settings): StreamedResponse
     {
         $period = $this->period($request);
-        $accountId = (int) $request->input('account_id');
-        if ($accountId < 1) {
-            throw ValidationException::withMessages(['account_id' => 'กรุณาเลือกบัญชี']);
-        }
+        $accountId = $request->integer('account_id') ?: null;
         $query = $reports->generalLedgerQuery($period, $this->authorizedWarehouseIds($request), $accountId);
+        if ($request->boolean('asset_scope')) {
+            $query = $reports->generalLedgerQuery($period, $this->authorizedWarehouseIds($request), $accountId, (int) $request->attributes->get('selectedBranch')->id);
+        }
         $this->applyLedgerSearch($query, $request);
         $this->applyLedgerOrder($query, $request);
 
@@ -124,10 +121,10 @@ class AccountingReportController extends Controller
 
         return response()->streamDownload(function () use ($query, $dateFormat) {
             echo $this->workbookStart('General Ledger');
-            echo $this->excelRow(['วันที่', 'เลขที่', 'สมุด', 'เอกสารอ้างอิง', 'คำอธิบาย', 'Subledger', 'เดบิต', 'เครดิต']);
+            echo $this->excelRow(['วันที่', 'เลขที่', 'สมุด', 'บัญชี', 'เอกสารอ้างอิง', 'คำอธิบาย', 'Subledger', 'เดบิต', 'เครดิต']);
             foreach ($query->lazy(500) as $line) {
                 echo $this->excelRow([
-                    Carbon::parse($line->entry_date)->format($dateFormat), $line->entry_number, $line->book_code,
+                    Carbon::parse($line->entry_date)->format($dateFormat), $line->entry_number, $line->book_code, $line->account_code.' · '.$line->account_name,
                     $line->source_reference, $line->entry_description ?: $line->line_description,
                     $line->subledger_type && $line->subledger_id ? $line->subledger_type.' · '.$line->subledger_id : '',
                     $line->debit, $line->credit,

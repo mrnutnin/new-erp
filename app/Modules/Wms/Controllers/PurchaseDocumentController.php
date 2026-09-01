@@ -535,6 +535,7 @@ class PurchaseDocumentController extends Controller
     {
         abort_unless((bool) config('erp.inventory.purchase_posting_enabled', false), 404);
         $document = $this->scoped($request, $purchaseDocument);
+        abort_unless($this->isInventoryPurchase($document->load(['lines.item', 'lines.receiptAllocations'])), 404);
         $before = $this->auditValues($document->load('lines'));
         $warehouse = Warehouse::query()->whereKey($document->warehouse_id)->firstOrFail();
         $posted = $adapter->post($document, $warehouse, $request->user(), null, (bool) config('erp.inventory.purchase_posting_enabled', false), $request->validated('posting_date'));

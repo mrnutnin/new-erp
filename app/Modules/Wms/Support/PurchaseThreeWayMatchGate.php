@@ -44,10 +44,11 @@ final class PurchaseThreeWayMatchGate
     public function previewWithPolicy(PurchaseDocument $document, PurchaseThreeWayMatchPolicy $policy): ?array
     {
         $document->loadMissing([
+            'lines.item:id,item_type',
             'lines.purchaseOrderLine.purchaseOrder.lines',
             'lines.receiptAllocations.goodsReceiptLine.goodsReceipt.lines',
         ]);
-        if (! $document->lines->contains(fn ($line): bool => (int) $line->item_id > 0)) {
+        if (! $document->lines->contains(fn ($line): bool => $line->item?->item_type === 'GOODS')) {
             return null;
         }
 

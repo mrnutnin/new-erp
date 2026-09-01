@@ -115,6 +115,10 @@
 
 typed mapping foundation ถูกเพิ่มใน Account Mapping แล้ว และต้องตั้งค่าให้ครบก่อนเปิด posting route:
 
+#### แผนมาตรฐานการตั้งค่าการลงบัญชีตาม Feature (Posting Configuration Plan)
+
+แผนกลางถูกแยกไว้ใน [12-feature-posting-configuration-plan.md](12-feature-posting-configuration-plan.md) เพื่อให้ทุก Module ใช้มาตรฐานเดียวกัน โดยยังไม่เริ่ม implementation จนกว่า Owner จะอนุมัติ
+
 `InventoryCostPostingContract` และ `InventoryCostPostingService` ทำหน้าที่ dry-run ตรวจ event, allocation type/direction, final cost status และ mapping ที่ต้องใช้ พร้อมสร้าง payload ที่เรียง allocation/line แบบ deterministic และ `posting_hash` สำหรับตรวจ retry โดยยังไม่สร้าง Journal เพื่อให้ทดสอบ readiness ก่อนเปิด posting จริง ทุกครั้งต้องส่ง `allocation_ids[]` แบบ explicit; ห้าม scan แล้วเดา allocation
 
 ในรอบนี้ `sales_cogs` และ `inventory.adjustment` สร้างได้เฉพาะ preview line ที่ resolve mapping ครบ ส่วน `inventory.receipt` ยังหยุดที่ source-account gate (เพราะใบซื้อเป็นเจ้าของ Dr Inventory/Cr AP) และ `inventory.recost` ยังหยุดจนกว่าจะมี typed revaluation mapping กับ reversal contract ครบ

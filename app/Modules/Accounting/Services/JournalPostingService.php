@@ -2,6 +2,7 @@
 
 namespace App\Modules\Accounting\Services;
 
+use App\Models\Branch;
 use App\Models\CompanySetting;
 use App\Models\User;
 use App\Models\Warehouse;
@@ -23,7 +24,7 @@ class JournalPostingService
 
     public function post(array $attributes, Warehouse $warehouse, ?User $actor = null): JournalEntry
     {
-        return DB::transaction(fn (): JournalEntry => $this->postWithinTransaction($attributes, $warehouse, $actor), 3);
+        return $this->postForBranch($attributes, $warehouse->branch, $warehouse, $actor);
     }
 
     /**
@@ -31,7 +32,22 @@ class JournalPostingService
      */
     public function postWithinTransaction(array $attributes, Warehouse $warehouse, ?User $actor = null): JournalEntry
     {
-        $posting = $this->normalize($this->validatePosting($attributes), $warehouse);
+        return $this->postForBranchWithinTransaction($attributes, $warehouse->branch, $warehouse, $actor);
+    }
+
+    public function postForBranch(array $attributes, Branch $branch, ?Warehouse $warehouse = null, ?User $actor = null): JournalEntry
+    {
+        return DB::transaction(fn (): JournalEntry => $this->postForBranchWithinTransaction($attributes, $branch, $warehouse, $actor), 3);
+    }
+
+    /** Join an existing outer transaction for a branch-scoped event. */
+    public function postForBranchWithinTransaction(array $attributes, Branch $branch, ?Warehouse $warehouse = null, ?User $actor = null): JournalEntry
+    {
+        if ($warehouse !== null && $warehouse->branch_id !== $branch->id) {
+            throw ValidationException::withMessages(['warehouse_id' => 'คลังต้องอยู่ในสาขาเดียวกับรายการบัญชี']);
+        }
+
+        $posting = $this->normalize($this->validatePosting($attributes), $branch, $warehouse);
         $key = PostingIdentity::key($posting['source_type'], $posting['event_code'], $posting['source_id']);
         $hash = PostingIdentity::fingerprint($posting);
 
@@ -86,8 +102,8 @@ class JournalPostingService
         $entry = JournalEntry::query()->create([
             'journal_book_id' => $book->id,
             'fiscal_period_id' => $period->id,
-            'branch_id' => $warehouse->branch_id,
-            'warehouse_id' => $warehouse->id,
+            'branch_id' => $branch->id,
+            'warehouse_id' => $warehouse?->id,
             'sequence_number' => $sequence,
             'entry_number' => sprintf('%s-%s-%06d', $book->sequence_prefix, str_replace('-', '', substr($posting['entry_date'], 0, 7)), $sequence),
             'entry_date' => $posting['entry_date'],
@@ -183,7 +199,8 @@ class JournalPostingService
             'entry_date' => ['required', 'date_format:Y-m-d'],
             'document_date' => ['nullable', 'date_format:Y-m-d'],
             'description' => ['required', 'string', 'max:500'],
-            'lines' => ['required', 'array', 'min:2', 'max:100'],
+            // A depreciation run retains one subledger line per Asset when its account is controlled.
+            'lines' => ['required', 'array', 'min:2', 'max:2000'],
             'lines.*.account_id' => ['required', 'integer', 'min:1'],
             'lines.*.tax_code_id' => ['nullable', 'integer', 'exists:tax_codes,id'],
             'lines.*.subledger_type' => ['nullable', 'string', 'max:30', 'regex:/^[A-Z][A-Z0-9_]*$/'],
@@ -198,12 +215,12 @@ class JournalPostingService
         ])->validate();
     }
 
-    private function normalize(array $posting, Warehouse $warehouse): array
+    private function normalize(array $posting, Branch $branch, ?Warehouse $warehouse): array
     {
         $posting['source_reference'] = trim((string) ($posting['source_reference'] ?? '')) ?: null;
         $posting['document_date'] ??= null;
-        $posting['warehouse_id'] = $warehouse->id;
-        $posting['branch_id'] = $warehouse->branch_id;
+        $posting['warehouse_id'] = $warehouse?->id;
+        $posting['branch_id'] = $branch->id;
         $posting['lines'] = collect($posting['lines'])->map(function (array $line, int $index) {
             $line = [
                 'account_id' => (int) $line['account_id'],

@@ -29,8 +29,63 @@ final class PeriodCloseGate
         }
 
         self::appendInventoryFailures($failures, $period);
+        self::appendAssetFailures($failures, $period);
 
         return $failures;
+    }
+
+    /**
+     * Asset documents are subledger work in progress until they are posted (or
+     * explicitly cancelled/reversed). Keep this gate schema-aware so an
+     * installation can migrate Accounting before Asset without breaking close.
+     */
+    private static function appendAssetFailures(array &$failures, FiscalPeriod $period): void
+    {
+        if (Schema::hasTable('asset_depreciation_runs')) {
+            $pendingRuns = DB::table('asset_depreciation_runs')
+                ->whereBetween('run_through_date', [$period->start_date, $period->end_date])
+                ->whereIn('status', ['DRAFT', 'SUBMITTED', 'APPROVED'])
+                ->count();
+            if ($pendingRuns > 0) {
+                $failures[] = "มี Asset depreciation run ที่ยังไม่ Post {$pendingRuns} รายการ — ไปที่ Asset > ค่าเสื่อมราคา ตรวจอนุมัติ/Post หรือยกเลิกก่อนปิดงวด";
+            }
+
+            $unlinkedPostedRuns = DB::table('asset_depreciation_runs')
+                ->whereBetween('run_through_date', [$period->start_date, $period->end_date])
+                ->where('book_type', 'BOOK')
+                ->where('status', 'POSTED')->whereNull('journal_entry_id')->count();
+            if ($unlinkedPostedRuns > 0) {
+                $failures[] = "มี Asset depreciation run ที่สถานะ POSTED แต่ยังไม่ผูก Journal {$unlinkedPostedRuns} รายการ — ตรวจ Asset > ค่าเสื่อมราคา และ Journal linkage ก่อนปิดงวด";
+            }
+        }
+
+        self::appendAssetDocumentFailures($failures, $period, 'asset_impairments', 'assessment_date', 'Impairment', 'ด้อยค่า');
+        self::appendAssetDocumentFailures($failures, $period, 'asset_disposals', 'disposal_date', 'Disposal', 'จำหน่าย/ตัดออก');
+    }
+
+    private static function appendAssetDocumentFailures(
+        array &$failures,
+        FiscalPeriod $period,
+        string $table,
+        string $dateColumn,
+        string $label,
+        string $menuLabel,
+    ): void {
+        if (! Schema::hasTable($table)) {
+            return;
+        }
+
+        $pending = DB::table($table)->whereBetween($dateColumn, [$period->start_date, $period->end_date])
+            ->whereIn('status', ['DRAFT', 'SUBMITTED', 'APPROVED'])->count();
+        if ($pending > 0) {
+            $failures[] = "มีเอกสาร Asset {$label} ที่ยังไม่ Post {$pending} รายการ — ไปที่ Asset > {$menuLabel} ตรวจอนุมัติ/Post หรือยกเลิกก่อนปิดงวด";
+        }
+
+        $unlinked = DB::table($table)->whereBetween($dateColumn, [$period->start_date, $period->end_date])
+            ->where('status', 'POSTED')->whereNull('journal_entry_id')->count();
+        if ($unlinked > 0) {
+            $failures[] = "มีเอกสาร Asset {$label} สถานะ POSTED แต่ยังไม่ผูก Journal {$unlinked} รายการ — ตรวจเอกสารและ Journal linkage ก่อนปิดงวด";
+        }
     }
 
     private static function appendInventoryFailures(array &$failures, FiscalPeriod $period): void

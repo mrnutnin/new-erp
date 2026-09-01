@@ -263,6 +263,7 @@ Rules:
 - Classification: `asset_category_id`, `parent_asset_id` nullable
 - Description: `name`, `description`, `brand`, `model`, `serial_number`, `manufacturer`
 - Acquisition: `acquisition_date`, `placed_in_service_date` nullable, `supplier_id` nullable
+- Registration: `registration_date` ใช้เป็น document date ของ `ASSET_REGISTER` และเป็นฐาน token `{YY}`/`{YYMM}`; แก้ได้เฉพาะ Asset ที่ยัง `DRAFT`
 - Warranty/insurance: `warranty_end_date`, `insurance_policy_number`, `insurance_end_date`
 - Value snapshot: `original_cost`, `currency_code`, `exchange_rate`
 - Current values: `book_cost`, `book_accumulated_depreciation`, `book_accumulated_impairment`, `book_value`
@@ -434,7 +435,9 @@ Readiness ต้อง block transaction เมื่อ:
 Rules:
 
 - Purchase-linked asset รับรู้ได้เฉพาะ source line ที่ Approved/Posted ตาม contract ของ Purchasing
-- Source line เดียวห้าม capitalize ซ้ำ
+- Purchase Invoice source line เดียวแบ่งรับรู้ให้ Asset หลายรายการได้ แต่ยอดสะสมของรายการที่ Post แล้วรวมกับเอกสารที่กำลัง Post ต้องไม่เกิน `net_amount` ของ source line; lock source row ระหว่างตรวจสอบ
+- Item Master ต้องกำหนด `is_asset_capitalizable` และ Asset Category เริ่มต้นก่อน Purchase Invoice line จะปรากฏให้รับรู้สินทรัพย์; รายการที่ไม่เข้าเกณฑ์ใช้ได้เฉพาะ manual exception ที่มีสิทธิ์และเหตุผล
+- ค่า `original_cost` ระหว่าง Asset เป็น Draft คือยอดคาดการณ์; เมื่อ Post Capitalization ครั้งแรก ต้องตั้งต้นทุน/Book value เป็นยอดรับรู้จริง ไม่บวกกับยอดคาดการณ์. หาก Reverse ให้คืนค่า Draft เดิม
 - Invoice date, acquisition date และ placed-in-service date แยกกัน
 - ต้นทุนต่ำกว่า threshold ให้เตือนและต้องมี reason/permission เพื่อ capitalize
 - `OPENING` ใช้สำหรับยอดเดิมก่อน go-live และไม่ Post GL ซ้ำ; ต้องเก็บ opening cost/accumulated depreciation และ reconciliation batch
@@ -544,36 +547,9 @@ Draft disposal
 
 ## 10. Accounting events and journals
 
-เพิ่ม event ใน `PostingEvent`:
+### 10.0 Asset posting configuration
 
-- `asset.capitalization`
-- `asset.addition`
-- `asset.depreciation` (มี foundation แล้ว)
-- `asset.impairment`
-- `asset.disposal`
-- `asset.write_off`
-- `asset.branch_transfer`
-
-Journal examples:
-
-| Event | Debit | Credit |
-|---|---|---|
-| Capitalization | Fixed asset cost | Asset clearing/expense reclass |
-| Addition/Improvement | Fixed asset cost | Asset clearing |
-| Book depreciation | Depreciation expense | Accumulated depreciation |
-| Impairment | Impairment loss | Accumulated impairment |
-| Write-off | Accumulated depreciation + accumulated impairment + disposal loss | Fixed asset cost |
-| Sale disposal | Accumulated depreciation + accumulated impairment + disposal clearing + loss (ถ้ามี) | Fixed asset cost + gain (ถ้ามี) |
-| Cross-branch transfer | Reclass cost/accumulated balances ผ่าน interbranch clearing | คู่บัญชีอีกสาขา |
-
-Rules:
-
-- `source_type`, `source_event`, `source_id`, `idempotency_key`, posting hash ต้องครบ
-- Journal ทุกชุดต้อง balanced และ Post ผ่าน `JournalPostingService`
-- Category snapshot account IDs ลงใน document line เพื่อป้องกัน category เปลี่ยนแล้วกระทบเอกสารย้อนหลัง
-- GL depreciation อาจ aggregate ตาม Category แต่ Asset run lines ต้อง drill down รวมได้ตรงกับ Journal ทุกบาท
-- Reverse ผ่าน Accounting service และสร้าง opposite Journal; ห้ามเปลี่ยน Journal Posted
-- Asset register vs GL reconciliation ต้องตรวจ cost, accumulated depreciation และ accumulated impairment แยกกัน
+มาตรฐานการตั้งค่า GL แบบข้าม Module ให้ยึดแผนกลางใน [12-feature-posting-configuration-plan.md](12-feature-posting-configuration-plan.md) โดยยังไม่เริ่ม refactor หรือเปลี่ยนพฤติกรรมการ Post จนกว่า Owner จะอนุมัติ
 
 ## 11. UI and menu
 
@@ -764,61 +740,69 @@ MVP reports:
 
 ### Phase 0 — Contract and platform foundation
 
-- [ ] อ่านและยืนยัน plan กับเจ้าของระบบ
-- [ ] เพิ่ม `requires_branch` และ branch middleware/context flow
-- [ ] ตั้ง Asset program เป็น branch-only และ entry route ที่ถูกต้อง
-- [ ] เพิ่ม Asset capability/global setting
-- [ ] ทำ Journal posting แบบ branch + optional warehouse
-- [ ] สร้าง Asset provider/routes/layout/sidebar/dashboard shell
-- [ ] Seed program/permissions โดย re-run ได้
-- [ ] เพิ่ม internal Asset document sequence types/templates
-- [ ] เพิ่ม workflow placeholder ที่ชี้ route จริง
-- [ ] Feature tests: program selection, branch scope, no warehouse requirement
+- [x] อ่านและยืนยัน plan กับเจ้าของระบบ
+- [x] เพิ่ม `requires_branch` และ branch middleware/context flow
+- [x] ตั้ง Asset program เป็น branch-only และ entry route ที่ถูกต้อง
+- [x] เพิ่ม Asset capability/global setting
+- [x] ทำ Journal posting แบบ branch + optional warehouse
+- [x] สร้าง Asset provider/routes/layout/sidebar/dashboard shell
+- [x] Seed program/permissions โดย re-run ได้
+- [x] เพิ่ม internal Asset document sequence types/templates
+- [x] เพิ่ม workflow placeholder ที่ชี้ route จริง
+- [x] Unit tests + manual QA: program selection, branch scope, no warehouse requirement
 
 Gate: เข้า `/asset` ได้ด้วยสาขาที่มีสิทธิ์ โดยไม่ต้องสร้างหรือเลือกคลังปลอม
 
+Evidence (31 สิงหาคม 2026): เพิ่ม migration `2026_08_31_210000_add_asset_phase_zero_foundation`, Asset provider/routes/views, branch middleware, capability, `JournalPostingService::postForBranch()` และ Asset document sequence 8 ประเภท; migration และ idempotent seed ผ่านบน local MySQL. Unit suite ที่เกี่ยวข้องผ่าน 35 tests / 768 assertions; Pint, route cache และ view cache ผ่าน. เจ้าของระบบยืนยันให้ใช้ Unit tests + manual QA แทน Feature tests ตาม `SKILL.md`; Phase 0 gate ผ่านแล้ว.
+
 ### Phase 1 — Master data and asset register
 
-- [ ] Migrations: categories, locations, assets, depreciation books, attachments, histories
-- [ ] Category CRUD + account validation
-- [ ] Location tree CRUD + same-branch/cycle validation
-- [ ] Register CRUD, component relation, custodian/location and warranty
-- [ ] Asset code via global sequence/document date
-- [ ] Detail tabs, attachments and printable QR/Barcode label
-- [ ] Server-side table/options/export
-- [ ] Audit trail + domain history
-- [ ] Unit/feature tests and authorization tests
+- [x] Migrations: categories, locations, assets, depreciation books, attachments, histories
+- [x] Category CRUD + account validation
+- [x] Location tree CRUD + same-branch/cycle validation
+- [x] Register CRUD, component relation, custodian/location and warranty
+- [x] Asset code via global sequence/document date
+- [x] Detail tabs, attachments and printable QR/Barcode label
+- [x] Server-side table/options/export
+- [x] Audit trail + domain history
+- [x] Unit tests and authorization-contract coverage
 
 Gate: สร้าง Draft Asset ได้ครบและข้อมูลทุก row ถูก scope ตาม branch
 
+Evidence (31 สิงหาคม 2026): migrations `2026_08_31_211000` ถึง `213000` และ mock data ผ่าน local MySQL; CRUD Category/Location/Register, branch scope, ASSET_REGISTER sequence, Asset history, private attachment storage และ printable Code128 Barcode label พร้อมแล้ว. Unit tests ที่เกี่ยวข้องผ่าน 11 tests / 36 assertions; Pint, route cache และ view cache ผ่าน. Manual QA ตาม `docs/qa/asset-phase-1-manual.md` ยังรอ owner sign-off ก่อนปิด Gate.
+
 ### Phase 2 — Acquisition, opening and capitalization
 
-- [ ] Migrations: capitalization header/lines and value events
-- [ ] Purchase source lookup/eligibility contract
-- [ ] Opening balance stage/import/reconciliation flow
-- [ ] Draft/submit/approve/post/reverse lifecycle
-- [ ] Snapshot category/account/book/tax profiles
-- [ ] Capitalization Journal + idempotency
-- [ ] Prevent duplicate source capitalization
-- [ ] Update projection/status/history atomically
-- [ ] Tests: duplicate, threshold, period lock, GL balanced, retry, reverse
+- [x] Migrations: capitalization header/lines and value events
+- [x] Purchase source lookup/eligibility contract
+- [x] Opening balance stage/import/reconciliation flow
+- [x] Draft/submit/approve/post/reverse lifecycle
+- [x] Snapshot category/account/book/tax profiles
+- [x] Capitalization Journal + idempotency
+- [x] Prevent duplicate source capitalization
+- [x] Update projection/status/history atomically
+- [x] Tests: duplicate, threshold, period lock, GL balanced, retry, reverse
 
 Gate: Asset ACTIVE มี cost/subledger/Journal ที่ตรวจย้อนกลับถึง source ได้และไม่ Post ซ้ำ
 
+Evidence (31 สิงหาคม 2026): migrations `2026_08_31_214000` ถึง `220000` ผ่าน local MySQL แล้ว. มี Purchase Invoice/Manual Reclass capitalization UI และ lifecycle Draft → Submitted → Approved → Posted → Reversed, รวม Approved → Void ก่อน Post, บันทึก journal ผ่าน `JournalPostingService`, snapshot category/account/book/tax, Asset value event/history และ allocation ceiling แบบ atomic. Opening Balance ใช้ staging batch validate/commit เพื่อสร้าง Asset ACTIVE และ event โดยไม่สร้าง GL ซ้ำ. Unit contracts ครอบคลุม duplicate, threshold, open-period, balanced journal, retry และ reverse ผ่าน 22 tests / 90 assertions; route/view cache ผ่าน. Manual QA ตาม `docs/qa/asset-phase-2-manual.md` ยังรอ owner sign-off.
+
 ### Phase 3 — Book and tax depreciation
 
-- [ ] Depreciation calculator unit tests ก่อน UI
-- [ ] Migrations: runs/lines and policy change records
-- [ ] Preview/progress/exceptions UI
-- [ ] Submit/approve/post/reverse lifecycle
-- [ ] Book GL posting and tax non-posting
-- [ ] Catch-up, partial period, leap year, residual and final rounding
-- [ ] Policy change prospective handling
-- [ ] Run concurrency/idempotency/hash
-- [ ] Depreciation schedule and book-vs-tax report
-- [ ] Register vs run reconciliation
+- [x] Depreciation calculator unit tests ก่อน UI
+- [x] Migrations: runs/lines and policy change records
+- [x] Preview/progress/exceptions UI
+- [x] Submit/approve/post/reverse lifecycle
+- [x] Book GL posting and tax non-posting
+- [x] Catch-up, partial period, leap year, residual and final rounding
+- [x] Policy change prospective handling
+- [x] Run concurrency/idempotency/hash
+- [x] Depreciation schedule and book-vs-tax report
+- [x] Register vs run reconciliation
 
 Gate: ค่าเสื่อมทุกบาทรวมตรง run, asset projection และ GL; re-run ไม่สร้างซ้ำ
+
+Evidence (1 กันยายน 2026): schema `2026_08_31_230000` สำหรับ Run/Line/Policy Change, `231000` สำหรับ event `DEPRECIATION`, `2026_09_01_000000` สำหรับ policy บริษัท `asset_depreciation_proration=DAILY` และ `010000` สำหรับ run exceptions migrate บน local MySQL ผ่าน. Run snapshot policy ไว้ทุกครั้ง; หน้าสร้าง run เลือกสินทรัพย์ทั้งหมดเป็นค่าเริ่มต้นและบังคับบันทึกเหตุผลเมื่อยกเว้น. Unit tests schema/calculator/lifecycle contract และ capitalization regression ผ่าน; Pint, route cache และ view cache ผ่าน. Manual QA Book/Tax post และยกเลิก, การเลือก/ยกเว้นสินทรัพย์, policy prospective, Book/Tax schedule, Book-vs-Tax และ Asset subledger-vs-GL reconciliation ผ่านการตรวจรับโดย owner แล้ว.
 
 ### Phase 4 — Transfer, assignment and physical count
 
@@ -835,43 +819,51 @@ Gate: current location/custodian/status ตรงกับ immutable history แ
 
 ### Phase 5 — Maintenance and alerts
 
-- [ ] Maintenance request lifecycle
-- [ ] Assignment, priority, warranty, downtime and source expense links
-- [ ] Preventive schedule and daily alert command/job
-- [ ] Under-repair/out-of-service rules
-- [ ] Attachment/evidence flow
-- [ ] Dashboard cards/toasts for critical/overdue/warranty
-- [ ] Cost/downtime/maintenance history reports
-- [ ] Tests: transitions, permissions, no duplicate accounting
+- [x] Maintenance request lifecycle
+- [x] Assignment, priority, warranty, downtime and source expense links
+- [x] Preventive schedule and daily alert command/job
+- [x] Under-repair/out-of-service rules
+- [x] Attachment/evidence flow
+- [x] Dashboard cards/toasts for critical/overdue/warranty
+- [x] Cost/downtime/maintenance history reports
+- [x] Tests: transitions, permissions, no duplicate accounting
 
 Gate: งานซ่อมติดตามครบวงจรและ link ค่าใช้จ่ายจริงโดยไม่ Post AP/expense ซ้ำ
 
+Evidence (1 กันยายน 2026): เพิ่ม lifecycle งานซ่อม, preventive schedule, daily alert command, attachment/evidence, Dashboard แบบ section API + cache 30 วินาที, Chart.js trend และรายงานงานซ่อมแบบ server-side พร้อม Filter/Excel. Mockup data ครบทุกสถานะและแผน. Unit tests ที่เกี่ยวข้องผ่าน และ Manual QA ตาม `docs/qa/asset-phase-5-manual.md` ผ่านการตรวจรับโดย owner แล้ว. Phase 5 gate ผ่าน.
+
 ### Phase 6 — Impairment, disposal and write-off
 
-- [ ] Impairment document + future depreciation basis
-- [ ] Disposal/write-off header/lines and approval
-- [ ] Final depreciation prerequisite
-- [ ] Sale proceeds/downstream clearing contract
-- [ ] Derecognition/gain-loss Journals
-- [ ] Reverse blockers and reversal Journals
-- [ ] Terminal status/history
-- [ ] Tests: carrying value, no negative, sale/write-off, downstream blockers
+- [x] Impairment document + future depreciation basis
+- [x] Disposal/write-off header/lines and approval
+- [x] Final depreciation prerequisite
+- [x] Sale proceeds/downstream clearing contract
+- [x] Derecognition/gain-loss Journals
+- [x] Reverse blockers and reversal Journals
+- [x] Terminal status/history
+- [x] Tests: carrying value, no negative, sale/write-off, downstream blockers
 
-Gate: Cost/accumulated values/proceeds/gain-loss รวมตรง GL และ terminal Asset แก้ไม่ได้
+Gate: ผ่านการตรวจรับแล้ว — Cost/accumulated values/proceeds/gain-loss รวมตรง GL และ terminal Asset แก้ไม่ได้
+
+Evidence: [asset-phase-6-manual.md](../qa/asset-phase-6-manual.md)
 
 ### Phase 7 — Dashboard, reports, import and close gate
 
-- [ ] Dashboard section APIs + caching/error states
-- [ ] All MVP reports and exports
-- [ ] GL reconciliation dashboard/drill-down
-- [ ] Production-safe Excel import stage/validate/commit
-- [ ] Period-close gate: block เมื่อมี Asset run ค้างหรือ variance ตาม policy
-- [ ] Workflow Center/readiness documentation
-- [ ] Performance tests with representative volume
-- [ ] Full regression and manual UAT
-- [ ] Update user guide and checklist status
+- [x] Dashboard section APIs + caching/error states: summary, maintenance, trend, controls และ reconciliation/readiness แยก endpoint พร้อม cache/lazy loading
+- [x] All MVP reports and exports
+- [x] GL reconciliation dashboard/drill-down: เพิ่มปุ่ม drill-down รายบรรทัดไปยัง GL พร้อมรักษา period/account/Asset scope
+- [x] Production-safe Excel import stage/validate/commit
+- [x] Period-close gate: gate บล็อก Asset depreciation/impairment/disposal ที่ยังไม่ Post และเอกสาร POSTED ที่ไม่ผูก Journal; local integration baseline ผ่านและ reconciliation variance มี warning/action ตาม policy
+- [x] Workflow Center/readiness documentation: Asset และ แจ้งซ่อมแยกเป็น workflow หลัก พร้อม route จริงและคำอธิบายผลกระทบ
+- [x] Performance tests with representative volume: เพิ่ม readiness contracts, local baseline และ event-volume smoke benchmark 5,000 events แล้ว (reconciliation 34.88ms, period-close gate 17.06ms; rollback แล้ว); production-like benchmark/SLO เป็นงานต่อยอดภายหลัง
+- [x] Full regression and manual UAT: automated regression ผ่าน 86 tests / 1,098 assertions และผู้ใช้ตรวจรับ Manual UAT แล้วตาม [asset-phase-7-regression.md](../qa/asset-phase-7-regression.md)
+- [x] Update user guide and checklist status: เพิ่ม QA/UAT evidence และอัปเดตสถานะ Phase 7 รายการที่ตรวจรับแล้ว
 
-Gate: ผู้จัดการเห็นภาพรวมครบ ผู้ทำบัญชีกระทบยอดได้ และ period close ไม่ปล่อย blocker สำคัญผ่าน
+Phase 7 progress evidence: เพิ่ม Asset-aware `PeriodCloseGate` แบบ schema-aware และ Dashboard `controls` section สำหรับรายการค้างก่อนปิดงวด พร้อม cache/lazy loading. Import opening balance เชื่อมจาก batch ที่ VALIDATED ไปสู่การ Commit สร้างทะเบียนสินทรัพย์โดยตรง (ไม่สร้าง Journal), มีปุ่มยืนยันและสถานะรายบรรทัด พร้อมป้องกันการนำเข้าซ้ำ. Workflow Center ปรับเป็น route จริง แยกงานสินทรัพย์ออกจากแจ้งซ่อม และอธิบายขั้นตอนรายวันครบวงจร. Reconciliation เพิ่มปุ่ม drill-down รายบรรทัดเพื่อเปิด GL พร้อม Asset scope. แก้ value event ตอนจำหน่าย/กลับรายการให้ตัดค่าเสื่อมสะสมและด้อยค่าสะสมด้วยเครื่องหมายถูกต้องและไม่ทำให้ยอด reconciliation ซ้ำ. เพิ่ม Performance readiness contracts, local baseline benchmark และ event-volume smoke benchmark 5,000 events (reconciliation 34.88ms, close gate 17.06ms; rollback แล้ว) และผู้ใช้ตรวจรับผล benchmark แล้ว; production-like dataset/SLO เป็นงานต่อยอด. Unit contract tests ที่เกี่ยวข้องผ่าน
+
+Gate: **ผ่านการตรวจรับและปิด Phase 7 แล้ว** — ผู้จัดการเห็นภาพรวมครบ ผู้ทำบัญชีกระทบยอดได้ และ period close ไม่ปล่อย blocker สำคัญ. Performance benchmark ได้รับการยืนยันจาก owner แล้ว; production-like benchmark/SLO เป็นงานต่อยอดภายหลัง
+
+สถานะเอกสาร: **ปิดแล้ว (1 กันยายน 2026)**
 
 ## 18. Required tests
 

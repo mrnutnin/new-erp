@@ -18,7 +18,7 @@ class ChangePurchaseDocumentStatusRequest extends FormRequest
 
     public function rules(): array
     {
-        $isApprove = $this->routeIs('wms.purchase-documents.approve');
+        $isApprove = $this->routeIs('wms.purchase-documents.approve', 'purchasing.purchase-documents.approve');
 
         return ['reason' => [$isApprove ? 'nullable' : 'required', 'string', $isApprove ? 'max:500' : 'min:10', 'max:500']];
     }

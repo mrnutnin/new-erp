@@ -265,6 +265,8 @@ MVP ยังไม่ถือว่าเสร็จหากแต่ละ�
 - เพิ่มสีสันแบบ subtle accent ได้เล็กน้อยใน badge, status, icon และปุ่มรอง เพื่อให้หน้าจอมีชีวิตชีวาคล้ายแนวทางเว็บธุรกิจสมัยใหม่ เช่น Soft Steel แต่ไม่เปลี่ยนระบบเป็นโทนจัดหรือ dashboard สีเข้ม
 - สี accent กลางให้ใช้ชุด semantic เดียวกัน: `primary` น้ำเงิน/indigo สำหรับ action หลัก, `success` เขียวสำหรับสำเร็จ/ใช้งาน, `warning` amber สำหรับรอตรวจสอบ/soft close, `danger` แดงสำหรับผิดพลาด/ลบ, `info` ฟ้าอมเขียวสำหรับข้อมูล และ `neutral` เทาสำหรับปิดใช้งาน
 - ปุ่มหลักใช้สี accent ได้หนึ่งจุดต่อกลุ่ม action; ปุ่มรองใช้ outline/neutral เป็นหลัก และ badge ต้องมีข้อความชัดเจนพร้อม contrast ที่อ่านได้บนพื้นขาว
+- ลำดับปุ่มของเอกสาร/Workflow ให้เรียงจากซ้ายไปขวาเป็น **การดำเนินการหลัก** (เช่น อนุมัติ/ลงบัญชี/บันทึก) → **การดำเนินการทำลายหรือยกเลิก** → **กลับ/รายการทั้งหมด**; ปุ่มหลักอยู่ด้านขวาของกลุ่ม action เมื่อ layout หรือ responsive order ทำให้ต้องจัดกลุ่มใหม่ และเอกสาร Posted ใช้เฉพาะปุ่ม Reversal/เอกสารแก้ไขตาม contract
+- ปุ่ม `primary` ใช้กับ next action ที่ระบบคาดหวัง, `success` ใช้กับการอนุมัติ/เสร็จสิ้น, `dark` ใช้กับการลงบัญชีหรือ action สำคัญ, `outline-danger` ใช้กับยกเลิก/ลบ/กลับรายการ, และ `outline-dark/secondary` ใช้กับกลับหรือรายการทั้งหมด; หนึ่งกลุ่มมี primary action เด่นได้เพียงหนึ่งปุ่ม
 - Badge ทุก Module ต้องเป็น pastel/soft fill ตาม semantic color (ประมาณฟ้าอ่อน เทาอ่อน แดงอ่อน เขียวอ่อน เหลืองอ่อน ม่วง/ชมพูอ่อนเมื่อมี semantic เพิ่ม), ตัวอักษรต้องเข้มพออ่านง่าย, ห้ามใช้พื้นสีเข้มจัด/neon/gradient และห้ามกำหนดสีเฉพาะหน้าแทน shared tokens
 - ชื่อคลาส Bootstrap เดิม เช่น `text-bg-success`, `text-bg-warning`, `text-bg-danger`, `text-bg-info`, `text-bg-secondary` และ `text-bg-dark` ใช้ได้เฉพาะเพื่อ compatibility; shared CSS ต้อง map ไปยัง pastel token เดียวกับ `app-status-success/warning/danger/info/neutral/primary` เสมอ
 - ห้ามใส่ gradient, glow, สี neon หรือสีสุ่มรายหน้า; สีใหม่ต้องเพิ่มที่ shared design token/component ใน `public/css/app.css` และใช้ซ้ำได้หลาย module
@@ -272,6 +274,7 @@ MVP ยังไม่ถือว่าเสร็จหากแต่ละ�
 - layout เดียวสำหรับทุก module: sidebar, topbar, breadcrumb, page actions และ content
 - app shell และ component ของระบบเน้นขาว ดำ เทากลาง เรียบง่าย และใช้ border radius กลางชุดเดียวให้ card, form control, button, modal และ container ดูโค้งมนสม่ำเสมอ; library widget คง appearance จาก stylesheet ทางการ
 - table ต้องอ่านง่าย มี filter, pagination, sticky action เมื่อเหมาะสม และ responsive fallback
+- หน้าที่มี Filter ต้องวาง Filter ไว้ใน card แยกจาก card ตาราง/รายงานเสมอ และมีปุ่ม `ล้างตัวกรอง` ที่ล้างค่าทุก field (รวม Select2/AJAX select) แล้ว reload ข้อมูลโดยไม่ reinitialize DataTable; ปุ่มล้างใช้ `outline-secondary` และอยู่ท้ายแถว Filter
 - form แบ่ง section สั้น ๆ, label ชัด, error ใกล้ field และ keyboard accessible
 - form control ทุกหน้าต้องมี readable minimum width ตามชนิดข้อมูล: searchable select/บัญชี GL, คำอธิบาย, จำนวนเงิน, Tax และวันที่ห้ามถูกบีบจนอ่านไม่ออก; ตารางฟอร์มที่มีหลายคอลัมน์ให้ใช้ horizontal scroll/responsive wrapper แทนการลดขนาด input ต่ำกว่าที่ใช้งานได้ และใช้ shared CSS utility ไม่เขียน inline style ซ้ำรายหน้า
 - document status และ primary action ต้องอยู่ตำแหน่งสม่ำเสมอ

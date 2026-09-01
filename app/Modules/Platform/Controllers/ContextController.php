@@ -54,6 +54,7 @@ class ContextController extends Controller
 
         $redirect = route($selection->nextRoute(
             $program->id,
+            $program->requires_branch,
             $program->requires_warehouse,
             $branch?->id,
             $this->canonicalEntryRoute($program->code, $program->entry_route),
@@ -93,6 +94,7 @@ class ContextController extends Controller
         $program = $request->attributes->get('selectedProgram');
         $redirect = route($selection->nextRoute(
             $program->id,
+            $program->requires_branch,
             $program->requires_warehouse,
             $branch->id,
             $this->canonicalEntryRoute($program->code, $program->entry_route),

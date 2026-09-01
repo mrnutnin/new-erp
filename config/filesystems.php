@@ -15,6 +15,9 @@ return [
 
     'default' => env('FILESYSTEM_DISK', 'local'),
 
+    // Business attachments must never fall back to the public disk.
+    'private_disk' => env('PRIVATE_FILESYSTEM_DISK', 'local'),
+
     /*
     |--------------------------------------------------------------------------
     | Filesystem Disks

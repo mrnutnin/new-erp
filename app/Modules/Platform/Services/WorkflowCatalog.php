@@ -194,14 +194,26 @@ final class WorkflowCatalog
         }
 
         if ($program === 'asset') {
-            return self::decorate([[
-                'code' => 'asset-lifecycle', 'title' => 'Asset Lifecycle',
-                'description' => 'โครงร่างลำดับงานสินทรัพย์ที่จะเปิดเมื่อ Asset domain พร้อม', 'duration' => 'รอ module readiness',
-                'steps' => [
-                    ['label' => 'Acquisition / Capitalize', 'route' => null, 'permission' => 'asset.register.view', 'effect' => 'เตรียมทะเบียนและการรับรู้สินทรัพย์', 'mode' => 'setup', 'block_reason' => 'Asset domain ยังไม่เปิดใน MVP จึงยังไม่มีหน้าปลายทางให้เริ่มทำงาน'],
-                    ['label' => 'Depreciate / Dispose', 'route' => null, 'permission' => 'asset.register.view', 'effect' => 'คำนวณค่าเสื่อม โอน ซ่อม และจำหน่าย', 'mode' => 'daily', 'block_reason' => 'รอ source document และ route ของ Asset ก่อนเปิดใช้งาน'],
-                ],
-            ]], 'daily');
+            return self::decorate([
+                ['code' => 'asset-setup', 'title' => 'ตั้งค่าก่อนเริ่มใช้งาน', 'mode' => 'setup', 'description' => 'เตรียมหมวด บัญชี สถานที่ และสิทธิ์ก่อนเริ่มบันทึกสินทรัพย์', 'duration' => 'ประมาณ 10 นาที', 'steps' => [
+                    ['label' => 'Asset Dashboard', 'route' => 'asset.index', 'permission' => 'asset.dashboard.view', 'effect' => 'ตรวจรายการค้างและความพร้อมของสาขาปัจจุบัน', 'mode' => 'setup'],
+                    ['label' => 'หมวดสินทรัพย์และบัญชี', 'route' => 'asset.categories.index', 'permission' => 'asset.categories.view', 'effect' => 'กำหนดบัญชีสินทรัพย์ ค่าเสื่อม ด้อยค่า และกำไร/ขาดทุน', 'mode' => 'setup'],
+                    ['label' => 'สถานที่สินทรัพย์', 'route' => 'asset.locations.index', 'permission' => 'asset.locations.view', 'effect' => 'เตรียมสถานที่และโครงสร้างตำแหน่งตามสาขา', 'mode' => 'setup'],
+                ]],
+                ['code' => 'asset-daily', 'title' => 'งานประจำวัน: สินทรัพย์', 'mode' => 'daily', 'description' => 'สร้างทะเบียน รับรู้ต้นทุน คำนวณค่าเสื่อม และควบคุมการเปลี่ยนแปลงสินทรัพย์', 'duration' => 'ตามรายการจริง', 'steps' => [
+                    ['label' => 'ทะเบียนสินทรัพย์', 'route' => 'asset.assets.index', 'permission' => 'asset.register.view', 'effect' => 'สร้าง แก้ไข และติดตามสถานะสินทรัพย์ในสาขาปัจจุบัน', 'mode' => 'daily'],
+                    ['label' => 'รับรู้ต้นทุน', 'route' => 'asset.capitalizations.index', 'permission' => 'asset.capitalizations.view', 'effect' => 'รับรู้จากใบแจ้งหนี้ซื้อ ตั้งทุนใหม่ หรือยอดยกมา ตาม workflow', 'mode' => 'daily'],
+                    ['label' => 'ค่าเสื่อมราคา', 'route' => 'asset.depreciations.index', 'permission' => 'asset.depreciation.view', 'effect' => 'คำนวณ อนุมัติ และลงบัญชี Book/Tax ตามงวด', 'mode' => 'daily'],
+                    ['label' => 'โอนย้ายและตรวจนับ', 'route' => 'asset.transfers.index', 'permission' => 'asset.transfers.view', 'effect' => 'ควบคุมการย้ายสาขา/สถานที่และตรวจนับสินทรัพย์', 'mode' => 'daily'],
+                    ['label' => 'ด้อยค่าและจำหน่าย', 'route' => 'asset.impairments.index', 'permission' => 'asset.impairments.view', 'effect' => 'บันทึกการด้อยค่าและจำหน่ายเมื่อผ่านการตรวจสอบและอนุมัติ', 'mode' => 'daily'],
+                    ['label' => 'รายงานและกระทบยอด', 'route' => 'asset.reports.reconciliation.index', 'permission' => 'asset.reports.view', 'effect' => 'ตรวจยอดทะเบียนเทียบ GL และแก้รายการค้างก่อนปิดงวด', 'mode' => 'daily'],
+                ]],
+                ['code' => 'maintenance-operations', 'title' => 'งานประจำวัน: แจ้งซ่อม', 'mode' => 'daily', 'description' => 'ติดตามการแจ้งซ่อม มอบหมายงาน และแผนบำรุงรักษาแยกจากวงจรบัญชีสินทรัพย์', 'duration' => 'ตามรายการจริง', 'steps' => [
+                    ['label' => 'แจ้งซ่อมและติดตามงาน', 'route' => 'asset.maintenance.index', 'permission' => 'asset.maintenance.view', 'effect' => 'เปิดงาน มอบหมาย เริ่มซ่อม รออะไหล่ และปิดงานพร้อม audit', 'mode' => 'daily'],
+                    ['label' => 'แผนบำรุงรักษา', 'route' => 'asset.maintenance.schedules.index', 'permission' => 'asset.maintenance.view', 'effect' => 'วางแผนและบันทึกงานบำรุงรักษาตามรอบ', 'mode' => 'daily'],
+                    ['label' => 'รายงานแจ้งซ่อม', 'route' => 'asset.reports.maintenance.index', 'permission' => 'asset.reports.view', 'effect' => 'สรุปค่าใช้จ่าย เวลาหยุดใช้งาน และสถานะงานซ่อม', 'mode' => 'daily'],
+                ]],
+            ], 'daily');
         }
 
         return [];

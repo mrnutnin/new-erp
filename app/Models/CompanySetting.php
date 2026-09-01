@@ -18,6 +18,8 @@ class CompanySetting extends Model
         'date_format',
         'business_profile',
         'production_enabled',
+        'asset_enabled',
+        'asset_depreciation_proration',
         'accounting_profile',
         'inventory_costing_method',
         'allow_negative_stock',
@@ -42,6 +44,7 @@ class CompanySetting extends Model
         return [
             'allow_negative_stock' => 'boolean',
             'production_enabled' => 'boolean',
+            'asset_enabled' => 'boolean',
             'default_vat_rate' => 'decimal:2',
             'default_withholding_tax_rate' => 'decimal:2',
             'tax_decimal_places' => 'integer',

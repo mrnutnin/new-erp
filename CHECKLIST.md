@@ -139,6 +139,7 @@
 - [x] Manual Journal approval และ reversal
 - [x] Posting contract แบบ idempotent สำหรับทุก module
 - [x] Typed Account Mapping สำหรับ Sales/Purchasing และ foundation ของ deferred/actual VAT กับ WHT พร้อม permission, audit และ Select2 AJAX
+- [ ] Feature-based Posting Configuration Plan: เอกสารแผนกลางแยกไว้ใน `docs/planning/12-feature-posting-configuration-plan.md` แล้ว; ยังไม่เริ่ม refactor หรือ migration จนกว่า Owner จะอนุมัติ
 - [x] Document Sequence รองรับ Sales/Purchase Invoice และ Credit Note พร้อม lock และป้องกัน reset รอบย้อนหลัง
 - [~] General Ledger และ Trial Balance
 - [~] รายงานเปรียบเทียบรายได้ (เพิ่มแล้ว; manual QA และรายงานชุดอื่นยังค้าง)
@@ -258,10 +259,11 @@
 
 ### Asset
 
-- [ ] Asset register และ capitalization
-- [ ] Depreciation
-- [ ] Transfer/repair/maintenance
-- [ ] Disposal และ accounting posting
+- [~] Asset register Phase 1 พร้อม; Phase 2 capitalization/opening foundation พร้อม: Purchase Invoice line แบ่งหลาย Asset ได้ภายใต้ allocation ceiling, lifecycle/Journal/value event/history และ opening staging commit ที่ไม่ Post GL ซ้ำ. รอ manual QA และ unit matrix เชิงลึกก่อนปิด Gate Phase 2
+- [x] Depreciation Phase 3: lifecycle Book/Tax post/reverse, policy change prospective, เลือกสินทรัพย์พร้อมเหตุผลยกเว้น, Book/Tax schedule, Book-vs-Tax และ Asset subledger-vs-GL reconciliation แยก Opening balance ผ่าน Unit tests และ owner manual UI sign-off แล้ว
+- [x] Transfer/physical count: Transfer lifecycle และ physical count แบบ freeze scope/follow-up โดยไม่เปลี่ยนทะเบียนหรือสร้าง GL อัตโนมัติ ผ่านการตรวจรับแล้ว
+- [~] Asset maintenance: ใบแจ้งซ่อม lifecycle, มอบหมาย, เริ่ม/รออะไหล่/ปิดงาน/ยกเลิก, downtime, ประกัน, ค่าใช้จ่ายอ้างอิง, evidence attachment และ UNDER_REPAIR ตามการยืนยันของ owner พร้อมแล้ว; preventive schedule และ daily alert ที่ไม่สร้างใบแจ้งซ่อมเองพร้อมแล้ว เหลือ dashboard toast และรายงาน
+- [x] Disposal และ accounting posting: Impairment, Sale/Write-off, final depreciation prerequisite, downstream clearing, gain/loss, reversal blockers และ terminal status ผ่าน Unit tests + Manual QA แล้ว ดู [asset-phase-6-manual.md](docs/qa/asset-phase-6-manual.md)
 
 ## Migration และ Commercial Readiness
 

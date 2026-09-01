@@ -33,6 +33,14 @@
     --app-badge-neutral-text: #4f5963;
 }
 
+@media print {
+    .app-sidebar, .app-topbar, .d-print-none { display: none !important; }
+    .app-shell { display: block; }
+    .app-workspace, .app-main { display: block; width: 100%; }
+    .print-label-page { padding: 0 !important; }
+    .print-label { box-shadow: none !important; width: 90mm; }
+}
+
 body {
     min-height: 100vh;
     background:

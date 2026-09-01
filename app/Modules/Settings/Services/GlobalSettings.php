@@ -26,9 +26,9 @@ class GlobalSettings
 
     public function value(string $key): mixed
     {
-        $this->registry->definition($key);
+        $definition = $this->registry->definition($key);
 
-        return $this->current()->getAttribute($key);
+        return $this->current()->getAttribute($key) ?? $definition['default'];
     }
 
     public function missingFor(string $module): array

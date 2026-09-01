@@ -213,7 +213,7 @@ class WorkflowCatalogTest extends TestCase
         $this->assertStringContainsString('ราคา/ต้นทุนต่าง', $decision['recovery_hint']);
     }
 
-    public function test_optional_module_catalogs_are_explicit_and_have_no_fake_routes(): void
+    public function test_optional_module_catalogs_are_explicit_and_asset_navigation_is_real(): void
     {
         foreach (['logistics', 'asset'] as $program) {
             $catalog = WorkflowCatalog::for($program);
@@ -221,8 +221,12 @@ class WorkflowCatalogTest extends TestCase
             $this->assertNotEmpty($catalog);
             foreach ($catalog as $workflow) {
                 foreach ($workflow['steps'] as $step) {
-                    $this->assertNull($step['route']);
-                    $this->assertNotEmpty($step['block_reason']);
+                    if ($program === 'asset') {
+                        $this->assertNotNull($step['route']);
+                    } else {
+                        $this->assertNull($step['route']);
+                        $this->assertNotEmpty($step['block_reason']);
+                    }
                 }
             }
         }
@@ -270,7 +274,7 @@ class WorkflowCatalogTest extends TestCase
         $this->assertNull($catalog[0]['steps'][0]['route']);
     }
 
-    public function test_optional_workflows_keep_setup_and_daily_modes_without_fake_routes(): void
+    public function test_optional_workflows_keep_setup_and_daily_modes_and_asset_exposes_real_routes(): void
     {
         $settings = Mockery::mock(GlobalSettings::class);
         $settings->shouldReceive('value')->with('business_profile')->andReturn('MANUFACTURING');
@@ -282,7 +286,9 @@ class WorkflowCatalogTest extends TestCase
 
             $this->assertSame(['daily', 'setup'], $modes, $program);
             foreach (collect($catalog)->flatMap(fn (array $workflow) => $workflow['steps']) as $step) {
-                $this->assertNull($step['route'], $program.': '.$step['label']);
+                if ($program !== 'asset') {
+                    $this->assertNull($step['route'], $program.': '.$step['label']);
+                }
                 $this->assertNotSame('', trim((string) ($step['recovery_hint'] ?? '')), $program.': '.$step['label']);
             }
         }

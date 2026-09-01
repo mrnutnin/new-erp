@@ -37,6 +37,8 @@ class UpdateCompanySettingRequest extends FormRequest
             'date_format' => ['required', 'in:d/m/Y,Y-m-d'],
             'business_profile' => ['nullable', 'in:TRADING,MANUFACTURING'],
             'production_enabled' => ['nullable', 'boolean'],
+            'asset_enabled' => ['nullable', 'boolean'],
+            'asset_depreciation_proration' => ['required', 'in:DAILY,FULL_MONTH'],
             'accounting_profile' => ['nullable', 'in:PAE,NPAE'],
             'inventory_costing_method' => ['nullable', 'in:AVG,FIFO'],
             'allow_negative_stock' => ['required', 'boolean'],

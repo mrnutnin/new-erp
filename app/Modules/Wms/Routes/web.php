@@ -201,6 +201,7 @@ Route::middleware(['auth', 'program:wms', 'warehouse'])->prefix('wms')->name('wm
     Route::get('/items/data', [ItemController::class, 'data'])->middleware('permission:wms.items.view')->name('items.data');
     Route::get('/items/category-options', [ItemController::class, 'categoryOptions'])->middleware('permission:wms.items.view')->name('items.category-options');
     Route::get('/items/account-options', [ItemController::class, 'accountOptions'])->middleware('permission:wms.items.view')->name('items.account-options');
+    Route::get('/items/asset-category-options', [ItemController::class, 'assetCategoryOptions'])->middleware('permission:wms.items.view')->name('items.asset-category-options');
     Route::get('/items/uom-options', [ItemController::class, 'uomOptions'])->middleware('permission:wms.items.view')->name('items.uom-options');
     Route::get('/items/create', [ItemController::class, 'create'])->middleware('permission:wms.items.create')->name('items.create');
     Route::post('/items', [ItemController::class, 'store'])->middleware('permission:wms.items.create')->name('items.store');
