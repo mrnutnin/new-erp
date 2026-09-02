@@ -10,7 +10,7 @@
         @endif
     </div>
     @php($workflowModes = ['setup' => 'เริ่มใช้งานครั้งแรก', 'daily' => 'งานประจำวัน'])
-    @php($hasSetupBlocker = collect($workflows)->where('mode', 'setup')->flatMap(fn ($workflow) => $workflow['steps'])->contains(fn ($step) => ($step['status_code'] ?? null) === 'NOT_READY'))
+    @php($hasSetupBlocker = collect($workflows)->where('mode', 'setup')->flatMap(fn ($workflow) => $workflow['steps'])->contains(fn ($step) => in_array($step['status_code'] ?? null, ['NOT_READY', 'CONFIGURATION_WARNING'], true)))
     @php($defaultWorkflowMode = $hasSetupBlocker ? 'setup' : 'daily')
     <ul class="nav nav-pills gap-2 mb-4" role="tablist">
         @foreach($workflowModes as $mode => $label)
@@ -31,4 +31,3 @@
     </div>
 </div>
 @endsection
-

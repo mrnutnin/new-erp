@@ -21,6 +21,22 @@ final class CommissionPayoutService
 {
     public function __construct(private readonly JournalPostingService $journals, private readonly AccountMappingService $accounts) {}
 
+    /** The page preview is advisory; post() repeats its complete transaction checks. */
+    public function postReadiness(CommissionPayoutBatch $batch): array
+    {
+        if ($batch->status !== 'DRAFT') {
+            return ['ready' => false, 'blockers' => ['Post ได้เฉพาะชุดจ่ายคอมมิชชั่นร่าง']];
+        }
+
+        try {
+            $this->accounts->resolveForEvent('sales_commission_payout', 'COMMISSION_EXPENSE');
+
+            return ['ready' => true, 'blockers' => []];
+        } catch (ValidationException $exception) {
+            return ['ready' => false, 'blockers' => collect($exception->errors())->flatten()->values()->all()];
+        }
+    }
+
     public function create(int $branchId, int $recipientId, BankAccount $bank, string $date, User $actor): CommissionPayoutBatch
     {
         return DB::transaction(function () use ($branchId, $recipientId, $bank, $date, $actor): CommissionPayoutBatch {
@@ -101,11 +117,16 @@ final class CommissionPayoutService
             if ($total !== JournalBalance::decimal($batch->total_amount) || $total === '0.00' || str_starts_with($total, '-')) {
                 throw ValidationException::withMessages(['commission_records' => 'ยอดชุดจ่ายคอมมิชชั่นไม่ถูกต้อง']);
             }
-            $expense = $this->accounts->resolve('SALES_COMMISSION_EXPENSE');
+            $expenseResolution = $this->accounts->resolveForEvent('sales_commission_payout', 'COMMISSION_EXPENSE');
+            $expense = $expenseResolution['account'];
             $journal = $this->journals->postWithinTransaction([
                 'source_type' => 'POS_COMMISSION', 'source_id' => (string) $batch->id, 'source_reference' => $batch->document_number,
                 'event_code' => 'sales_commission_payout', 'entry_date' => $batch->document_date->format('Y-m-d'), 'document_date' => $batch->document_date->format('Y-m-d'),
                 'description' => "จ่ายคอมมิชชั่น {$batch->document_number}",
+                'posting_metadata' => ['contract_version' => 1, 'event_code' => 'sales_commission_payout', 'accounts' => [
+                    $expenseResolution['provenance'],
+                    ['event_code' => 'sales_commission_payout', 'account_role' => 'BANK_ACCOUNT', 'account_id' => (int) $bank->account_id, 'source' => 'DOCUMENT', 'source_type' => 'BANK_ACCOUNT', 'source_id' => (string) $bank->id, 'mapping_id' => null, 'mapping_version' => null],
+                ]],
                 'lines' => [
                     ['account_id' => $expense->id, 'description' => "ค่าใช้จ่ายคอมมิชชั่น {$batch->recipient?->name}", 'debit' => $total, 'credit' => '0.00'],
                     ['account_id' => $bank->account_id, 'subledger_type' => strtoupper($bank->type), 'subledger_id' => (string) $bank->id, 'description' => "จ่ายคอมมิชชั่น {$batch->document_number}", 'debit' => '0.00', 'credit' => $total],

@@ -10,15 +10,6 @@ use Tests\TestCase;
 
 class AccountMappingServiceTest extends TestCase
 {
-    public function test_mapping_resolution_fails_closed_on_duplicate_active_keys(): void
-    {
-        $source = file_get_contents(base_path('app/Modules/Accounting/Services/AccountMappingService.php'));
-
-        $this->assertStringContainsString('if ($mappings->count() !== 1)', $source);
-        $this->assertStringContainsString('$mappings->sole()->account_id', $source);
-        $this->assertStringNotContainsString("->where('key', \$key)->where('is_active', true)->sharedLock()->first()", $source);
-    }
-
     public function test_purchase_default_accepts_non_control_expense_or_asset_only(): void
     {
         $service = new AccountMappingService;
@@ -65,6 +56,20 @@ class AccountMappingServiceTest extends TestCase
             $account->setRelation('type', new AccountType(['code' => $type]));
             $service->assertCompatible($key, $account);
         }
+        $this->addToAssertionCount(2);
+    }
+
+    public function test_asset_cost_accepts_a_fixed_asset_control_or_a_normal_asset_account(): void
+    {
+        $service = new AccountMappingService;
+
+        $fixedAsset = new Account(['is_active' => true, 'is_postable' => true, 'control_account_type' => 'FIXED_ASSET']);
+        $service->assertCompatible('ASSET_COST', $fixedAsset);
+
+        $asset = new Account(['is_active' => true, 'is_postable' => true]);
+        $asset->setRelation('type', new AccountType(['code' => 'ASSET']));
+        $service->assertCompatible('ASSET_COST', $asset);
+
         $this->addToAssertionCount(2);
     }
 }

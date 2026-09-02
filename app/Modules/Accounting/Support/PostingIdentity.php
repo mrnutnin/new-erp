@@ -19,7 +19,7 @@ final class PostingIdentity
         return hash('sha256', json_encode(self::canonicalize($value), JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
     }
 
-    private static function canonicalize(array $value): array
+    public static function canonicalize(array $value): array
     {
         if (! array_is_list($value)) {
             ksort($value);

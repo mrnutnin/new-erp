@@ -255,7 +255,7 @@ final class CommissionCalculationService
             ->whereIn(DB::raw("CAST(JSON_UNQUOTE(JSON_EXTRACT(movements.metadata, '$.physical_sale_line_id')) AS UNSIGNED)"), $lineIds)
             ->selectRaw("CAST(JSON_UNQUOTE(JSON_EXTRACT(movements.metadata, '$.physical_sale_line_id')) AS UNSIGNED) AS line_id, SUM(ABS(allocations.value)) AS amount")
             ->groupByRaw("CAST(JSON_UNQUOTE(JSON_EXTRACT(movements.metadata, '$.physical_sale_line_id')) AS UNSIGNED)")
-            ->pluck('amount', 'line_id')->map(fn ($amount) => JournalBalance::decimal($amount))->all();
+            ->pluck('amount', 'line_id')->map(fn ($amount) => BigDecimal::of((string) $amount)->toScale(2, RoundingMode::HALF_UP)->__toString())->all();
     }
 
     private function record(SalesCommissionPlanAssignment $assignment, PhysicalSale $sale, ?int $lineId, string $sourceType, string $sourceId, float $base, array $snapshot): void

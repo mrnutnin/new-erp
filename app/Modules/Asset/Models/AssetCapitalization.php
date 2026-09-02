@@ -15,7 +15,7 @@ class AssetCapitalization extends Model
     use SoftDeletes;
 
     protected $fillable = [
-        'document_number', 'branch_id', 'document_date', 'source_type', 'source_id', 'is_manual_exception', 'manual_exception_reason', 'status', 'description',
+        'document_number', 'transaction_type', 'branch_id', 'document_date', 'source_type', 'source_id', 'is_manual_exception', 'manual_exception_reason', 'status', 'description',
         'journal_entry_id', 'reversal_journal_entry_id', 'reversal_of_id', 'submitted_by', 'submitted_at',
         'approved_by', 'approved_at', 'posted_by', 'posted_at', 'reversed_by', 'reversed_at', 'reversal_date',
         'reversal_reason', 'voided_by', 'voided_at', 'void_reason', 'created_by', 'updated_by',

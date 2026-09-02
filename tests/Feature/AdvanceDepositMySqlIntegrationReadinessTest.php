@@ -108,6 +108,7 @@ final class AdvanceDepositMySqlIntegrationReadinessTest extends TestCase
             self::assertSame(['40.00', '60.00'], $cashCredits);
             self::assertSame('100.00', JournalBalance::decimal($reversal->lines->sum('debit')));
             self::assertSame('100.00', JournalBalance::decimal($reversal->lines->sum('credit')));
+            self::assertSame(['BANK_ACCOUNT_'.$banks[0]->id, 'BANK_ACCOUNT_'.$banks[1]->id], collect(data_get($posted->journalEntry?->posting_metadata, 'accounts', []))->pluck('account_role')->filter(fn (string $role): bool => str_starts_with($role, 'BANK_ACCOUNT_'))->values()->all());
         } finally {
             DB::rollBack();
         }

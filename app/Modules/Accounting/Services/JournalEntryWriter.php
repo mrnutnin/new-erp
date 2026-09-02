@@ -153,6 +153,10 @@ class JournalEntryWriter
             'source_reference' => $entry->entry_number,
             'idempotency_key' => $source['idempotency_key'] ?? null,
             'posting_hash' => $source['posting_hash'] ?? null,
+            'posting_metadata' => $entry->posting_metadata === null ? null : [
+                'reversal_of_id' => $entry->id,
+                'original_posting_metadata' => $entry->posting_metadata,
+            ],
             'description' => Str::limit("กลับรายการ {$entry->entry_number}: {$reason}", 500, ''),
             'currency_code' => $entry->currency_code,
             'exchange_rate' => $entry->exchange_rate,

@@ -1,6 +1,6 @@
 @php
     $intake = $sourceIntake ?? null;
-    $taxLines = $document->relationLoaded('lines') ? $document->lines : collect();
+    $taxLines = $intake?->lines ?? ($document->relationLoaded('lines') ? $document->lines : collect());
     $rates = collect($taxLines)->pluck('tax_rate')->filter(fn ($rate) => (float) $rate > 0)->unique()->sort()->values();
     $hasTax = (float) ($document->tax_amount ?? $intake?->tax_amount ?? 0) > 0 || $rates->isNotEmpty();
     $taxMethod = $hasTax ? (($intake?->prices_include_vat ?? false) ? 'รวมภาษี' : 'ภาษีนอก') : 'ไม่มีภาษี';

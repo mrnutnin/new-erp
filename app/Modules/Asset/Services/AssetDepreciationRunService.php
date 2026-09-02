@@ -4,7 +4,6 @@ namespace App\Modules\Asset\Services;
 
 use App\Models\Branch;
 use App\Models\User;
-use App\Modules\Accounting\Models\Account;
 use App\Modules\Accounting\Models\FiscalPeriod;
 use App\Modules\Accounting\Services\JournalPostingService;
 use App\Modules\Asset\Models\Asset;
@@ -15,9 +14,11 @@ use App\Modules\Asset\Models\AssetDepreciationRun;
 use App\Modules\Asset\Models\AssetDepreciationRunException;
 use App\Modules\Asset\Models\AssetHistory;
 use App\Modules\Asset\Models\AssetValueEvent;
+use App\Modules\Asset\Support\AssetPostingAccountResolver;
 use Brick\Math\BigDecimal;
 use Brick\Math\RoundingMode;
 use Carbon\CarbonImmutable;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\ValidationException;
@@ -28,6 +29,7 @@ final class AssetDepreciationRunService
     public function __construct(
         private readonly DepreciationPreviewCalculator $calculator,
         private readonly JournalPostingService $journals,
+        private readonly ?AssetPostingAccountResolver $accounts = null,
     ) {}
 
     public function createDraft(Branch $branch, array $attributes, User $actor): AssetDepreciationRun
@@ -106,14 +108,17 @@ final class AssetDepreciationRunService
             $this->assertReady($run);
             $lines = $run->lines()->orderBy('line_number')->lockForUpdate()->get();
             $books = AssetDepreciationBook::query()->whereKey($lines->pluck('asset_depreciation_book_id'))->lockForUpdate()->get()->keyBy('id');
+            $assets = Asset::query()->with('category')->whereKey($lines->pluck('asset_id'))->lockForUpdate()->get()->keyBy('id');
 
             $journal = null;
             if ($run->book_type === 'BOOK' && $lines->contains(fn (AssetDepreciationLine $line) => $this->amount($line->period_depreciation)->plus($this->amount($line->catch_up_adjustment))->isGreaterThan(0))) {
+                [$journalLines, $provenance] = $this->configuredJournalLines($lines, $assets);
                 $journal = $this->journals->postForBranchWithinTransaction([
                     'source_type' => 'ASSET', 'source_id' => (string) $run->id, 'source_reference' => $run->document_number,
                     'event_code' => 'asset.depreciation', 'entry_date' => $run->run_through_date->toDateString(),
                     'document_date' => $run->run_through_date->toDateString(), 'description' => 'ค่าเสื่อมราคา '.$run->document_number,
-                    'lines' => $this->journalLines($lines),
+                    'posting_metadata' => ['contract_version' => 1, 'event_code' => 'asset.depreciation', 'accounts' => $provenance],
+                    'lines' => $journalLines,
                 ], $run->branch, null, $actor)->load('lines');
             }
 
@@ -128,6 +133,23 @@ final class AssetDepreciationRunService
 
             return $run->fresh(['lines', 'journalEntry']);
         }, 3);
+    }
+
+    public function postReadiness(AssetDepreciationRun $run): array
+    {
+        try {
+            $this->assertStatus($run, 'APPROVED');
+            $this->assertReady($run);
+            $lines = $run->lines()->orderBy('line_number')->get();
+            $assets = Asset::query()->with('category')->whereKey($lines->pluck('asset_id'))->get()->keyBy('id');
+            if ($run->book_type === 'BOOK' && $lines->contains(fn (AssetDepreciationLine $line) => $this->amount($line->period_depreciation)->plus($this->amount($line->catch_up_adjustment))->isGreaterThan(0))) {
+                $this->configuredJournalLines($lines, $assets, false);
+            }
+
+            return ['ready' => true, 'blockers' => []];
+        } catch (ValidationException $exception) {
+            return ['ready' => false, 'blockers' => collect($exception->errors())->flatten()->unique()->values()->all()];
+        }
     }
 
     public function reverse(AssetDepreciationRun $run, string $reversalDate, string $reason, User $actor): AssetDepreciationRun
@@ -211,6 +233,7 @@ final class AssetDepreciationRunService
                     'accumulated_depreciation' => (string) $book->accumulated_depreciation,
                     'last_depreciation_date' => $book->last_depreciation_date?->toDateString(),
                     'policy_change_id' => $policy?->id,
+                    'asset_category_id' => $asset->asset_category_id,
                     'depreciation_expense_account_id' => $asset->category?->depreciation_expense_account_id,
                     'accumulated_depreciation_account_id' => $asset->category?->accumulated_depreciation_account_id,
                 ];
@@ -245,34 +268,36 @@ final class AssetDepreciationRunService
         ]);
     }
 
-    /** @param iterable<AssetDepreciationLine> $lines */
-    private function journalLines(iterable $lines): array
+    /** @param iterable<AssetDepreciationLine> $lines @param Collection<int, Asset> $assets @return array{0: array<int, array<string, mixed>>, 1: array<int, array<string, int|string|null>>} */
+    private function configuredJournalLines(iterable $lines, Collection $assets, bool $lockForUpdate = true): array
     {
+        $resolver = $this->accounts ?? app(AssetPostingAccountResolver::class);
         $rows = [];
+        $provenance = [];
+
         foreach ($lines as $line) {
             $amount = $this->amount($line->period_depreciation)->plus($this->amount($line->catch_up_adjustment));
             if ($amount->isZero()) {
                 continue;
             }
+            $asset = $assets->get($line->asset_id) ?? throw ValidationException::withMessages(['lines' => 'ไม่พบสินทรัพย์สำหรับลงบัญชีค่าเสื่อม']);
             $snapshot = $line->calculation_input_snapshot;
-            foreach ([['depreciation_expense_account_id', 'debit'], ['accumulated_depreciation_account_id', 'credit']] as [$field, $side]) {
-                $accountId = $snapshot[$field] ?? null;
-                if (! $accountId) {
-                    throw ValidationException::withMessages(['lines' => 'หมวดสินทรัพย์ไม่มีบัญชีค่าเสื่อมที่ snapshot ไว้ กรุณาสร้างชุดค่าเสื่อมใหม่']);
-                }
-                $account = Account::query()->find($accountId);
-                if (! $account || ! $account->is_active || ! $account->is_postable) {
-                    throw ValidationException::withMessages(['lines' => 'บัญชีค่าเสื่อมที่ snapshot ไว้ไม่พร้อมลงรายการ']);
-                }
+            $categoryId = (string) ($snapshot['asset_category_id'] ?? $asset->asset_category_id);
+            $expense = $resolver->resolve('asset.depreciation', 'DEPRECIATION_EXPENSE', $snapshot['depreciation_expense_account_id'] ?? null, 'ASSET_CATEGORY', $categoryId, 'MASTER', $lockForUpdate);
+            $accumulated = $resolver->resolve('asset.depreciation', 'ACCUMULATED_DEPRECIATION', $snapshot['accumulated_depreciation_account_id'] ?? null, 'ASSET_CATEGORY', $categoryId, 'MASTER', $lockForUpdate);
+
+            foreach ([[$expense['account'], 'debit'], [$accumulated['account'], 'credit']] as [$account, $side]) {
                 $isControl = $account->control_account_type !== null;
-                $key = $accountId.'|'.$side.'|'.($isControl ? $line->asset_id : '');
-                $rows[$key] ??= ['account_id' => $accountId, 'subledger_type' => $isControl ? 'ASSET' : null,
+                $key = $account->id.'|'.$side.'|'.($isControl ? $line->asset_id : '');
+                $rows[$key] ??= ['account_id' => $account->id, 'subledger_type' => $isControl ? 'ASSET' : null,
                     'subledger_id' => $isControl ? (string) $line->asset_id : null, 'debit' => '0.00', 'credit' => '0.00', 'description' => 'ค่าเสื่อม '.$line->asset_number];
                 $rows[$key][$side] = $this->amount($rows[$key][$side])->plus($amount)->__toString();
             }
+            $provenance[] = $expense['provenance'];
+            $provenance[] = $accumulated['provenance'];
         }
 
-        return array_values($rows);
+        return [array_values($rows), $provenance];
     }
 
     private function projectPostedLine(AssetDepreciationRun $run, AssetDepreciationLine $line, AssetDepreciationBook $book, mixed $journal, User $actor): void

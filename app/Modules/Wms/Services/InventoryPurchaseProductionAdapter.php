@@ -5,9 +5,9 @@ namespace App\Modules\Wms\Services;
 use App\Models\User;
 use App\Models\Warehouse;
 use App\Modules\Accounting\Models\Account;
-use App\Modules\Accounting\Models\AccountMapping;
 use App\Modules\Accounting\Models\JournalEntry;
 use App\Modules\Accounting\Models\JournalEntryLine;
+use App\Modules\Accounting\Services\AccountMappingService;
 use App\Modules\Accounting\Services\JournalPostingService;
 use App\Modules\Wms\Models\CostAllocation;
 use App\Modules\Wms\Models\CostAllocationJournalLine;
@@ -29,6 +29,7 @@ final class InventoryPurchaseProductionAdapter
 
     public function __construct(
         private readonly InventoryPurchasePostingService $posting,
+        private readonly AccountMappingService $mappings,
         private readonly JournalPostingService $journals,
         private readonly StockMovementService $movements,
         private readonly InventoryCostAllocationService $allocations,
@@ -163,13 +164,21 @@ final class InventoryPurchaseProductionAdapter
     public function preflight(PurchaseDocument $document, ?Account $purchaseAp = null, bool $featureEnabled = false): array
     {
         try {
-            $purchaseAp ??= $this->resolvePurchaseAp();
+            $apResolution = $purchaseAp ? null : $this->mappings->resolveForEvent('supplier_invoice.inventory', 'ACCOUNTS_PAYABLE');
+            $purchaseAp ??= $apResolution['account'];
         } catch (ValidationException $exception) {
             return ['ready' => false, 'production_ready' => false, 'blockers' => ['purchase_ap_mapping'], 'errors' => $exception->errors()];
         }
         $preflight = $this->posting->preflight($document, $purchaseAp, $featureEnabled);
         if (! ($preflight['plan'] ?? null) || ! ($preflight['payload'] ?? null)) {
             return [...$preflight, 'production_ready' => false];
+        }
+        if ($apResolution) {
+            $preflight['payload']['posting_metadata'] = [
+                'contract_version' => 1,
+                'event_code' => 'supplier_invoice.inventory',
+                'accounts' => [$apResolution['provenance']],
+            ];
         }
 
         $document->loadMissing([
@@ -212,20 +221,6 @@ final class InventoryPurchaseProductionAdapter
                 ...($productionReady ? [] : ($preflight['blockers'] ?? ['feature_gate'])),
             ])),
         ];
-    }
-
-    private function resolvePurchaseAp(): Account
-    {
-        $mappings = AccountMapping::query()->with('account')->where('key', 'PURCHASE_AP')->where('is_active', true)->sharedLock()->get();
-        if ($mappings->count() !== 1) {
-            throw ValidationException::withMessages(['purchase_ap' => 'ต้องมี Account Mapping PURCHASE_AP ที่ active เพียงหนึ่งรายการ']);
-        }
-        $account = $mappings->sole()->account;
-        if (! $account || ! $account->is_active || ! $account->is_postable || $account->control_account_type !== 'AP') {
-            throw ValidationException::withMessages(['purchase_ap' => 'บัญชี PURCHASE_AP ต้อง active, postable และเป็นบัญชีคุม AP']);
-        }
-
-        return $account;
     }
 
     private function verifyPostedRetry(PurchaseDocument $document, array $preflight, Warehouse $warehouse): void

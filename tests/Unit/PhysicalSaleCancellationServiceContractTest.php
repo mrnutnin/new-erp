@@ -18,6 +18,8 @@ final class PhysicalSaleCancellationServiceContractTest extends TestCase
         self::assertStringContainsString('กรุณายกเลิกเอกสารรับชำระหนี้ก่อน', $service);
         self::assertStringContainsString('$this->movements->reverseWithinTransaction(', $service);
         self::assertStringContainsString('$this->journals->reverseWithinTransaction(', $service);
+        self::assertStringContainsString("'posting_metadata' => \$this->originalRevenueMetadata(\$revenue)", $service);
+        self::assertStringContainsString("'source' => 'ORIGINAL'", $service);
         self::assertStringContainsString("'status' => 'VOID'", $service);
     }
 }

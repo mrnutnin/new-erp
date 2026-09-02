@@ -180,7 +180,7 @@ class SalesDocumentController extends Controller
         return response()->json(['status' => true, 'msg' => "สร้างร่าง {$document->document_number} แล้ว", 'redirect' => route('pos.sales-documents.show', $document)]);
     }
 
-    public function show(Request $request, SalesDocument $salesDocument, OpenItemService $openItems): View
+    public function show(Request $request, SalesDocument $salesDocument, OpenItemService $openItems, SalesDocumentPostingService $posting): View
     {
         $document = $this->scoped($request, $salesDocument)->load(['lines.revenueAccount', 'lines.taxCode', 'lines.item', 'lines.uom', 'lines.stockUom', 'sourceInvoice']);
         $payment = null;
@@ -210,7 +210,7 @@ class SalesDocumentController extends Controller
             }
         }
 
-        return view('Pos::sales-documents.show', ['salesDocument' => $document, 'payment' => $payment, 'paymentOpenItem' => $paymentOpenItem]);
+        return view('Pos::sales-documents.show', ['salesDocument' => $document, 'payment' => $payment, 'paymentOpenItem' => $paymentOpenItem, 'postReadiness' => $posting->postReadiness($document)]);
     }
 
     public function edit(Request $request, SalesDocument $salesDocument): View

@@ -51,7 +51,7 @@ class SalesIntake extends Model
 
     public function quotation(): HasOne
     {
-        return $this->hasOne(SalesQuotation::class, 'source_sales_intake_id');
+        return $this->hasOne(SalesQuotation::class, 'source_sales_intake_id')->latestOfMany();
     }
 
     public function order(): HasOne

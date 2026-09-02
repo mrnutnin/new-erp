@@ -40,6 +40,33 @@ final class PurchaseDocumentPostingService
         private readonly ?PurchaseThreeWayMatchGate $matchGate = null,
     ) {}
 
+    /**
+     * Read-only preview for the document page. The post() method remains the
+     * authority and repeats every validation inside its transaction.
+     */
+    public function postReadiness(PurchaseDocument $document): array
+    {
+        if ($document->status !== 'APPROVED') {
+            return ['ready' => false, 'blockers' => ['อนุมัติเอกสารก่อน Post']];
+        }
+
+        if ($document->document_type !== 'INVOICE') {
+            return ['ready' => true, 'blockers' => []];
+        }
+
+        try {
+            $event = 'supplier_invoice.expense';
+            $this->mappings->resolveForEvent($event, 'ACCOUNTS_PAYABLE');
+            if ($document->tax_treatment === 'VAT_IN' && $document->tax_amount !== '0.00') {
+                $this->mappings->resolveForEvent($event, 'DEFERRED_INPUT_VAT');
+            }
+
+            return ['ready' => true, 'blockers' => []];
+        } catch (ValidationException $exception) {
+            return ['ready' => false, 'blockers' => collect($exception->errors())->flatten()->values()->all()];
+        }
+    }
+
     public function post(PurchaseDocument $purchaseDocument, string $postingDate, User $actor, Request $request): PurchaseDocument
     {
         return DB::transaction(function () use ($purchaseDocument, $postingDate, $actor, $request): PurchaseDocument {
@@ -68,7 +95,7 @@ final class PurchaseDocumentPostingService
             $apAccount = null;
             $originalOpenItem = null;
             if ($document->document_type === 'CREDIT_NOTE') {
-                [$apAccount, $originalOpenItem] = $this->creditNoteControl($document, $postingDate);
+                [$apAccount, $originalOpenItem, $taxAccount] = $this->creditNoteControl($document, $postingDate);
             }
             $party = Party::query()->whereKey($document->supplier_id)->where('is_active', true)->sharedLock()->first();
             $role = $party ? PartyRole::query()->where('party_id', $party->id)->where('role', 'SUPPLIER')->where('is_active', true)->sharedLock()->first() : null;
@@ -100,8 +127,20 @@ final class PurchaseDocumentPostingService
             }
             $this->assertLineAccounts($document);
 
-            $apAccount ??= $this->mappings->resolve('PURCHASE_AP');
             $event = $document->document_type === 'INVOICE' ? 'supplier_invoice.expense' : 'purchase_credit_note';
+            $postingMetadata = null;
+            if ($document->document_type === 'INVOICE') {
+                $apResolution = $this->mappings->resolveForEvent($event, 'ACCOUNTS_PAYABLE');
+                $apAccount = $apResolution['account'];
+                $provenance = [$apResolution['provenance']];
+                $taxAccount = null;
+                if ($document->tax_treatment === 'VAT_IN') {
+                    $taxResolution = $this->mappings->resolveForEvent($event, 'DEFERRED_INPUT_VAT');
+                    $taxAccount = $taxResolution['account'];
+                    $provenance[] = $taxResolution['provenance'];
+                }
+                $postingMetadata = ['contract_version' => 1, 'event_code' => $event, 'accounts' => $provenance];
+            }
             $journal = $this->journals->post([
                 'source_type' => 'PURCHASING',
                 'source_id' => (string) $document->id,
@@ -110,7 +149,8 @@ final class PurchaseDocumentPostingService
                 'entry_date' => $postingDate,
                 'document_date' => $document->document_date->format('Y-m-d'),
                 'description' => ($document->document_type === 'INVOICE' ? 'ใบตั้งหนี้ ' : 'ใบลดหนี้ ').$document->document_number,
-                'lines' => $this->journalLines($document, $apAccount),
+                'posting_metadata' => $postingMetadata,
+                'lines' => $this->journalLines($document, $apAccount, $taxAccount),
             ], $warehouse, $actor);
 
             $controlLine = $this->controlLine($journal, $document, $apAccount);
@@ -197,7 +237,21 @@ final class PurchaseDocumentPostingService
         }
         $this->openItems->assertAmountAvailable($openItem, $postingDate, $document->gross_amount, 'gross_amount');
 
-        return [$account, $openItem];
+        $taxAccount = null;
+        if ($document->tax_treatment === 'VAT_IN') {
+            $taxAccounts = JournalEntryLine::query()->with('account')
+                ->where('journal_entry_id', $original->journal_entry_id)
+                ->where('subledger_type', 'TAX')->get()->pluck('account')->filter()->unique('id')->values();
+            if ($taxAccounts->count() !== 1) {
+                throw ValidationException::withMessages(['original_document_id' => 'ใบลดหนี้ VAT ต้องใช้บัญชีภาษีจาก Journal ใบตั้งหนี้ต้นทางเพียงหนึ่งบัญชี']);
+            }
+            $taxAccount = $taxAccounts->sole();
+            if ($taxAccount->trashed() || ! $taxAccount->is_active || ! $taxAccount->is_postable || $taxAccount->control_account_type !== 'INPUT_VAT') {
+                throw ValidationException::withMessages(['original_document_id' => 'บัญชีภาษีของ Journal ใบตั้งหนี้ต้นทางต้องเปิดใช้งาน']);
+            }
+        }
+
+        return [$account, $openItem, $taxAccount];
     }
 
     private function assertCreditAccountCeilings(PurchaseDocument $document, PurchaseDocument $original): void
@@ -349,7 +403,7 @@ final class PurchaseDocumentPostingService
         }
     }
 
-    private function journalLines(PurchaseDocument $document, Account $apAccount): array
+    private function journalLines(PurchaseDocument $document, Account $apAccount, ?Account $taxAccount = null): array
     {
         $invoice = $document->document_type === 'INVOICE';
         $lines = $document->lines->map(fn ($line) => [
@@ -363,7 +417,9 @@ final class PurchaseDocumentPostingService
             'tax_point_date' => $document->tax_treatment === 'VAT_IN' ? $document->document_date->format('Y-m-d') : null,
         ])->all();
         if ($document->tax_treatment === 'VAT_IN') {
-            $taxAccount = $this->mappings->resolve('DEFERRED_INPUT_VAT');
+            if (! $taxAccount) {
+                throw ValidationException::withMessages(['account_mapping' => 'ยังไม่ได้ตั้งค่า Deferred Input VAT สำหรับ Posting event นี้']);
+            }
             foreach ($document->lines->groupBy('tax_code_id') as $taxCodeId => $taxLines) {
                 $base = $taxLines->reduce(fn (string $total, $line) => JournalBalance::add($total, $line->tax_base), '0.00');
                 $tax = $taxLines->reduce(fn (string $total, $line) => JournalBalance::add($total, $line->tax_amount), '0.00');

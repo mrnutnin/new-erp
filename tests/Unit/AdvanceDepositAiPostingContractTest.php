@@ -17,9 +17,10 @@ final class AdvanceDepositAiPostingContractTest extends TestCase
         self::assertContains('balance_amount', (new AdvanceDeposit)->getFillable());
         self::assertStringContainsString("Schema::create('finance_advance_deposit_tenders'", $migration);
         self::assertStringContainsString("'ADVANCE_DEPOSIT_AI'", $migration);
-        self::assertStringContainsString("\$this->mappings->resolve('CUSTOMER_ADVANCE')", $service);
-        self::assertStringContainsString("\$this->mappings->resolve('WHT_RECEIVABLE')", $service);
+        self::assertStringContainsString("resolveForEvent('customer_advance', 'CUSTOMER_ADVANCE')", $service);
+        self::assertStringContainsString("resolveForEvent('customer_advance', 'WHT_RECEIVABLE')", $service);
         self::assertStringContainsString("'event_code' => 'customer_advance'", $service);
+        self::assertStringContainsString("'posting_metadata'", $service);
         self::assertStringContainsString("'status' => 'POSTED'", $service);
     }
 }

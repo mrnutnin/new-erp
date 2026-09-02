@@ -30,6 +30,7 @@ final class PeriodCloseGate
 
         self::appendInventoryFailures($failures, $period);
         self::appendAssetFailures($failures, $period);
+        self::appendOperationalPostingFailures($failures, $period);
 
         return $failures;
     }
@@ -44,7 +45,7 @@ final class PeriodCloseGate
         if (Schema::hasTable('asset_depreciation_runs')) {
             $pendingRuns = DB::table('asset_depreciation_runs')
                 ->whereBetween('run_through_date', [$period->start_date, $period->end_date])
-                ->whereIn('status', ['DRAFT', 'SUBMITTED', 'APPROVED'])
+                ->whereIn('status', ['DRAFT', 'SUBMITTED', 'APPROVED', 'FAILED'])
                 ->count();
             if ($pendingRuns > 0) {
                 $failures[] = "มี Asset depreciation run ที่ยังไม่ Post {$pendingRuns} รายการ — ไปที่ Asset > ค่าเสื่อมราคา ตรวจอนุมัติ/Post หรือยกเลิกก่อนปิดงวด";
@@ -75,16 +76,77 @@ final class PeriodCloseGate
             return;
         }
 
-        $pending = DB::table($table)->whereBetween($dateColumn, [$period->start_date, $period->end_date])
+        $documents = DB::table($table)->whereBetween($dateColumn, [$period->start_date, $period->end_date]);
+        if (Schema::hasColumn($table, 'deleted_at')) {
+            $documents->whereNull('deleted_at');
+        }
+
+        $pending = (clone $documents)
             ->whereIn('status', ['DRAFT', 'SUBMITTED', 'APPROVED'])->count();
         if ($pending > 0) {
             $failures[] = "มีเอกสาร Asset {$label} ที่ยังไม่ Post {$pending} รายการ — ไปที่ Asset > {$menuLabel} ตรวจอนุมัติ/Post หรือยกเลิกก่อนปิดงวด";
         }
 
-        $unlinked = DB::table($table)->whereBetween($dateColumn, [$period->start_date, $period->end_date])
+        $unlinked = (clone $documents)
             ->where('status', 'POSTED')->whereNull('journal_entry_id')->count();
         if ($unlinked > 0) {
             $failures[] = "มีเอกสาร Asset {$label} สถานะ POSTED แต่ยังไม่ผูก Journal {$unlinked} รายการ — ตรวจเอกสารและ Journal linkage ก่อนปิดงวด";
+        }
+    }
+
+    /**
+     * These are operational documents that own a live GL event. A draft or
+     * approved record inside the period must be resolved before a final lock;
+     * this is deliberately a read-only gate, while each posting service keeps
+     * its own status and mapping validation when the user eventually posts.
+     */
+    private static function appendOperationalPostingFailures(array &$failures, FiscalPeriod $period): void
+    {
+        foreach ([
+            ['asset_capitalizations', 'document_date', ['DRAFT', 'SUBMITTED', 'APPROVED'], 'Asset รับรู้/เพิ่มมูลค่า'],
+            ['sales_documents', 'document_date', ['DRAFT', 'APPROVED'], 'POS ใบแจ้งหนี้/ใบลดหนี้'],
+            ['pos_physical_sales', 'document_date', ['DRAFT'], 'POS HS/IV'],
+            ['pos_sales_returns', 'document_date', ['DRAFT'], 'POS ใบรับคืนสินค้า'],
+            ['finance_settlements', 'settlement_date', ['DRAFT', 'APPROVED'], 'Finance รับ/จ่ายชำระ'],
+            ['finance_advance_deposits', 'document_date', ['DRAFT'], 'Finance เงินล่วงหน้า/มัดจำ'],
+            ['pos_sales_commission_payout_batches', 'document_date', ['DRAFT'], 'Finance จ่ายคอมมิชชั่น'],
+            ['purchase_documents', 'document_date', ['DRAFT', 'APPROVED'], 'Purchasing ใบซื้อ/ใบลดหนี้'],
+            ['wms_inventory_adjustment_documents', 'document_date', ['DRAFT', 'APPROVED'], 'WMS ปรับปรุงสต็อก'],
+        ] as [$table, $dateColumn, $pendingStatuses, $label]) {
+            self::appendOperationalDocumentFailures($failures, $period, $table, $dateColumn, $pendingStatuses, $label);
+        }
+    }
+
+    /** @param list<string> $pendingStatuses */
+    private static function appendOperationalDocumentFailures(
+        array &$failures,
+        FiscalPeriod $period,
+        string $table,
+        string $dateColumn,
+        array $pendingStatuses,
+        string $label,
+    ): void {
+        if (! Schema::hasTable($table)) {
+            return;
+        }
+
+        $documents = DB::table($table)->whereBetween($dateColumn, [$period->start_date, $period->end_date]);
+        if (Schema::hasColumn($table, 'deleted_at')) {
+            $documents->whereNull('deleted_at');
+        }
+
+        $pending = (clone $documents)->whereIn('status', $pendingStatuses)->count();
+        if ($pending > 0) {
+            $failures[] = "มี {$label} ที่ยังไม่ Post {$pending} รายการ — ตรวจอนุมัติ/Post หรือยกเลิกเอกสารก่อน Lock งวด";
+        }
+
+        if (! Schema::hasColumn($table, 'journal_entry_id')) {
+            return;
+        }
+
+        $unlinked = (clone $documents)->where('status', 'POSTED')->whereNull('journal_entry_id')->count();
+        if ($unlinked > 0) {
+            $failures[] = "มี {$label} สถานะ POSTED แต่ยังไม่ผูก Journal {$unlinked} รายการ — ตรวจ Journal linkage และทำ correction/reversal ตาม workflow ก่อน Lock งวด";
         }
     }
 

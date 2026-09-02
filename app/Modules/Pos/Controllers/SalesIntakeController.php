@@ -47,7 +47,7 @@ class SalesIntakeController extends Controller
 
     public function data(Request $r): JsonResponse
     {
-        $q = SalesIntake::query()->where('branch_id', $this->branchId())->withCount('lines')->with(['rfq:id,source_sales_intake_id,document_number,status', 'rfq.quotation:id,sales_rfq_id,document_number,status', 'rfq.order:id,sales_rfq_id,document_number,status', 'quotation:id,source_sales_intake_id,document_number,status', 'quotation.order:id,sales_quotation_id,document_number,status', 'order:id,source_sales_intake_id,document_number,status', 'order.physicalSales:id,source_id,document_type,document_number,status', 'quotation.order.physicalSales:id,source_id,document_type,document_number,status', 'rfq.quotation.order.physicalSales:id,source_id,document_type,document_number,status', 'rfq.order.physicalSales:id,source_id,document_type,document_number,status']);
+        $q = SalesIntake::query()->where('branch_id', $this->branchId())->withCount('lines')->with(['rfq:id,source_sales_intake_id,document_number,status', 'rfq.quotation:id,sales_rfq_id,document_number,status', 'rfq.order:id,sales_rfq_id,document_number,status', 'quotation:sales_quotations.id,sales_quotations.source_sales_intake_id,sales_quotations.document_number,sales_quotations.status', 'quotation.order:id,sales_quotation_id,document_number,status', 'order:id,source_sales_intake_id,document_number,status', 'order.physicalSales:id,source_id,document_type,document_number,status', 'quotation.order.physicalSales:id,source_id,document_type,document_number,status', 'rfq.quotation.order.physicalSales:id,source_id,document_type,document_number,status', 'rfq.order.physicalSales:id,source_id,document_type,document_number,status']);
         if ($r->filled('date_from')) {
             $q->whereDate('document_date', '>=', $r->date_from);
         }if ($r->filled('date_to')) {
@@ -171,8 +171,8 @@ class SalesIntakeController extends Controller
 
     public function edit(Request $r, SalesIntake $salesIntake): View
     {
-        $x = $this->scope($r, $salesIntake)->load('lines.item.baseUom', 'lines.uom', 'party');
-        abort_unless($x->status === 'DRAFT', 403);
+        $x = $this->scope($r, $salesIntake)->load('lines.item.baseUom', 'lines.uom', 'party', 'quotation.order', 'order', 'rfq.quotation.order', 'rfq.order');
+        abort_unless($this->canRevise($x), 403);
 
         return view('Pos::sales-intakes.form', ['intake' => $x, 'lines' => $x->lines, 'party' => $x->party, 'decimalPlaces' => WmsDecimal::places(),
             'preparedUsers' => User::query()->where('is_active', true)->orderBy('name')->get(['id', 'name']),
@@ -187,7 +187,7 @@ class SalesIntakeController extends Controller
 
     public function update(SaveSalesIntakeRequest $r, SalesIntake $salesIntake, DocumentSequenceService $s, AuditLogger $a): JsonResponse
     {
-        abort_unless($this->scope($r, $salesIntake)->status === 'DRAFT', 403);
+        abort_unless($this->canRevise($this->scope($r, $salesIntake)), 403);
 
         return $this->save($r, $salesIntake, $s, $a);
     }
@@ -215,6 +215,13 @@ class SalesIntakeController extends Controller
             }
             $requires = false;
             $preparedLines = [];
+            $taxCode = null;
+            $taxRate = '0';
+            if (($d['tax_treatment'] ?? 'NONE_VAT') === 'VAT_OUT') {
+                $taxCode = TaxCode::query()->where('kind', 'VAT_OUT')->where('is_active', true)->lockForUpdate()->find($d['tax_code_id'] ?? null);
+                abort_unless($taxCode, 422, 'กรุณาเลือก Tax Code ภาษีขายที่ใช้งานได้');
+                $taxRate = (string) $taxCode->rate;
+            }
             foreach ($d['lines'] as $i => $line) {
                 $item = ! empty($line['item_id']) ? Item::query()->with('baseUom')->where('is_active', true)->find($line['item_id']) : null;
                 $uom = $item?->baseUom;
@@ -243,13 +250,6 @@ class SalesIntakeController extends Controller
                     if ($requested !== null && $standard !== null && SalesIntakePriceRule::requiresRfq((string) $requested, (string) $standard)) {
                         $requires = true;
                     }
-                }
-                $taxCode = null;
-                $taxRate = '0';
-                if (($d['tax_treatment'] ?? 'NONE_VAT') === 'VAT_OUT') {
-                    $taxCode = TaxCode::query()->where('kind', 'VAT_OUT')->where('is_active', true)->lockForUpdate()->find($line['tax_code_id'] ?? null);
-                    abort_unless($taxCode, 422, 'กรุณาเลือก Tax Code ภาษีขายที่ใช้งานได้');
-                    $taxRate = (string) $taxCode->rate;
                 }
                 $preparedLines[] = [
                     'line_number' => $i + 1, 'item_id' => $item?->id, 'uom_id' => $uom?->id,
@@ -313,7 +313,7 @@ class SalesIntakeController extends Controller
         $x = $this->scope($r, $salesIntake)->load('lines.item', 'lines.uom', 'party', 'rfq.quotation.order.physicalSales', 'rfq.order.physicalSales', 'quotation.order.physicalSales', 'order.physicalSales', 'preparedBy');
         $history = AuditLog::query()->with('user:id,name')->where('subject_type', $x->getMorphClass())->where('subject_id', $x->id)->latest()->get();
 
-        return view('Pos::sales-intakes.show', ['x' => $x, 'history' => $history, 'decimalPlaces' => (int) ($x->tax_decimal_places ?? WmsDecimal::places()), 'flowDocuments' => SalesDocumentTrail::for($x)]);
+        return view('Pos::sales-intakes.show', ['x' => $x, 'history' => $history, 'canRevise' => $this->canRevise($x), 'decimalPlaces' => (int) ($x->tax_decimal_places ?? WmsDecimal::places()), 'flowDocuments' => SalesDocumentTrail::for($x)]);
     }
 
     public function toRfq(Request $r, SalesIntake $salesIntake, DocumentSequenceService $seq, AuditLogger $audit): JsonResponse
@@ -404,7 +404,7 @@ class SalesIntakeController extends Controller
         $x = $this->scope($r, $x);
         DB::transaction(function () use ($r, $x, $status, $a) {
             $x = SalesIntake::query()->lockForUpdate()->findOrFail($x->id);
-            abort_unless($x->status === 'DRAFT', 403);
+            abort_unless($this->canRevise($x), 403);
             $before = $x->toArray();
             $x->status = $status;
             $x->save();
@@ -510,6 +510,21 @@ class SalesIntakeController extends Controller
         abort_unless((int) $x->branch_id === $this->branchId(), 404);
 
         return $x;
+    }
+
+    private function canRevise(SalesIntake $intake): bool
+    {
+        if ($intake->status === 'DRAFT') {
+            return true;
+        }
+        if ($intake->status !== 'COMPLETED') {
+            return false;
+        }
+
+        $intake->loadMissing('quotation.order', 'order', 'rfq.quotation.order', 'rfq.order');
+        $documents = collect([$intake->quotation, $intake->order, $intake->rfq, $intake->rfq?->quotation, $intake->rfq?->order, $intake->quotation?->order])->filter();
+
+        return $documents->isNotEmpty() && $documents->every(fn ($document): bool => in_array($document->status, ['CANCELLED', 'REJECTED', 'VOID'], true));
     }
 
     private function wid(): int

@@ -15,7 +15,7 @@ class JournalEntry extends Model
     protected $fillable = [
         'journal_book_id', 'fiscal_period_id', 'branch_id', 'warehouse_id', 'sequence_number',
         'entry_number', 'entry_date', 'document_date', 'source_type', 'source_event', 'source_id', 'source_reference',
-        'idempotency_key', 'posting_hash',
+        'idempotency_key', 'posting_hash', 'posting_metadata',
         'description', 'currency_code', 'exchange_rate', 'status', 'reversal_of_id',
         'validated_by', 'validated_at', 'validation_reason', 'posted_by', 'posted_at',
         'posting_reason', 'reversed_by', 'reversed_at', 'reversal_reason', 'created_by', 'updated_by',
@@ -27,6 +27,7 @@ class JournalEntry extends Model
             'entry_date' => 'date',
             'document_date' => 'date',
             'exchange_rate' => 'decimal:6',
+            'posting_metadata' => 'array',
             'validated_at' => 'datetime',
             'posted_at' => 'datetime',
             'reversed_at' => 'datetime',

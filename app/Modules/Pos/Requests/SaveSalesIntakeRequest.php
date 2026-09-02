@@ -4,6 +4,7 @@ namespace App\Modules\Pos\Requests;
 
 use App\Modules\Wms\Support\WmsDecimal;
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Rule;
 
 class SaveSalesIntakeRequest extends FormRequest
 {
@@ -53,6 +54,7 @@ class SaveSalesIntakeRequest extends FormRequest
             'tax_calculation' => ['required', 'in:VAT_INCLUSIVE,VAT_EXCLUSIVE,NONE'],
             'tax_treatment' => ['required', 'in:NONE_VAT,VAT_OUT'],
             'prices_include_vat' => ['sometimes', 'boolean'],
+            'tax_code_id' => ['nullable', 'integer', Rule::requiredIf(fn (): bool => $this->input('tax_treatment') === 'VAT_OUT'), Rule::prohibitedIf(fn (): bool => $this->input('tax_treatment') === 'NONE_VAT')],
             'billing_address' => ['nullable', 'string', 'max:1000'],
             'shipping_address' => ['nullable', 'string', 'max:1000'],
             'document_promotion_id' => ['nullable', 'integer', 'min:1'],
@@ -65,7 +67,6 @@ class SaveSalesIntakeRequest extends FormRequest
             'lines.*.requested_unit_price' => array_merge(['nullable'], $decimal, ['gte:0']),
             'lines.*.discount_amount' => array_merge(['nullable'], $decimal, ['gte:0']),
             'lines.*.promotion_id' => ['nullable', 'integer', 'min:1'],
-            'lines.*.tax_code_id' => ['nullable', 'integer', 'min:1'],
         ];
     }
 }

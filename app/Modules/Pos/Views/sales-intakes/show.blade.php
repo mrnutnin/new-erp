@@ -32,21 +32,21 @@
                         <form class="js-convert d-inline-flex" method="post" action="{{ route('pos.sales-orders.from-rfq', $x->rfq) }}">@csrf<button class="btn btn-outline-primary d-inline-flex align-items-center gap-1" type="submit"><i class="bx bx-cart-add"></i>สร้างใบสั่งขาย</button></form>
                     @endif
                 @endif
-            @elseif ($x->quotation)
-                <a class="btn btn-app-soft d-inline-flex align-items-center gap-1" href="{{ route('pos.sales-quotations.show', $x->quotation) }}"><i class="bx bx-file"></i>ดูใบเสนอราคา</a>
             @elseif ($x->order)
                 <a class="btn btn-app-soft d-inline-flex align-items-center gap-1" href="{{ route('pos.sales-orders.show', $x->order) }}"><i class="bx bx-cart"></i>ดูใบสั่งขาย</a>
-            @elseif (in_array($x->status, ['DRAFT', 'COMPLETED'], true))
+            @elseif (in_array($x->status, ['DRAFT', 'COMPLETED'], true) && (! $x->quotation || $x->quotation->status === 'CANCELLED'))
                 @if (auth()->user()->hasPermission('pos.sales-quotations.create'))
                     <form class="js-convert d-inline-flex" method="post" action="{{ route('pos.sales-quotations.from-intake', $x) }}">@csrf<button class="btn btn-primary d-inline-flex align-items-center gap-1" type="submit"><i class="bx bx-plus-circle"></i>สร้างใบเสนอราคา</button></form>
                 @endif
-                @if (auth()->user()->hasPermission('pos.sales-orders.create'))
+                @if (! $x->quotation && auth()->user()->hasPermission('pos.sales-orders.create'))
                     <form class="js-convert d-inline-flex" method="post" action="{{ route('pos.sales-orders.from-intake', $x) }}">@csrf<button class="btn btn-outline-primary d-inline-flex align-items-center gap-1" type="submit"><i class="bx bx-cart-add"></i>สร้างใบสั่งขาย</button></form>
                 @endif
             @endif
+            @if($canRevise && auth()->user()->hasPermission('pos.sales-intakes.cancel'))<button type="button" class="btn btn-outline-danger d-inline-flex align-items-center gap-1 js-intake-cancel" data-url="{{ route('pos.sales-intakes.cancel', $x) }}"><i class="bx bx-x-circle"></i>ยกเลิก</button>@endif
             @if ($x->quotation)<a class="btn btn-app-soft d-inline-flex align-items-center gap-1" href="{{ route('pos.sales-quotations.show', $x->quotation) }}"><i class="bx bx-link-external"></i>QT {{ $x->quotation->document_number }}</a>@endif
             @if ($x->rfq)<a class="btn btn-app-soft d-inline-flex align-items-center gap-1" href="{{ route('pos.sales-rfqs.show', $x->rfq) }}"><i class="bx bx-link-external"></i>RFQ {{ $x->rfq->document_number }}</a>@endif
             @if(auth()->user()->hasPermission('pos.sales-intakes.print'))<a class="btn btn-app-soft d-inline-flex align-items-center gap-1" href="{{ route('pos.sales-intakes.pdf', $x) }}" target="_blank" rel="noopener"><i class="bx bx-printer"></i>พิมพ์ PDF</a>@endif
+            @if($canRevise && auth()->user()->hasPermission('pos.sales-intakes.update'))<a class="btn btn-app-soft d-inline-flex align-items-center gap-1" href="{{ route('pos.sales-intakes.edit', $x) }}"><i class="bx bx-edit-alt"></i>แก้ไข</a>@endif
             <a class="btn btn-outline-secondary d-inline-flex align-items-center gap-1" href="{{ route('pos.sales-intakes.index') }}"><i class="bx bx-arrow-back"></i>กลับรายการ</a>
         </div>
     </div>
@@ -57,5 +57,5 @@
 @endsection
 
 @push('scripts')
-<script>$(function(){window.erpAjaxForm({form:'.js-convert',redirect:true});});</script>
+<script>$(function(){window.erpAjaxForm({form:'.js-convert',redirect:true});$('.js-intake-cancel').on('click',function(){const button=$(this);Swal.fire({icon:'warning',title:'ยกเลิกใบรับข้อมูล?',input:'textarea',inputLabel:'เหตุผล (อย่างน้อย 10 ตัวอักษร)',showCancelButton:true,confirmButtonText:'ยืนยันยกเลิก',cancelButtonText:'กลับ',inputValidator:value=>value&&value.trim().length>=10?undefined:'กรุณาระบุเหตุผลอย่างน้อย 10 ตัวอักษร'}).then(result=>{if(!result.isConfirmed)return;button.prop('disabled',true);$.post(button.data('url'),{_token:'{{ csrf_token() }}',reason:result.value}).done(()=>location.reload()).fail(xhr=>{button.prop('disabled',false);Swal.fire({icon:'error',title:'ดำเนินการไม่สำเร็จ',text:xhr.responseJSON?.message||'ไม่สามารถยกเลิกใบรับข้อมูลได้'});});});});</script>
 @endpush

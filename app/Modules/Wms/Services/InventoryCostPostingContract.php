@@ -42,7 +42,7 @@ final class InventoryCostPostingContract
         $valid = match ($eventCode) {
             'inventory.receipt' => $type === 'RECEIPT' && $direction === 'IN',
             'sales_cogs' => $type === 'ISSUE' && $direction === 'OUT',
-            'inventory.adjustment' => $type === 'ADJUSTMENT' && in_array($direction, ['IN', 'OUT'], true),
+            'inventory_adjustment' => $type === 'ADJUSTMENT' && in_array($direction, ['IN', 'OUT'], true),
             'inventory.recost' => $type === 'RECOST',
             default => false,
         };
@@ -76,7 +76,7 @@ final class InventoryCostPostingContract
             'mapping_keys' => match ($eventCode) {
                 'inventory.receipt' => ['INVENTORY_DEFAULT'],
                 'sales_cogs' => ['COGS_DEFAULT', 'INVENTORY_DEFAULT'],
-                'inventory.adjustment' => [
+                'inventory_adjustment' => [
                     'INVENTORY_DEFAULT',
                     $direction === 'IN' ? 'INVENTORY_ADJUSTMENT_GAIN' : 'INVENTORY_ADJUSTMENT_LOSS',
                 ],
@@ -91,10 +91,18 @@ final class InventoryCostPostingContract
     {
         $requirements = $this->requirements($allocation, $eventCode);
         $accounts = [];
+        $roles = [
+            'INVENTORY_DEFAULT' => 'INVENTORY',
+            'INVENTORY_ADJUSTMENT_GAIN' => 'ADJUSTMENT_GAIN',
+            'INVENTORY_ADJUSTMENT_LOSS' => 'ADJUSTMENT_LOSS',
+        ];
+        $provenance = [];
         foreach ($requirements['mapping_keys'] as $key) {
-            $accounts[$key] = $mappings->resolve($key)->id;
+            $resolution = $mappings->resolveForEvent($requirements['event_code'], $roles[$key] ?? $key);
+            $accounts[$key] = $resolution['account']->id;
+            $provenance[] = $resolution['provenance'];
         }
 
-        return [...$requirements, 'accounts' => $accounts];
+        return [...$requirements, 'accounts' => $accounts, 'provenance' => $provenance];
     }
 }

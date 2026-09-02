@@ -17,6 +17,7 @@
         @endif
         @if (auth()->user()->hasPermission('asset.capitalizations.view'))
             <a class="list-group-item list-group-item-action {{ request()->routeIs('asset.capitalizations.*') ? 'active' : '' }}" href="{{ route('asset.capitalizations.index') }}"><i class="bx bx-receipt me-2" aria-hidden="true"></i>ใบรับรู้สินทรัพย์</a>
+            <a class="list-group-item list-group-item-action {{ request()->routeIs('asset.additions.*') ? 'active' : '' }}" href="{{ route('asset.additions.index') }}"><i class="bx bx-plus-circle me-2" aria-hidden="true"></i>ใบเพิ่มมูลค่าสินทรัพย์</a>
         @endif
         @if (auth()->user()->hasPermission('asset.depreciation.view'))
             <a class="list-group-item list-group-item-action {{ request()->routeIs('asset.depreciations.*') ? 'active' : '' }}" href="{{ route('asset.depreciations.index') }}"><i class="bx bx-calculator me-2" aria-hidden="true"></i>ค่าเสื่อมราคา</a>

@@ -3,16 +3,19 @@
 namespace App\Modules\Asset\Services;
 
 use App\Models\User;
-use App\Modules\Accounting\Models\Account;
 use App\Modules\Accounting\Services\JournalPostingService;
 use App\Modules\Asset\Models\AssetImpairment;
 use App\Modules\Asset\Models\AssetValueEvent;
+use App\Modules\Asset\Support\AssetPostingAccountResolver;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
 final class AssetImpairmentService
 {
-    public function __construct(private readonly ?JournalPostingService $journals = null) {}
+    public function __construct(
+        private readonly ?JournalPostingService $journals = null,
+        private readonly ?AssetPostingAccountResolver $accounts = null,
+    ) {}
 
     public function assess(float $carryingAmount, float $recoverableAmount): array
     {
@@ -30,13 +33,36 @@ final class AssetImpairmentService
         }
     }
 
+    public function postReadiness(AssetImpairment $impairment): array
+    {
+        try {
+            if ($impairment->status !== 'APPROVED') {
+                throw ValidationException::withMessages(['status' => 'ลงบัญชีได้เฉพาะเอกสารที่อนุมัติแล้ว']);
+            }
+            $this->validatePost($impairment);
+            $impairment->loadMissing('asset.category');
+            $category = $impairment->asset?->category;
+            if (! $category) {
+                throw ValidationException::withMessages(['asset_id' => 'ไม่พบหมวดสินทรัพย์สำหรับลงบัญชีด้อยค่า']);
+            }
+            $accounts = $this->accounts ?? app(AssetPostingAccountResolver::class);
+            $accounts->resolve('asset.impairment', 'IMPAIRMENT_LOSS', $category->impairment_loss_account_id, 'ASSET_CATEGORY', (string) $category->id, 'MASTER', false);
+            $accounts->resolve('asset.impairment', 'ACCUMULATED_IMPAIRMENT', $category->accumulated_impairment_account_id, 'ASSET_CATEGORY', (string) $category->id, 'MASTER', false);
+
+            return ['ready' => true, 'blockers' => []];
+        } catch (ValidationException $exception) {
+            return ['ready' => false, 'blockers' => collect($exception->errors())->flatten()->unique()->values()->all()];
+        }
+    }
+
     public function post(AssetImpairment $impairment, User $actor): AssetImpairment
     {
         // Keep the dependency optional for lightweight calculation tests, but
         // resolve the posting service when an actual posting is requested.
         $journals = $this->journals ?? app(JournalPostingService::class);
+        $accounts = $this->accounts ?? app(AssetPostingAccountResolver::class);
 
-        return DB::transaction(function () use ($impairment, $actor, $journals): AssetImpairment {
+        return DB::transaction(function () use ($impairment, $actor, $journals, $accounts): AssetImpairment {
             $impairment = AssetImpairment::query()->with('asset.category')->lockForUpdate()->findOrFail($impairment->id);
             if ($impairment->status === 'POSTED') {
                 return $impairment;
@@ -47,19 +73,13 @@ final class AssetImpairmentService
             $this->validatePost($impairment);
             $asset = $impairment->asset;
             $category = $asset?->category;
-            $loss = $category?->impairment_loss_account_id;
-            $accumulated = $category?->accumulated_impairment_account_id;
-            if (! $loss || ! $accumulated) {
-                throw ValidationException::withMessages(['accounts' => 'หมวดสินทรัพย์ยังไม่ได้กำหนดบัญชีขาดทุนและบัญชีด้อยค่าสะสม']);
+            if (! $category) {
+                throw ValidationException::withMessages(['asset_id' => 'ไม่พบหมวดสินทรัพย์สำหรับลงบัญชีด้อยค่า']);
             }
-            foreach ([$loss, $accumulated] as $accountId) {
-                $account = Account::query()->find($accountId);
-                if (! $account || ! $account->is_active || ! $account->is_postable) {
-                    throw ValidationException::withMessages(['accounts' => 'บัญชีด้อยค่าไม่พร้อมลงรายการ']);
-                }
-            }
+            $loss = $accounts->resolve('asset.impairment', 'IMPAIRMENT_LOSS', $category->impairment_loss_account_id, 'ASSET_CATEGORY', (string) $category->id);
+            $accumulated = $accounts->resolve('asset.impairment', 'ACCUMULATED_IMPAIRMENT', $category->accumulated_impairment_account_id, 'ASSET_CATEGORY', (string) $category->id);
             $amount = (float) $impairment->impairment_amount;
-            $journal = $journals->postForBranchWithinTransaction(['source_type' => 'ASSET', 'source_id' => (string) $impairment->id, 'source_reference' => $impairment->document_number, 'event_code' => 'asset.impairment', 'entry_date' => $impairment->assessment_date->toDateString(), 'document_date' => $impairment->assessment_date->toDateString(), 'description' => 'ด้อยค่าสินทรัพย์ '.$impairment->document_number, 'lines' => [['account_id' => $loss, 'debit' => number_format($amount, 2, '.', ''), 'credit' => '0.00', 'description' => 'ขาดทุนจากการด้อยค่า'], ['account_id' => $accumulated, 'debit' => '0.00', 'credit' => number_format($amount, 2, '.', ''), 'subledger_type' => 'ASSET', 'subledger_id' => (string) $asset->id, 'description' => 'ด้อยค่าสะสม']]], $impairment->branch, null, $actor);
+            $journal = $journals->postForBranchWithinTransaction(['source_type' => 'ASSET', 'source_id' => (string) $impairment->id, 'source_reference' => $impairment->document_number, 'event_code' => 'asset.impairment', 'entry_date' => $impairment->assessment_date->toDateString(), 'document_date' => $impairment->assessment_date->toDateString(), 'description' => 'ด้อยค่าสินทรัพย์ '.$impairment->document_number, 'posting_metadata' => ['contract_version' => 1, 'event_code' => 'asset.impairment', 'accounts' => [$loss['provenance'], $accumulated['provenance']]], 'lines' => [['account_id' => $loss['account']->id, 'debit' => number_format($amount, 2, '.', ''), 'credit' => '0.00', 'description' => 'ขาดทุนจากการด้อยค่า'], ['account_id' => $accumulated['account']->id, 'debit' => '0.00', 'credit' => number_format($amount, 2, '.', ''), 'subledger_type' => 'ASSET', 'subledger_id' => (string) $asset->id, 'description' => 'ด้อยค่าสะสม']]], $impairment->branch, null, $actor);
             $asset->update(['book_accumulated_impairment' => (float) $asset->book_accumulated_impairment + $amount, 'book_value' => max(0, (float) $asset->book_value - $amount), 'updated_by' => $actor->id]);
             AssetValueEvent::query()->create(['asset_id' => $asset->id, 'branch_id' => $asset->branch_id, 'event_date' => $impairment->assessment_date, 'event_type' => 'IMPAIRMENT', 'impairment_delta' => $amount, 'source_type' => 'ASSET_IMPAIRMENT', 'source_id' => $impairment->id, 'journal_entry_id' => $journal->id, 'idempotency_key' => hash('sha256', 'ASSET_IMPAIRMENT|'.$impairment->id), 'created_by' => $actor->id]);
             $impairment->update(['status' => 'POSTED', 'journal_entry_id' => $journal->id, 'posted_by' => $actor->id, 'posted_at' => now()]);

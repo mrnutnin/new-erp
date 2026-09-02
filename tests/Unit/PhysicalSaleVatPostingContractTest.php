@@ -16,8 +16,10 @@ final class PhysicalSaleVatPostingContractTest extends TestCase
         self::assertStringContainsString('SalesDocumentCalculator::calculate($draftLines', $controller);
         self::assertStringContainsString("'tax_base' => \$calculation['tax_base']", $controller);
         self::assertStringContainsString("'tax_code_id' => \$calculated['tax_code_id']", $controller);
-        self::assertStringContainsString('PhysicalSaleWithholdingSnapshot::build($tax, $request->input(\'withholding_base\', \'0.00\'), $draft->tax_base)', $controller);
-        self::assertStringContainsString("resolve('DEFERRED_OUTPUT_VAT')", $plan);
+        self::assertStringContainsString('private function sourceTaxProfile', $controller);
+        self::assertStringContainsString("'tax_treatment' => \$sourceTaxProfile['tax_treatment']", $controller);
+        self::assertStringContainsString("PhysicalSaleWithholdingSnapshot::build(\$tax, \$request->input('withholding_base', '0.00'), JournalBalance::subtract(\$draft->subtotal, \$draft->discount_amount))", $controller);
+        self::assertStringContainsString("resolveForEvent(\$event, 'DEFERRED_OUTPUT_VAT')", $plan);
         self::assertStringContainsString("'tax_code_id' => \$taxCodeIds->first()", $plan);
         self::assertStringContainsString('private function invoiceJournal', $plan);
         self::assertStringContainsString("decimal('tax_base'", $migration);

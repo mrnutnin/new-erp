@@ -4,6 +4,10 @@
 
 @section('content')
     @php($statusLabels = ['DRAFT' => 'Draft', 'VALIDATED' => 'รออนุมัติ', 'POSTED' => 'ลงบัญชีแล้ว', 'REVERSED' => 'กลับรายการแล้ว'])
+    @php($postingMetadata = (array) ($journalEntry->posting_metadata ?? []))
+    @php($metadataAccounts = collect($postingMetadata['accounts'] ?? []))
+    @php($accountsById = $journalEntry->lines->mapWithKeys(fn ($line) => [$line->account_id => $line->account]))
+    @php($sourceLabels = ['MAPPING' => 'Account Mapping', 'MASTER' => 'Master data', 'DOCUMENT' => 'เอกสาร', 'ORIGINAL' => 'Journal เดิม'])
     <div class="container-fluid px-3 px-lg-4 py-4">
         <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-end gap-3 mb-4">
             <div>
@@ -38,6 +42,39 @@
                 </div>
             </div>
         </div>
+
+        @if ($postingMetadata !== [] || $sourceDocument)
+            <div class="card border-0 shadow-sm mb-4">
+                <div class="card-body p-4">
+                    <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-2 mb-3">
+                        <div><h2 class="h5 mb-1">ที่มาของการลงบัญชี</h2><p class="small text-secondary mb-0">ตรวจสอบ event และบัญชีที่ระบบ snapshot ไว้ ณ เวลาที่ Post</p></div>
+                        @if ($sourceDocument && auth()->user()->hasPermission($sourceDocument['permission']))
+                            <a class="btn btn-app-soft btn-sm" href="{{ $sourceDocument['url'] }}"><i class="bx bx-link-external me-1" aria-hidden="true"></i>{{ $sourceDocument['label'] }}</a>
+                        @endif
+                    </div>
+                    <div class="row g-3 mb-3">
+                        <div class="col-12 col-md-4"><div class="small text-secondary">Posting event</div><div class="fw-semibold">{{ ($postingMetadata['event_code'] ?? $journalEntry->source_event) ?: 'Manual journal' }}</div></div>
+                        <div class="col-12 col-md-4"><div class="small text-secondary">Source</div><div>{{ $journalEntry->source_type ?: 'MANUAL' }}{{ $journalEntry->source_id ? ' · '.$journalEntry->source_id : '' }}</div></div>
+                        <div class="col-12 col-md-4"><div class="small text-secondary">Configuration version</div><div>{{ $postingMetadata['contract_version'] ?? '—' }}</div></div>
+                    </div>
+                    @if ($metadataAccounts->isNotEmpty())
+                        <div class="table-responsive"><table class="table table-sm align-middle mb-0"><thead><tr><th>Account role</th><th>บัญชีที่ใช้</th><th>แหล่งที่มา</th><th>Mapping</th></tr></thead><tbody>
+                            @foreach ($metadataAccounts as $metadataAccount)
+                                @php($account = $accountsById->get((int) data_get($metadataAccount, 'account_id')))
+                                <tr>
+                                    <td class="fw-semibold">{{ data_get($metadataAccount, 'account_role', '—') }}</td>
+                                    <td>{{ $account ? $account->code.' · '.$account->name : '#'.data_get($metadataAccount, 'account_id') }}</td>
+                                    <td>{{ $sourceLabels[data_get($metadataAccount, 'source')] ?? data_get($metadataAccount, 'source', '—') }}@if(data_get($metadataAccount, 'source_type'))<div class="small text-secondary">{{ data_get($metadataAccount, 'source_type') }}{{ data_get($metadataAccount, 'source_id') ? ' · '.data_get($metadataAccount, 'source_id') : '' }}</div>@endif</td>
+                                    <td>{{ data_get($metadataAccount, 'mapping_id') ? '#'.data_get($metadataAccount, 'mapping_id').' · v'.data_get($metadataAccount, 'mapping_version', '—') : '—' }}</td>
+                                </tr>
+                            @endforeach
+                        </tbody></table></div>
+                    @else
+                        <div class="alert alert-light border mb-0 small">Journal นี้ไม่มี posting metadata เพราะเป็นรายการ Manual หรือประวัติเดิมก่อนเปิดใช้ configuration snapshot</div>
+                    @endif
+                </div>
+            </div>
+        @endif
 
         @if ($journalEntry->validated_at || $journalEntry->posted_at || $journalEntry->reversed_at)
             <div class="card border-0 shadow-sm mb-4">

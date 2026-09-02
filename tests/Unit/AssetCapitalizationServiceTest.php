@@ -53,6 +53,17 @@ final class AssetCapitalizationServiceTest extends TestCase
         self::assertStringContainsString("'status' => 'REVERSED'", $source);
     }
 
+    public function test_post_readiness_reuses_post_validation_without_taking_source_locks(): void
+    {
+        $source = file_get_contents((new \ReflectionClass(AssetCapitalizationService::class))->getFileName());
+
+        self::assertStringContainsString('public function postReadiness(AssetCapitalization', $source);
+        self::assertStringContainsString('$this->assertAllocationCeilings($capitalization, $lines);', $source);
+        self::assertStringContainsString('$this->additionPolicyPlan($capitalization, $assets, false);', $source);
+        self::assertStringContainsString('$this->configuredJournalLines($capitalization, $lines, $assets, false);', $source);
+        self::assertStringContainsString('post() repeats every gate under lock', $source);
+    }
+
     public function test_purchase_source_is_split_by_ceiling_not_by_a_single_asset_unique_key(): void
     {
         $source = file_get_contents((new \ReflectionClass(AssetCapitalizationService::class))->getFileName());
@@ -98,7 +109,8 @@ final class AssetCapitalizationServiceTest extends TestCase
         self::assertStringContainsString('PURCHASE_DOCUMENT,OPENING,MANUAL_RECLASS', $source);
         self::assertStringContainsString('required_if:source_type,MANUAL_RECLASS', $source);
         self::assertStringContainsString('$capitalization->source_type === \'OPENING\' ? null', $source);
-        self::assertStringContainsString('$capitalization->source_type !== \'OPENING\' && ! $line->clearing_account_id', $source);
+        self::assertStringContainsString("'CAPITALIZATION_CLEARING'", $source);
+        self::assertStringContainsString('app(AssetPostingAccountResolver::class)', $source);
     }
 
     public function test_capitalization_rejects_a_control_account_as_its_credit_account(): void
@@ -152,5 +164,53 @@ final class AssetCapitalizationServiceTest extends TestCase
 
         self::assertStringContainsString('isLessThan($this->decimal($asset->category->capitalization_threshold))', $source);
         self::assertStringContainsString('ต่ำกว่าเกณฑ์ของหมวดสินทรัพย์', $source);
+    }
+
+    public function test_addition_is_a_distinct_active_asset_document_and_preserves_original_cost(): void
+    {
+        $source = file_get_contents((new \ReflectionClass(AssetCapitalizationService::class))->getFileName());
+
+        self::assertStringContainsString("'transaction_type' => ['required', 'in:CAPITALIZATION,ADDITION']", $source);
+        self::assertStringContainsString("? ['ACTIVE'] : ['DRAFT', 'REGISTERED']", $source);
+        self::assertStringContainsString("'event_type' => \$isAddition ? 'ADDITION'", $source);
+        self::assertStringContainsString("'book_cost' => \$this->decimal(\$asset->book_cost)->plus(\$cost)->__toString()", $source);
+        self::assertStringContainsString("'book_value' => \$this->decimal(\$asset->book_value)->plus(\$cost)->__toString()", $source);
+        self::assertStringContainsString("'ADDITION_REVERSED'", $source);
+    }
+
+    public function test_capitalization_and_addition_use_master_or_document_accounts_with_a_mapping_fallback_snapshot(): void
+    {
+        $source = file_get_contents((new \ReflectionClass(AssetCapitalizationService::class))->getFileName());
+
+        self::assertStringContainsString('configuredJournalLines', $source);
+        self::assertStringContainsString("'ASSET_COST'", $source);
+        self::assertStringContainsString("'CAPITALIZATION_CLEARING'", $source);
+        self::assertStringContainsString("'ASSET_CATEGORY'", $source);
+        self::assertStringContainsString("'SOURCE_DOCUMENT'", $source);
+        self::assertStringContainsString("'DOCUMENT'", $source);
+        self::assertStringContainsString("'posting_metadata' => ['contract_version' => 1", $source);
+        self::assertStringContainsString('app(AssetPostingAccountResolver::class)', $source);
+        self::assertStringNotContainsString('return [$this->journalLines($lines), []]', $source);
+    }
+
+    public function test_addition_creates_a_draft_prospective_depreciation_policy_for_each_active_book(): void
+    {
+        $source = file_get_contents((new \ReflectionClass(AssetCapitalizationService::class))->getFileName());
+
+        self::assertStringContainsString('additionPolicyPlan', $source);
+        self::assertStringContainsString("->whereDate('start_date', '>', \$capitalization->document_date)", $source);
+        self::assertStringContainsString("'status' => 'DRAFT'", $source);
+        self::assertStringContainsString("'addition_document_id' => \$capitalization->id", $source);
+        self::assertStringContainsString('useful_life_months', $source);
+    }
+
+    public function test_addition_reversal_voids_only_its_draft_policy_and_blocks_after_policy_approval(): void
+    {
+        $source = file_get_contents((new \ReflectionClass(AssetCapitalizationService::class))->getFileName());
+
+        self::assertStringContainsString('assertAdditionPoliciesCanBeReversed', $source);
+        self::assertStringContainsString("->where('status', 'APPROVED')->exists()", $source);
+        self::assertStringContainsString('voidAdditionPolicyDrafts', $source);
+        self::assertStringContainsString("'status' => 'VOID'", $source);
     }
 }

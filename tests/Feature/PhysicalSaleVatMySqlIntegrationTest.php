@@ -4,6 +4,8 @@ namespace Tests\Feature;
 
 use App\Models\Party;
 use App\Models\User;
+use App\Modules\Accounting\Models\Account;
+use App\Modules\Accounting\Models\AccountMapping;
 use App\Modules\Accounting\Models\FiscalPeriod;
 use App\Modules\Accounting\Models\TaxCode;
 use App\Modules\Accounting\Services\AccountMappingService;
@@ -80,6 +82,8 @@ final class PhysicalSaleVatMySqlIntegrationTest extends TestCase
                 self::assertSame('VOID', $voided->status);
                 self::assertSame($calculation['tax_amount'], (string) $reversal->lines->where('account_id', $deferred->id)->sole()->debit);
                 self::assertSame((int) $vat->id, (int) $reversal->lines->where('account_id', $deferred->id)->sole()->tax_code_id);
+                self::assertSame($journal->id, data_get($reversal->posting_metadata, 'reversal_of_id'));
+                self::assertSame('sales_invoice', data_get($reversal->posting_metadata, 'original_posting_metadata.event_code'));
             }
         } finally {
             DB::rollBack();
@@ -126,6 +130,75 @@ final class PhysicalSaleVatMySqlIntegrationTest extends TestCase
             self::assertSame($withholding['withholding_amount'], (string) $receipt->withholding_amount);
             self::assertSame('0.00', app(OpenItemService::class)->remainingAt($openItem->fresh(), today()->toDateString()));
             self::assertSame($withholding['withholding_amount'], (string) WithholdingRealization::query()->where('open_item_id', $openItem->id)->sum('tax_amount'));
+        } finally {
+            DB::rollBack();
+        }
+    }
+
+    public function test_new_invoice_uses_new_ar_mapping_version_without_changing_the_old_journal(): void
+    {
+        if (config('database.default') !== 'mysql' || env('ERP_RUN_MYSQL_INTEGRATION') !== '1') {
+            $this->markTestSkipped('ต้องรันใน dedicated MySQL integration process ด้วย ERP_RUN_MYSQL_INTEGRATION=1 เท่านั้น');
+        }
+
+        $actor = User::query()->first();
+        $vat = TaxCode::query()->where('kind', 'VAT_OUT')->where('is_active', true)->orderBy('id')->first();
+        $mapping = AccountMapping::query()->where('event_code', 'sales_invoice')->where('key', 'ACCOUNTS_RECEIVABLE')->where('is_active', true)->sole();
+        if (! $actor || ! $vat) {
+            $this->markTestSkipped('ต้องมี User และ VAT OUT สำหรับ MySQL fixture');
+        }
+
+        DB::beginTransaction();
+        try {
+            [$bank, $party, $item, $balance] = $this->fixture();
+            $balance = $balance && $bank ? StockBalance::query()->whereKey($balance->id)->where('available', '>=', '2')->first() : null;
+            if (! $bank || ! $party || ! $item || ! $balance) {
+                $this->markTestSkipped('ต้องมี Stock อย่างน้อย 2 หน่วยสำหรับ mapping-version rollback fixture');
+            }
+            $calculation = SalesDocumentCalculator::calculate([[
+                'quantity' => '1.0000', 'unit_price' => '107.00', 'discount_amount' => '0.00',
+                'tax_code_id' => $vat->id, 'tax_rate' => $vat->rate,
+            ]], true);
+            $first = app(PhysicalSalePostingService::class)->post(
+                $this->draft($actor, $bank, $party, $item, $balance, $vat, $calculation, 'IV'),
+                today()->toDateString(), $bank->warehouse, $actor, Request::create('/', 'POST'),
+            );
+            $firstJournal = $first->journalEntry()->firstOrFail();
+            $firstAr = collect($firstJournal->posting_metadata['accounts'] ?? [])->firstWhere('account_role', 'ACCOUNTS_RECEIVABLE');
+
+            $original = $mapping->account()->firstOrFail();
+            $alternative = Account::query()->create([
+                'account_type_id' => $original->account_type_id,
+                'parent_id' => $original->parent_id,
+                'code' => 'AR-E2E-'.str()->upper(str()->random(10)),
+                'name' => 'ลูกหนี้ทดสอบ Mapping Version',
+                'level' => $original->level,
+                'normal_balance' => $original->normal_balance,
+                'statement_section' => $original->statement_section,
+                'reporting_profile' => $original->reporting_profile,
+                'control_account_type' => 'AR',
+                'is_postable' => true,
+                'is_active' => true,
+                'updated_by' => $actor->id,
+            ]);
+            $mapping->update([
+                'account_id' => $alternative->id,
+                'version' => app(AccountMappingService::class)->nextVersion($mapping, $alternative->id, true),
+                'updated_by' => $actor->id,
+            ]);
+
+            $second = app(PhysicalSalePostingService::class)->post(
+                $this->draft($actor, $bank, $party, $item, $balance->fresh(), $vat, $calculation, 'IV'),
+                today()->toDateString(), $bank->warehouse, $actor, Request::create('/', 'POST'),
+            );
+            $secondJournal = $second->journalEntry()->firstOrFail();
+            $secondAr = collect($secondJournal->posting_metadata['accounts'] ?? [])->firstWhere('account_role', 'ACCOUNTS_RECEIVABLE');
+
+            self::assertSame((int) $original->id, (int) $firstAr['account_id']);
+            self::assertSame((int) $mapping->version - 1, (int) $firstAr['mapping_version']);
+            self::assertSame((int) $alternative->id, (int) $secondAr['account_id']);
+            self::assertSame((int) $mapping->version, (int) $secondAr['mapping_version']);
+            self::assertSame((int) $original->id, (int) collect($firstJournal->fresh()->posting_metadata['accounts'])->firstWhere('account_role', 'ACCOUNTS_RECEIVABLE')['account_id']);
         } finally {
             DB::rollBack();
         }

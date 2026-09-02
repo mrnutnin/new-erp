@@ -26,7 +26,9 @@ final class CommissionPayoutBatchContractTest extends TestCase
 
         self::assertStringContainsString("'event_code' => 'sales_commission_payout'", $service);
         self::assertStringContainsString("'source_type' => 'POS_COMMISSION', 'source_id' => (string) \$batch->id", $service);
-        self::assertStringContainsString("'SALES_COMMISSION_EXPENSE'", $service);
+        self::assertStringContainsString("resolveForEvent('sales_commission_payout', 'COMMISSION_EXPENSE')", $service);
+        self::assertStringContainsString("'source_type' => 'BANK_ACCOUNT'", $service);
+        self::assertStringContainsString("'posting_metadata'", $service);
         self::assertStringContainsString("'status' => 'PAID'", $service);
         self::assertTrue(strpos($service, 'postWithinTransaction([') < strpos($service, "'status' => 'PAID'"));
     }

@@ -14,11 +14,18 @@ class SalesQuotationStateTest extends TestCase
         self::assertSame('ACCEPTED', SalesQuotationState::accept('SENT'));
         self::assertSame('REJECTED', SalesQuotationState::reject('SENT'));
         self::assertSame('CANCELLED', SalesQuotationState::cancel('DRAFT'));
+        self::assertSame('CANCELLED', SalesQuotationState::cancel('ACCEPTED', true));
     }
 
     public function test_invalid_transition_is_rejected(): void
     {
         $this->expectException(DomainException::class);
         SalesQuotationState::accept('DRAFT');
+    }
+
+    public function test_accepted_quotation_requires_cancelled_order_before_cancellation(): void
+    {
+        $this->expectException(DomainException::class);
+        SalesQuotationState::cancel('ACCEPTED');
     }
 }

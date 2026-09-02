@@ -27,7 +27,7 @@ class InventorySourceContractTest extends TestCase
         InventorySourceContract::assertCompatible($receipt, $this->allocation($receipt), 'inventory.receipt');
 
         $adjustment = $this->movement('COUNT', 'IN', 'INVENTORY');
-        InventorySourceContract::assertCompatible($adjustment, $this->allocation($adjustment), 'inventory.adjustment');
+        InventorySourceContract::assertCompatible($adjustment, $this->allocation($adjustment), 'inventory_adjustment');
         $this->assertTrue(true);
     }
 

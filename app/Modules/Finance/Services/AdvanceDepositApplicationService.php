@@ -96,13 +96,21 @@ final class AdvanceDepositApplicationService
                 'application_hash' => $hash,
                 'created_by' => $actor?->id,
             ]);
-            $mapping = strtoupper($lockedAdvance->party_type) === 'CUSTOMER' ? 'CUSTOMER_ADVANCE' : 'SUPPLIER_ADVANCE';
-            $advanceAccount = $this->mappings->resolve($mapping);
+            $event = AdvanceDepositPostingContract::event($lockedAdvance->party_type, 'APPLY');
+            $advanceResolution = $this->mappings->resolveForEvent(
+                $event,
+                strtoupper($lockedAdvance->party_type) === 'CUSTOMER' ? 'CUSTOMER_ADVANCE' : 'SUPPLIER_ADVANCE',
+            );
+            $advanceAccount = $advanceResolution['account'];
             $journal = $this->journals->post([
                 'source_type' => 'FINANCE_ADVANCE_APP', 'source_id' => (string) $application->id,
-                'source_reference' => $payload['source_id'], 'event_code' => AdvanceDepositPostingContract::event($lockedAdvance->party_type, 'APPLY'),
+                'source_reference' => $payload['source_id'], 'event_code' => $event,
                 'entry_date' => $payload['application_date'], 'document_date' => $payload['application_date'],
                 'description' => 'Advance/Deposit application '.$payload['source_id'],
+                'posting_metadata' => ['contract_version' => 1, 'event_code' => $event, 'accounts' => array_values(array_filter([
+                    $advanceResolution['provenance'],
+                    ['event_code' => $event, 'account_role' => strtoupper($lockedAdvance->party_type) === 'CUSTOMER' ? 'ACCOUNTS_RECEIVABLE' : 'ACCOUNTS_PAYABLE', 'account_id' => (int) $lockedItem->account_id, 'source' => 'ORIGINAL', 'source_type' => 'OPEN_ITEM', 'source_id' => (string) $lockedItem->id, 'mapping_id' => null, 'mapping_version' => null],
+                ]))],
                 'lines' => AdvanceDepositPostingContract::applicationLines(
                     $lockedAdvance->party_type, (int) $advanceAccount->id, (int) $lockedItem->account_id,
                     (int) $lockedItem->party_id, $payload['amount'], $payload['source_id'],
@@ -116,7 +124,7 @@ final class AdvanceDepositApplicationService
         }, 3);
     }
 
-    /** @param list<array{advance_deposit_id:int,amount:string|int|float}> $allocations @return list<array{account_id:int,amount:string}> */
+    /** @param list<array{advance_deposit_id:int,amount:string|int|float}> $allocations @return list<array{account_id:int,amount:string,provenance:array<string,mixed>}> */
     public function applyToPhysicalSale(PhysicalSale $sale, array $allocations, string $date, ?User $actor = null): array
     {
         if ($allocations === []) {
@@ -132,7 +140,7 @@ final class AdvanceDepositApplicationService
             if ($requested->contains(fn (array $row): bool => $row['id'] < 1 || $row['amount'] === '0.00') || $requested->pluck('id')->duplicates()->isNotEmpty()) {
                 throw ValidationException::withMessages(['advance_allocations' => 'AI แต่ละรายการต้องระบุครั้งเดียวและยอดต้องมากกว่า 0']);
             }
-            $advances = AdvanceDeposit::query()->whereKey($requested->pluck('id')->sort()->values())->orderBy('id')->lockForUpdate()->get()->keyBy('id');
+            $advances = AdvanceDeposit::query()->with('journalEntry.lines')->whereKey($requested->pluck('id')->sort()->values())->orderBy('id')->lockForUpdate()->get()->keyBy('id');
             if ($advances->count() !== $requested->count()) {
                 throw ValidationException::withMessages(['advance_allocations' => 'ไม่พบ AI ที่เลือก']);
             }
@@ -158,8 +166,28 @@ final class AdvanceDepositApplicationService
                     $application = AdvanceDepositApplication::query()->create([...$payload, 'idempotency_key' => $key, 'application_hash' => $hash, 'created_by' => $actor?->id]);
                     $advance->update(['applied_amount' => JournalBalance::add($advance->applied_amount, $row['amount']), 'status' => AdvanceDepositContract::status($advance->original_amount, JournalBalance::add($advance->applied_amount, $row['amount']))]);
                 }
-                $account = $this->mappings->resolve('CUSTOMER_ADVANCE');
-                $result[] = ['account_id' => (int) $account->id, 'amount' => $application->amount];
+                $snapshot = collect(data_get($advance->journalEntry?->posting_metadata, 'accounts', []))
+                    ->firstWhere('account_role', 'CUSTOMER_ADVANCE');
+                $accountId = (int) data_get($snapshot, 'account_id', 0);
+                if ($accountId < 1) {
+                    $accountId = (int) $this->mappings->resolveForEvent('customer_advance', 'CUSTOMER_ADVANCE')['account']->id;
+                }
+                $provenance = $snapshot ?: [
+                    'event_code' => 'sales_invoice',
+                    'account_role' => 'CUSTOMER_ADVANCE_ORIGINAL_'.(int) $advance->id,
+                    'account_id' => $accountId,
+                    'source' => 'ORIGINAL',
+                    'source_type' => 'ADVANCE_DEPOSIT',
+                    'source_id' => (string) $advance->id,
+                    'mapping_id' => null,
+                    'mapping_version' => null,
+                ];
+                $provenance['event_code'] = 'sales_invoice';
+                $provenance['account_role'] = 'CUSTOMER_ADVANCE_ORIGINAL_'.(int) $advance->id;
+                $provenance['source'] = 'ORIGINAL';
+                $provenance['source_type'] = 'ADVANCE_DEPOSIT';
+                $provenance['source_id'] = (string) $advance->id;
+                $result[] = ['account_id' => $accountId, 'amount' => $application->amount, 'provenance' => $provenance];
             }
 
             return $result;

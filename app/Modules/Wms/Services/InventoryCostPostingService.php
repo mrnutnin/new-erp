@@ -40,9 +40,13 @@ final class InventoryCostPostingService
         }
 
         $accounts = [];
+        $provenance = [];
         foreach ($resolved as $result) {
             foreach ($result['accounts'] as $key => $accountId) {
                 $accounts[$key] = (int) $accountId;
+            }
+            foreach ($result['provenance'] as $resolution) {
+                $provenance[$resolution['account_role']] = $resolution;
             }
         }
 
@@ -53,6 +57,7 @@ final class InventoryCostPostingService
             'creates_journal' => false,
             'allocation_ids' => $allocations->map(fn (CostAllocation $allocation): int => (int) $allocation->id)->all(),
             'accounts' => $accounts,
+            'posting_metadata' => ['contract_version' => 1, 'event_code' => strtolower(trim($eventCode)), 'accounts' => array_values($provenance)],
             'lines' => $preview['lines'],
             'posting_hash' => PostingIdentity::fingerprint([
                 'event_code' => strtolower(trim($eventCode)),
@@ -101,7 +106,7 @@ final class InventoryCostPostingService
 
             match ($eventCode) {
                 'sales_cogs' => ($add('COGS_DEFAULT', 'DEBIT') || $add('INVENTORY_DEFAULT', 'CREDIT')),
-                'inventory.adjustment' => $allocation->direction === 'IN'
+                'inventory_adjustment' => $allocation->direction === 'IN'
                     ? ($add('INVENTORY_DEFAULT', 'DEBIT') || $add('INVENTORY_ADJUSTMENT_GAIN', 'CREDIT'))
                     : ($add('INVENTORY_ADJUSTMENT_LOSS', 'DEBIT') || $add('INVENTORY_DEFAULT', 'CREDIT')),
                 'inventory.recost' => throw ValidationException::withMessages(['event_code' => 'ยังไม่เปิดใช้การ Post recost จนกว่าจะมี mapping revaluation และ reversal contract']),
@@ -120,7 +125,7 @@ final class InventoryCostPostingService
     {
         $required = match ($eventCode) {
             'sales_cogs' => ['COGS_DEFAULT', 'INVENTORY_DEFAULT'],
-            'inventory.adjustment' => $allocation->direction === 'IN'
+            'inventory_adjustment' => $allocation->direction === 'IN'
                 ? ['INVENTORY_DEFAULT', 'INVENTORY_ADJUSTMENT_GAIN']
                 : ['INVENTORY_ADJUSTMENT_LOSS', 'INVENTORY_DEFAULT'],
             'inventory.recost' => ['INVENTORY_REVALUATION'],

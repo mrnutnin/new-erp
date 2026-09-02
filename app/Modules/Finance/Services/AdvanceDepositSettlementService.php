@@ -54,13 +54,18 @@ final class AdvanceDepositSettlementService
             if (! $bank || ! $bank->account_id) {
                 throw ValidationException::withMessages(['bank_account_id' => 'บัญชีธนาคารไม่พร้อมลงบัญชี']);
             }
-            $mapping = $partyType === 'CUSTOMER' ? 'CUSTOMER_ADVANCE' : 'SUPPLIER_ADVANCE';
-            $advanceAccount = $this->mappings->resolve($mapping);
+            $event = AdvanceDepositPostingContract::event($partyType);
+            $advanceResolution = $this->mappings->resolveForEvent($event, $partyType === 'CUSTOMER' ? 'CUSTOMER_ADVANCE' : 'SUPPLIER_ADVANCE');
+            $advanceAccount = $advanceResolution['account'];
             $amount = JournalBalance::decimal($source->gross_amount);
             $journal = $this->journals->post([
                 'source_type' => 'FINANCE', 'source_id' => (string) $source->id, 'source_reference' => $source->document_number,
-                'event_code' => AdvanceDepositPostingContract::event($partyType), 'entry_date' => $source->settlement_date->format('Y-m-d'),
+                'event_code' => $event, 'entry_date' => $source->settlement_date->format('Y-m-d'),
                 'document_date' => $source->document_date->format('Y-m-d'), 'description' => $source->description ?: $source->document_number,
+                'posting_metadata' => ['contract_version' => 1, 'event_code' => $event, 'accounts' => array_values(array_filter([
+                    ['event_code' => $event, 'account_role' => 'BANK_ACCOUNT', 'account_id' => (int) $bank->account_id, 'source' => 'DOCUMENT', 'source_type' => 'BANK_ACCOUNT', 'source_id' => (string) $bank->id, 'mapping_id' => null, 'mapping_version' => null],
+                    $advanceResolution['provenance'],
+                ]))],
                 'lines' => AdvanceDepositPostingContract::sourceLines($partyType, (int) $bank->account_id, (int) $advanceAccount->id, $amount, $source->document_number),
             ], $warehouse, $actor);
             $source->update(['status' => 'POSTED', 'journal_entry_id' => $journal->id, 'posted_by' => $actor?->id, 'posted_at' => now()]);
@@ -166,8 +171,10 @@ final class AdvanceDepositSettlementService
             $bankLine = $journal->lines->first(fn ($line): bool => (int) $line->account_id === (int) $bank->account_id
                 && JournalBalance::decimal($partyType === 'CUSTOMER' ? $line->debit : $line->credit) === $amount
                 && JournalBalance::decimal($partyType === 'CUSTOMER' ? $line->credit : $line->debit) === '0.00');
-            $mapping = $partyType === 'CUSTOMER' ? 'CUSTOMER_ADVANCE' : 'SUPPLIER_ADVANCE';
-            $advanceAccount = $this->mappings->resolve($mapping);
+            $advanceAccount = $this->mappings->resolveForEvent(
+                $event,
+                $partyType === 'CUSTOMER' ? 'CUSTOMER_ADVANCE' : 'SUPPLIER_ADVANCE',
+            )['account'];
             $advanceLine = $journal->lines->first(fn ($line): bool => (int) $line->account_id === (int) $advanceAccount->id
                 && JournalBalance::decimal($partyType === 'CUSTOMER' ? $line->credit : $line->debit) === $amount
                 && JournalBalance::decimal($partyType === 'CUSTOMER' ? $line->debit : $line->credit) === '0.00');

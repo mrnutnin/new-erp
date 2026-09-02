@@ -15,7 +15,7 @@ final class WhtRealizationLedgerService
 {
     public function __construct(private readonly AccountMappingService $mappings) {}
 
-    public function record(Allocation $allocation, ?Settlement $settlement, User $actor): ?WithholdingRealization
+    public function record(Allocation $allocation, Settlement $settlement, User $actor): ?WithholdingRealization
     {
         return DB::transaction(function () use ($allocation, $settlement, $actor) {
             $allocation = Allocation::query()->with(['debitOpenItem', 'creditOpenItem'])->lockForUpdate()->findOrFail($allocation->id);
@@ -35,11 +35,15 @@ final class WhtRealizationLedgerService
                 ->where('id', '!=', $allocation->id)->where('allocation_date', '<=', $date)->where(fn ($q) => $q->whereNull('reversal_date')->orWhere('reversal_date', '>', $date))->sum('amount');
             $calc = WhtRealizationCalculator::calculate($invoice->original_amount, $invoice->withholding_base, $invoice->withholding_amount, $allocation->amount, (string) $allocated, (string) $realized);
             $direction = $invoice->ledger_type === 'AR' ? 'RECEIVABLE' : 'PAYABLE';
-            $key = $direction === 'RECEIVABLE' ? 'WHT_RECEIVABLE' : 'WHT_PAYABLE';
+            $account = $direction === 'RECEIVABLE' && $settlement->document_type === 'RECEIPT'
+                ? $this->mappings->resolveForEvent('customer_payment', 'WHT_RECEIVABLE')['account']
+                : ($direction === 'PAYABLE' && $settlement->document_type === 'PAYMENT'
+                    ? $this->mappings->resolveForEvent('supplier_payment', 'WHT_PAYABLE')['account']
+                    : throw new \RuntimeException('Settlement ไม่ตรงกับทิศทาง WHT ของ Open Item'));
 
             return WithholdingRealization::query()->create([
                 'allocation_id' => $allocation->id, 'settlement_id' => $settlement?->id, 'open_item_id' => $invoice->id,
-                'tax_code_id' => $invoice->withholding_tax_code_id, 'account_id' => $this->mappings->resolve($key)->id,
+                'tax_code_id' => $invoice->withholding_tax_code_id, 'account_id' => $account->id,
                 'direction' => $direction, 'tax_base' => $calc['base'], 'tax_amount' => $calc['tax'], 'settlement_date' => $date, 'created_by' => $actor->id,
             ]);
         }, 3);

@@ -18,8 +18,8 @@ final class PhysicalSaleReceiptUiContractTest extends TestCase
         self::assertStringContainsString("Route::get('/physical-sales/{physicalSale}/receive-payment'", $routes);
         self::assertStringContainsString("Route::post('/physical-sales/{physicalSale}/receive-payment'", $routes);
         self::assertStringContainsString('receive-payment/summary', $routes);
-        self::assertStringContainsString('permission:pos.physical-sales.receive-payment', $routes);
-        self::assertStringContainsString('pos.physical-sales.receive-payment', $rbac);
+        self::assertStringContainsString('permission:pos.receipts.create', $routes);
+        self::assertStringContainsString('pos.receipts.create', $rbac);
         self::assertStringContainsString('paymentOpenItem', $controller);
         self::assertStringContainsString('PhysicalSaleReceiptService', $controller);
         self::assertStringContainsString("'withholding_amount' => ['prohibited']", $request);

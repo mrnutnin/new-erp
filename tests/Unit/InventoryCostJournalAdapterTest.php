@@ -31,6 +31,10 @@ class InventoryCostJournalAdapterTest extends TestCase
         $this->assertSame('4', $payload['lines'][1]['subledger_id']);
         $this->assertSame('12.35', $payload['lines'][0]['debit']);
         $this->assertSame('12.35', $payload['lines'][1]['credit']);
+        $this->assertSame('MASTER', $payload['posting_metadata']['accounts'][0]['source']);
+        $this->assertSame('ITEM', $payload['posting_metadata']['accounts'][0]['source_type']);
+        $this->assertSame(10, $payload['posting_metadata']['accounts'][0]['account_id']);
+        $this->assertSame(20, $payload['posting_metadata']['accounts'][1]['account_id']);
     }
 
     public function test_rejects_missing_item_specific_cogs_account(): void

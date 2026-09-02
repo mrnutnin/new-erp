@@ -7,7 +7,7 @@
         <div><h1 class="h3 mb-2">คู่มือการทำงาน POS</h1><p class="text-secondary mb-0">เลือกกลุ่มงาน แล้วทำตามลำดับจากซ้ายไปขวา; ปุ่ม <i class="bx bx-play align-middle" aria-hidden="true"></i> จะพาไปยังเมนูที่เกี่ยวข้อง</p></div>
     </div>
     @php($workflowModes = ['setup' => 'เริ่มใช้งานครั้งแรก', 'daily' => 'งานประจำวัน'])
-    @php($hasSetupBlocker = collect($workflows)->where('mode', 'setup')->flatMap(fn ($workflow) => $workflow['steps'])->contains(fn ($step) => ($step['status_code'] ?? null) === 'NOT_READY'))
+    @php($hasSetupBlocker = collect($workflows)->where('mode', 'setup')->flatMap(fn ($workflow) => $workflow['steps'])->contains(fn ($step) => in_array($step['status_code'] ?? null, ['NOT_READY', 'CONFIGURATION_WARNING'], true)))
     @php($defaultWorkflowMode = $hasSetupBlocker ? 'setup' : 'daily')
     <ul class="nav nav-pills gap-2 mb-4" role="tablist">
         @foreach($workflowModes as $mode => $label)

@@ -83,11 +83,13 @@ class AssetDepreciationRunController extends Controller
         return response()->json(['status' => true, 'msg' => 'สร้างชุดคำนวณค่าเสื่อมร่างแล้ว', 'redirect' => route('asset.depreciations.show', $run)]);
     }
 
-    public function show(Request $request, AssetDepreciationRun $depreciation): View
+    public function show(Request $request, AssetDepreciationRun $depreciation, AssetDepreciationRunService $service): View
     {
-        return view('Asset::depreciations.show', ['run' => $this->scoped($request, $depreciation)->load([
+        $run = $this->scoped($request, $depreciation)->load([
             'branch', 'fiscalPeriod', 'createdBy', 'submittedBy', 'approvedBy', 'postedBy', 'reversedBy', 'cancelledBy', 'journalEntry', 'reversalJournalEntry', 'lines.asset', 'lines.depreciationBook', 'exceptions',
-        ])]);
+        ]);
+
+        return view('Asset::depreciations.show', ['run' => $run, 'postReadiness' => $run->status === 'APPROVED' ? $service->postReadiness($run) : null]);
     }
 
     public function submit(Request $request, AssetDepreciationRun $depreciation, AssetDepreciationRunService $service): JsonResponse

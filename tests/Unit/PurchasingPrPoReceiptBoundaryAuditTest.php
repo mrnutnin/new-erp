@@ -139,8 +139,8 @@ final class PurchasingPrPoReceiptBoundaryAuditTest extends TestCase
         $this->assertStringContainsString('public function options(Request $request): JsonResponse', $controller);
         $this->assertStringContainsString('public function create(): View', $controller);
         $this->assertStringContainsString('public function edit(Party $supplier): View', $controller);
-        $this->assertStringContainsString('public function store(SaveSupplierRequest $request, AuditLogger $audit): JsonResponse', $controller);
-        $this->assertStringContainsString('return parent::store($request, $audit);', $controller);
+        $this->assertStringContainsString('public function store(SaveSupplierRequest $request, AuditLogger $audit, DocumentSequenceService $sequences): JsonResponse', $controller);
+        $this->assertStringContainsString('return parent::store($request, $audit, $sequences);', $controller);
         $this->assertStringContainsString('public function update(SaveSupplierRequest $request, Party $supplier, AuditLogger $audit): JsonResponse', $controller);
         $this->assertStringContainsString('return parent::update($request, $supplier, $audit);', $controller);
         $this->assertStringContainsString('public function destroy(Request $request, Party $supplier, AuditLogger $audit): JsonResponse', $controller);

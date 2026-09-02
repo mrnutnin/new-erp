@@ -114,6 +114,7 @@ class JournalPostingService
             'source_reference' => $posting['source_reference'],
             'idempotency_key' => $key,
             'posting_hash' => $hash,
+            'posting_metadata' => $posting['posting_metadata'],
             'description' => $posting['description'],
             'currency_code' => CompanySetting::query()->value('base_currency') ?: 'THB',
             'exchange_rate' => 1,
@@ -199,6 +200,17 @@ class JournalPostingService
             'entry_date' => ['required', 'date_format:Y-m-d'],
             'document_date' => ['nullable', 'date_format:Y-m-d'],
             'description' => ['required', 'string', 'max:500'],
+            'posting_metadata' => ['nullable', 'array'],
+            'posting_metadata.contract_version' => ['required_with:posting_metadata', 'integer', 'min:1'],
+            'posting_metadata.event_code' => ['required_with:posting_metadata', 'string', 'max:80'],
+            'posting_metadata.accounts' => ['required_with:posting_metadata', 'array', 'max:50'],
+            'posting_metadata.accounts.*.account_role' => ['required', 'string', 'max:80', 'regex:/^[A-Z][A-Z0-9_]*$/'],
+            'posting_metadata.accounts.*.account_id' => ['required', 'integer', 'min:1'],
+            'posting_metadata.accounts.*.source' => ['required', Rule::in(['ORIGINAL', 'DOCUMENT', 'MASTER', 'MAPPING'])],
+            'posting_metadata.accounts.*.source_type' => ['nullable', 'string', 'max:80'],
+            'posting_metadata.accounts.*.source_id' => ['nullable', 'string', 'max:100'],
+            'posting_metadata.accounts.*.mapping_id' => ['nullable', 'integer', 'min:1'],
+            'posting_metadata.accounts.*.mapping_version' => ['nullable', 'integer', 'min:1'],
             // A depreciation run retains one subledger line per Asset when its account is controlled.
             'lines' => ['required', 'array', 'min:2', 'max:2000'],
             'lines.*.account_id' => ['required', 'integer', 'min:1'],
@@ -221,6 +233,9 @@ class JournalPostingService
         $posting['document_date'] ??= null;
         $posting['warehouse_id'] = $warehouse?->id;
         $posting['branch_id'] = $branch->id;
+        $posting['posting_metadata'] = isset($posting['posting_metadata'])
+            ? PostingIdentity::canonicalize($posting['posting_metadata'])
+            : null;
         $posting['lines'] = collect($posting['lines'])->map(function (array $line, int $index) {
             $line = [
                 'account_id' => (int) $line['account_id'],
@@ -249,7 +264,31 @@ class JournalPostingService
         if ($totals['debit'] <= 0 || $totals['debit'] !== $totals['credit']) {
             throw ValidationException::withMessages(['lines' => 'ยอดรวมเดบิตและเครดิตต้องเท่ากันและมากกว่าศูนย์']);
         }
+        $this->assertMetadataMatchesPosting($posting);
 
         return $posting;
+    }
+
+    private function assertMetadataMatchesPosting(array $posting): void
+    {
+        $metadata = $posting['posting_metadata'];
+        if ($metadata === null) {
+            return;
+        }
+        if (strtolower(trim((string) $metadata['event_code'])) !== $posting['event_code']) {
+            throw ValidationException::withMessages(['posting_metadata.event_code' => 'Posting metadata ต้องอ้างอิง event เดียวกับ Journal']);
+        }
+
+        $lineAccounts = collect($posting['lines'])->pluck('account_id')->map(fn (int $id): string => (string) $id)->unique();
+        $roles = [];
+        foreach ($metadata['accounts'] as $index => $snapshot) {
+            if (! $lineAccounts->contains((string) $snapshot['account_id'])) {
+                throw ValidationException::withMessages(["posting_metadata.accounts.{$index}.account_id" => 'บัญชีใน Posting metadata ต้องอยู่ใน Journal lines']);
+            }
+            if (isset($roles[$snapshot['account_role']])) {
+                throw ValidationException::withMessages(["posting_metadata.accounts.{$index}.account_role" => 'Account role ใน Posting metadata ห้ามซ้ำ']);
+            }
+            $roles[$snapshot['account_role']] = true;
+        }
     }
 }

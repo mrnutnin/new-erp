@@ -94,13 +94,56 @@ class AccountingFinanceMockupSeeder extends Seeder
             'INVENTORY_RECOST_GAIN' => '42200',
             'INVENTORY_RECOST_LOSS' => '52200',
         ] as $key => $accountCode) {
-            AccountMapping::query()->updateOrCreate(['key' => $key], [
+            AccountMapping::query()->updateOrCreate(['event_code' => null, 'key' => $key], [
                 'account_id' => $accounts[$accountCode]->id,
                 'is_active' => true,
                 'created_by' => $user->id,
                 'updated_by' => $user->id,
             ]);
         }
+
+        foreach (['OUTPUT_VAT' => '21800', 'WHT_RECEIVABLE' => '11900', 'CUSTOMER_ADVANCE' => '21500'] as $key => $accountCode) {
+            AccountMapping::query()->updateOrCreate(['event_code' => 'customer_payment', 'key' => $key], [
+                'account_id' => $accounts[$accountCode]->id,
+                'is_active' => true,
+                'created_by' => $user->id,
+                'updated_by' => $user->id,
+            ]);
+        }
+
+        foreach (['INPUT_VAT' => '11800', 'WHT_PAYABLE' => '21400', 'SUPPLIER_ADVANCE' => '12500'] as $key => $accountCode) {
+            AccountMapping::query()->updateOrCreate(['event_code' => 'supplier_payment', 'key' => $key], [
+                'account_id' => $accounts[$accountCode]->id,
+                'is_active' => true,
+                'created_by' => $user->id,
+                'updated_by' => $user->id,
+            ]);
+        }
+
+        foreach (['CUSTOMER_ADVANCE' => '21500', 'WHT_RECEIVABLE' => '11900'] as $key => $accountCode) {
+            AccountMapping::query()->updateOrCreate(['event_code' => 'customer_advance', 'key' => $key], [
+                'account_id' => $accounts[$accountCode]->id,
+                'is_active' => true,
+                'created_by' => $user->id,
+                'updated_by' => $user->id,
+            ]);
+        }
+
+        foreach (['ACCOUNTS_RECEIVABLE' => '12000', 'DEFERRED_OUTPUT_VAT' => '21810', 'WHT_RECEIVABLE' => '11900', 'CUSTOMER_ADVANCE' => '21500'] as $key => $accountCode) {
+            AccountMapping::query()->updateOrCreate(['event_code' => 'sales_invoice', 'key' => $key], [
+                'account_id' => $accounts[$accountCode]->id,
+                'is_active' => true,
+                'created_by' => $user->id,
+                'updated_by' => $user->id,
+            ]);
+        }
+
+        AccountMapping::query()->updateOrCreate(['event_code' => 'sales_commission_payout', 'key' => 'COMMISSION_EXPENSE'], [
+            'account_id' => $accounts['53000']->id,
+            'is_active' => true,
+            'created_by' => $user->id,
+            'updated_by' => $user->id,
+        ]);
 
         BankAccount::query()->updateOrCreate(['warehouse_id' => $warehouse->id, 'code' => 'BANK-HQ'], [
             'account_id' => $accounts['11111']->id, 'type' => 'BANK', 'name' => 'ธนาคาร Mockup สำนักงานใหญ่', 'bank_name' => 'ธนาคารตัวอย่าง', 'account_number' => '123-4-56789-0', 'currency_code' => 'THB', 'is_active' => true, 'created_by' => $user->id,

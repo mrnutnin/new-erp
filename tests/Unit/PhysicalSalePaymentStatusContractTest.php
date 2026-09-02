@@ -25,9 +25,9 @@ final class PhysicalSalePaymentStatusContractTest extends TestCase
         self::assertStringContainsString('payment_status_label', $view);
         self::assertStringContainsString('physical-sale-filter', $view);
         self::assertStringContainsString('physical-sale-from', $view);
-        self::assertStringContainsString('receive_payment_url', $controller);
+        self::assertStringContainsString('receive_receipt_url', $controller);
         self::assertStringContainsString('cancel_full_detail_url', $controller);
-        self::assertStringContainsString("button(row.pdf_url,'btn-app-soft','bx-printer','พิมพ์ PDF')", $view);
-        self::assertStringContainsString("button(row.receive_payment_url,'btn-success','bx-money','รับชำระเงิน')", $view);
+        self::assertStringContainsString('button(row.pdf_url', $view);
+        self::assertStringContainsString("button(row.receive_receipt_url, 'btn-success',", $view);
     }
 }

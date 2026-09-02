@@ -123,13 +123,13 @@ class SalesQuotationController extends Controller
         return redirect()->route('pos.sales-quotations.show', $quotation)->with('success', 'สร้างใบเสนอราคาจากใบขอราคาแล้ว');
     }
 
-    public function fromIntake(Request $request, SalesIntake $salesIntake, DocumentSequenceService $sequences, AuditLogger $audit): JsonResponse
+    public function fromIntake(Request $request, SalesIntake $salesIntake, DocumentSequenceService $sequences, AuditLogger $audit): JsonResponse|RedirectResponse
     {
         abort_unless((int) $salesIntake->branch_id === $this->branchId($request), 404);
         $quotation = DB::transaction(function () use ($request, $salesIntake, $sequences, $audit) {
             $intake = SalesIntake::query()->with(['lines', 'quotation', 'order'])->lockForUpdate()->findOrFail($salesIntake->id);
             abort_unless(! $intake->requires_rfq && in_array($intake->status, ['DRAFT', 'COMPLETED'], true), 422);
-            if ($intake->quotation) {
+            if ($intake->quotation && $intake->quotation->status !== 'CANCELLED') {
                 return $intake->quotation;
             }
             if ($intake->order) {
@@ -157,14 +157,18 @@ class SalesQuotationController extends Controller
             ]);
             $sequences->recordIssued($sequence, $quotation->document_number, 'sales_quotations', $quotation->id, $intake->document_date, $request->user()->id);
             foreach ($intake->lines as $line) {
-                $quotation->lines()->create(['line_number' => $line->line_number, 'item_id' => $line->item_id, 'uom_id' => $line->uom_id, 'description' => $line->description, 'quantity' => $line->quantity, 'unit_price' => $line->requested_unit_price ?? $line->standard_unit_price ?? '0', 'discount_amount' => $line->discount_amount, 'promotion_discount_amount' => $line->promotion_discount_amount, 'line_total' => $line->line_total, 'pricing_snapshot' => $line->pricing_snapshot, 'item_snapshot' => $line->item_snapshot, 'uom_snapshot' => $line->uom_snapshot]);
+                $quotation->lines()->create(['line_number' => $line->line_number, 'item_id' => $line->item_id, 'uom_id' => $line->uom_id, 'description' => $this->lineDescription($line), 'quantity' => $line->quantity, 'unit_price' => $line->requested_unit_price ?? $line->standard_unit_price ?? '0', 'discount_amount' => $line->discount_amount, 'promotion_discount_amount' => $line->promotion_discount_amount, 'line_total' => $line->line_total, 'pricing_snapshot' => $line->pricing_snapshot, 'item_snapshot' => $line->item_snapshot, 'uom_snapshot' => $line->uom_snapshot]);
             }
             $audit->record('pos.sales-quotation.created', $quotation, [], $quotation->fresh()->toArray(), $request->user(), $request);
 
             return $quotation;
         });
 
-        return response()->json(['status' => true, 'redirect' => route('pos.sales-quotations.show', $quotation)]);
+        if ($request->expectsJson()) {
+            return response()->json(['status' => true, 'redirect' => route('pos.sales-quotations.show', $quotation)]);
+        }
+
+        return redirect()->route('pos.sales-quotations.show', $quotation)->with('success', 'สร้างใบเสนอราคาจากใบรับข้อมูลแล้ว');
     }
 
     public function send(ChangeSalesQuotationStatusRequest $request, SalesQuotation $salesQuotation, AuditLogger $audit): JsonResponse
@@ -200,11 +204,13 @@ class SalesQuotationController extends Controller
         DB::transaction(function () use ($request, $salesQuotation, $audit, $action): void {
             $quotation = SalesQuotation::query()->whereKey($this->scope($request, $salesQuotation)->id)->lockForUpdate()->firstOrFail();
             $quotation->load('order');
-            if ($quotation->order) {
+            if ($quotation->order && $quotation->order->status !== 'CANCELLED') {
                 throw ValidationException::withMessages(['status' => 'ใบเสนอราคานี้ถูกสร้างใบสั่งขายแล้ว ไม่สามารถเปลี่ยนสถานะได้']);
             }
             try {
-                $status = SalesQuotationState::{$action}($quotation->status);
+                $status = $action === 'cancel'
+                    ? SalesQuotationState::cancel($quotation->status, ! $quotation->order || $quotation->order->status === 'CANCELLED')
+                    : SalesQuotationState::{$action}($quotation->status);
             } catch (DomainException $e) {
                 throw ValidationException::withMessages(['status' => $e->getMessage()]);
             }
@@ -235,6 +241,11 @@ class SalesQuotationController extends Controller
     private function warehouseId(Request $request): int
     {
         return (int) $request->attributes->get('selectedWarehouse')->id;
+    }
+
+    private function lineDescription(object $line): string
+    {
+        return trim((string) $line->description) ?: trim((string) data_get($line->item_snapshot, 'name')) ?: 'รายการสินค้า';
     }
 
     private function branchId(Request $request): int

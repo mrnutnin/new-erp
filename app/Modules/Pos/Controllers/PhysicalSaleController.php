@@ -151,7 +151,7 @@ final class PhysicalSaleController extends Controller
         abort_if($sourceOrderId && $orders->isEmpty(), 404);
 
         $sourceOrder = $orders->firstWhere('id', $sourceOrderId);
-        $sourceOrder?->load(['lines', 'sourceIntake.preparedBy', 'quotation.sourceIntake.preparedBy', 'quotation.rfq.sourceIntake.preparedBy', 'rfq.sourceIntake.preparedBy']);
+        $sourceOrder?->load(['lines', 'sourceIntake.preparedBy', 'sourceIntake.lines', 'quotation.sourceIntake.preparedBy', 'quotation.sourceIntake.lines', 'quotation.rfq.sourceIntake.preparedBy', 'quotation.rfq.sourceIntake.lines', 'rfq.sourceIntake.preparedBy', 'rfq.sourceIntake.lines']);
         $documentType = (float) ($sourceOrder?->party?->customerRole?->credit_limit ?? 0) > 0 ? 'IV' : 'HS';
         $documentDate = today();
         $term = $sourceOrder?->party?->customerRole?->paymentTerm;
@@ -159,8 +159,9 @@ final class PhysicalSaleController extends Controller
             ? $documentDate
             : ($term?->is_active ? PhysicalSaleDueDate::resolve('IV', $documentDate->format('Y-m-d'), $term, null) : null);
         $sourceIntake = $sourceOrder?->sourceIntake ?? $sourceOrder?->quotation?->sourceIntake ?? $sourceOrder?->quotation?->rfq?->sourceIntake ?? $sourceOrder?->rfq?->sourceIntake;
+        $sourceTaxProfile = $sourceOrder ? $this->sourceTaxProfile($sourceOrder) : null;
 
-        return view('Pos::physical-sales.form', ['sale' => new PhysicalSale(['document_type' => $documentType, 'source_type' => 'SALES_ORDER', 'document_date' => $documentDate, 'tax_treatment' => 'VAT_OUT', 'prices_include_vat' => true, 'due_date' => $dueDate]), 'orders' => $orders, 'sourceOrder' => $sourceOrder, 'sourceIntake' => $sourceIntake, 'sourceOrderId' => $sourceOrderId, 'fulfillmentWarehouseId' => $warehouse->id, 'fulfillmentWarehouses' => $request->user()->warehouses()->where('warehouses.branch_id', $branch->id)->where('warehouses.is_active', true)->orderBy('warehouses.code')->get(['warehouses.id', 'warehouses.code', 'warehouses.name']), 'vatTaxCodes' => TaxCode::query()->where('kind', 'VAT_OUT')->where('is_active', true)->orderBy('code')->get(['id', 'code', 'name', 'rate']), 'whtTaxCodes' => TaxCode::query()->where('kind', 'WHT')->where('is_active', true)->orderBy('code')->get(['id', 'code', 'name', 'rate'])]);
+        return view('Pos::physical-sales.form', ['sale' => new PhysicalSale(['document_type' => $documentType, 'source_type' => 'SALES_ORDER', 'document_date' => $documentDate, 'tax_treatment' => $sourceTaxProfile['tax_treatment'] ?? 'VAT_OUT', 'prices_include_vat' => $sourceTaxProfile['prices_include_vat'] ?? true, 'due_date' => $dueDate]), 'orders' => $orders, 'sourceOrder' => $sourceOrder, 'sourceIntake' => $sourceIntake, 'sourceTaxProfile' => $sourceTaxProfile, 'sourceOrderId' => $sourceOrderId, 'fulfillmentWarehouseId' => $warehouse->id, 'fulfillmentWarehouses' => $request->user()->warehouses()->where('warehouses.branch_id', $branch->id)->where('warehouses.is_active', true)->orderBy('warehouses.code')->get(['warehouses.id', 'warehouses.code', 'warehouses.name']), 'vatTaxCodes' => TaxCode::query()->where('kind', 'VAT_OUT')->where('is_active', true)->orderBy('code')->get(['id', 'code', 'name', 'rate']), 'whtTaxCodes' => TaxCode::query()->where('kind', 'WHT')->where('is_active', true)->orderBy('code')->get(['id', 'code', 'name', 'rate'])]);
     }
 
     public function store(SavePhysicalSaleRequest $request, DocumentSequenceService $sequences, AuditLogger $audit): JsonResponse
@@ -173,6 +174,11 @@ final class PhysicalSaleController extends Controller
             if (! $source) {
                 throw ValidationException::withMessages(['source_id' => 'ไม่พบเอกสารต้นทางในสาขาที่เลือก']);
             }
+            $sourceTaxProfile = $this->sourceTaxProfile($source);
+            if ($sourceTaxProfile) {
+                $values['tax_treatment'] = $sourceTaxProfile['tax_treatment'];
+                $values['prices_include_vat'] = $sourceTaxProfile['prices_include_vat'];
+            }
             if (PhysicalSale::query()->where(['source_type' => $values['source_type'], 'source_id' => $source->id])->where('status', '!=', 'VOID')->exists()) {
                 throw ValidationException::withMessages(['source_id' => 'ใบสั่งขายนี้ถูกนำไปสร้าง HS/IV แล้ว ไม่สามารถสร้างซ้ำได้']);
             }
@@ -182,12 +188,18 @@ final class PhysicalSaleController extends Controller
                 throw ValidationException::withMessages(['document_type' => 'ยังไม่ได้ตั้งค่าเลขเอกสารใบขายสด/ขายเชื่อ']);
             }
             $dueDate = $this->dueDate($values, $source);
-            $taxCode = $this->vatTaxCode($values);
+            $taxCodes = $sourceTaxProfile && $sourceTaxProfile['tax_treatment'] === 'VAT_OUT'
+                ? TaxCode::query()->whereIn('id', collect($sourceTaxProfile['lines'])->pluck('tax_code_id')->filter()->unique())->where('kind', 'VAT_OUT')->where('is_active', true)->lockForUpdate()->get()->keyBy('id')
+                : collect();
+            $taxCode = $sourceTaxProfile ? null : $this->vatTaxCode($values);
             $draftLines = $source->lines->map(fn ($line): array => [
                 'source' => $line, 'quantity' => $line->quantity, 'unit_price' => $line->unit_price,
-                'discount_amount' => $line->discount_amount ?? '0.00', 'tax_code_id' => $taxCode?->id,
-                'tax_rate' => $taxCode?->rate ?? '0.0000',
+                'discount_amount' => $line->discount_amount ?? '0.00', 'tax_code_id' => $sourceTaxProfile['lines'][$line->line_number]['tax_code_id'] ?? $taxCode?->id,
+                'tax_rate' => $sourceTaxProfile['lines'][$line->line_number]['tax_rate'] ?? $taxCode?->rate ?? '0.0000',
             ])->all();
+            if ($sourceTaxProfile && $sourceTaxProfile['tax_treatment'] === 'VAT_OUT' && collect($draftLines)->contains(fn (array $line): bool => ! isset($taxCodes[$line['tax_code_id']]))) {
+                throw ValidationException::withMessages(['source_id' => 'Tax Code จากใบรับข้อมูลไม่พร้อมใช้งาน กรุณาตรวจสอบเอกสารต้นทาง']);
+            }
             $calculation = SalesDocumentCalculator::calculate($draftLines, (bool) $values['prices_include_vat']);
             $withholding = $this->withholdingSnapshot($values, $calculation['tax_base']);
             $sale = PhysicalSale::query()->create([
@@ -201,8 +213,7 @@ final class PhysicalSaleController extends Controller
                 ...$withholding,
                 'description' => $values['description'] ?? null, 'status' => 'DRAFT', 'created_by' => $request->user()->id, 'updated_by' => $request->user()->id,
             ]);
-            // Freeze the source quantities/prices with the selected VAT code and
-            // calculation; source orders intentionally do not own tax snapshots.
+            // Freeze quantities/prices with the VAT snapshot inherited from the intake.
             foreach ($calculation['lines'] as $index => $calculated) {
                 $line = $draftLines[$index]['source'];
                 $item = $line->item;
@@ -237,7 +248,7 @@ final class PhysicalSaleController extends Controller
         return response()->json(['status' => true, 'msg' => "สร้างร่าง {$sale->document_number} แล้ว", 'redirect' => route('pos.physical-sales.show', $sale)]);
     }
 
-    public function show(Request $request, PhysicalSale $physicalSale, GlobalSettings $settings, OpenItemService $openItems): View
+    public function show(Request $request, PhysicalSale $physicalSale, GlobalSettings $settings, OpenItemService $openItems, PhysicalSalePostingService $posting): View
     {
         $this->ensureCurrentBranch($request, $physicalSale);
         $sale = $physicalSale->load(['warehouse', 'party', 'lines.item', 'lines.saleUom', 'lines.stockUom', 'tenders.bankAccount', 'advanceDepositApplications.advanceDeposit']);
@@ -283,7 +294,7 @@ final class PhysicalSaleController extends Controller
             ->orderBy('id')
             ->get();
 
-        return view('Pos::physical-sales.show', ['sale' => $sale, 'source' => $source, 'sourceIntake' => $sourceIntake, 'flowDocuments' => $flowDocuments, 'history' => $history, 'paymentOpenItem' => $paymentOpenItem, 'saleOpenItem' => $saleOpenItem, 'receipts' => $receipts, 'hasPostedReceipt' => $hasPostedReceipt, 'dateFormat' => (string) ($settings->value('date_format') ?: 'd/m/Y'), 'whtTaxCodes' => TaxCode::query()->where('kind', 'WHT')->where('is_active', true)->orderBy('code')->get(['id', 'code', 'name', 'rate'])]);
+        return view('Pos::physical-sales.show', ['sale' => $sale, 'source' => $source, 'sourceIntake' => $sourceIntake, 'flowDocuments' => $flowDocuments, 'history' => $history, 'paymentOpenItem' => $paymentOpenItem, 'saleOpenItem' => $saleOpenItem, 'receipts' => $receipts, 'hasPostedReceipt' => $hasPostedReceipt, 'dateFormat' => (string) ($settings->value('date_format') ?: 'd/m/Y'), 'whtTaxCodes' => TaxCode::query()->where('kind', 'WHT')->where('is_active', true)->orderBy('code')->get(['id', 'code', 'name', 'rate']), 'postReadiness' => $posting->postReadiness($sale)]);
     }
 
     public function void(Request $request, PhysicalSale $physicalSale, AuditLogger $audit): JsonResponse
@@ -328,7 +339,7 @@ final class PhysicalSaleController extends Controller
             $tax = $request->filled('withholding_tax_code_id')
                 ? TaxCode::query()->whereKey($request->integer('withholding_tax_code_id'))->where('kind', 'WHT')->where('is_active', true)->lockForUpdate()->first()
                 : null;
-            $draft->forceFill(PhysicalSaleWithholdingSnapshot::build($tax, $request->input('withholding_base', '0.00'), $draft->tax_base))->save();
+            $draft->forceFill(PhysicalSaleWithholdingSnapshot::build($tax, $request->input('withholding_base', '0.00'), JournalBalance::subtract($draft->subtotal, $draft->discount_amount)))->save();
             $sale = $posting->post($physicalSale, $request->validated('posting_date'), $warehouse, $request->user(), $request, $request->validated('tenders', []));
 
             return $sale;
@@ -372,7 +383,7 @@ final class PhysicalSaleController extends Controller
             return null;
         }
 
-        return SalesOrder::query()->with(['lines.item', 'lines.uom'])->whereKey($id)->where('branch_id', $branchId)->where('status', 'CONFIRMED')->first();
+        return SalesOrder::query()->with(['lines.item', 'lines.uom', 'sourceIntake.lines', 'quotation.sourceIntake.lines', 'quotation.rfq.sourceIntake.lines', 'rfq.sourceIntake.lines'])->whereKey($id)->where('branch_id', $branchId)->where('status', 'CONFIRMED')->first();
     }
 
     private function fulfillmentWarehouse(Request $request, int $warehouseId): Warehouse
@@ -428,5 +439,21 @@ final class PhysicalSaleController extends Controller
 
         return TaxCode::query()->whereKey($values['tax_code_id'])->where('kind', 'VAT_OUT')->where('is_active', true)
             ->lockForUpdate()->firstOr(fn () => throw ValidationException::withMessages(['tax_code_id' => 'Tax Code ภาษีขายไม่พร้อมใช้งาน']));
+    }
+
+    private function sourceTaxProfile(SalesOrder $source): ?array
+    {
+        $intake = $source->sourceIntake ?? $source->quotation?->sourceIntake ?? $source->quotation?->rfq?->sourceIntake ?? $source->rfq?->sourceIntake;
+        if (! $intake) {
+            return null;
+        }
+
+        return [
+            'tax_treatment' => $intake->tax_treatment,
+            'prices_include_vat' => (bool) $intake->prices_include_vat,
+            'tax_base' => (string) $intake->tax_base,
+            'tax_amount' => (string) $intake->tax_amount,
+            'lines' => $intake->lines->mapWithKeys(fn ($line): array => [(int) $line->line_number => ['tax_code_id' => $line->tax_code_id, 'tax_rate' => $line->tax_rate]])->all(),
+        ];
     }
 }

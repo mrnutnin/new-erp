@@ -16,16 +16,14 @@ final class PhysicalSaleHsAtomicPostContractTest extends TestCase
         self::assertStringContainsString("'ขายสดต้องระบุช่องทางรับเงินก่อนยืนยันขาย'", $request);
     }
 
-    public function test_hs_post_and_receipt_share_the_controller_transaction_boundary(): void
+    public function test_hs_post_keeps_tenders_in_the_same_atomic_controller_transaction(): void
     {
         $root = dirname(__DIR__, 2);
         $controller = file_get_contents($root.'/app/Modules/Pos/Controllers/PhysicalSaleController.php');
 
-        self::assertStringContainsString('DB::transaction(function () use ($request, $physicalSale, $posting, $receipts, $warehouse)', $controller);
-        self::assertStringContainsString("\$sale = \$posting->post(\$physicalSale, \$request->validated('posting_date'), \$warehouse, \$request->user(), \$request);", $controller);
-        self::assertStringContainsString("if (\$sale->document_type === 'HS' && JournalBalance::decimal(\$sale->total_amount) !== '0.00') {", $controller);
-        self::assertStringContainsString("\$receipts->receive(\$sale, [", $controller);
-        self::assertStringContainsString("'tenders' => \$request->validated('tenders')", $controller);
+        self::assertStringContainsString('DB::transaction(function () use ($request, $physicalSale, $posting, $warehouse)', $controller);
+        self::assertStringContainsString("\$sale = \$posting->post(\$physicalSale, \$request->validated('posting_date'), \$warehouse, \$request->user(), \$request, \$request->validated('tenders', []));", $controller);
+        self::assertStringNotContainsString('PhysicalSaleReceiptController', $controller);
         self::assertStringContainsString('}, 3);', $controller);
     }
 }

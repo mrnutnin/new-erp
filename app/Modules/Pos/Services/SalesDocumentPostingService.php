@@ -39,6 +39,36 @@ final class SalesDocumentPostingService
         private readonly CreditLimitService $creditLimits,
     ) {}
 
+    /**
+     * Read-only mapping preview for the document page. post() validates again
+     * while holding its transaction locks.
+     */
+    public function postReadiness(SalesDocument $document): array
+    {
+        if ($document->status !== 'APPROVED') {
+            return ['ready' => false, 'blockers' => ['อนุมัติเอกสารก่อน Post']];
+        }
+
+        if ($document->document_type === 'CREDIT_NOTE') {
+            if (! $document->source_invoice_id) {
+                return ['ready' => false, 'blockers' => ['ใบลดหนี้ต้องอ้าง Invoice ต้นทาง']];
+            }
+
+            return ['ready' => true, 'blockers' => []];
+        }
+
+        try {
+            $this->mappings->resolveForEvent('sales_invoice', 'ACCOUNTS_RECEIVABLE');
+            if ($document->tax_amount !== '0.00') {
+                $this->mappings->resolveForEvent('sales_invoice', 'DEFERRED_OUTPUT_VAT');
+            }
+
+            return ['ready' => true, 'blockers' => []];
+        } catch (ValidationException $exception) {
+            return ['ready' => false, 'blockers' => collect($exception->errors())->flatten()->values()->all()];
+        }
+    }
+
     public function post(SalesDocument $salesDocument, string $postingDate, Warehouse $warehouse, User $actor, Request $request): SalesDocument
     {
         return DB::transaction(function () use ($salesDocument, $postingDate, $warehouse, $actor, $request): SalesDocument {
@@ -87,16 +117,47 @@ final class SalesDocumentPostingService
 
             $lines = SalesDocumentLine::query()->with('taxCode')->where('sales_document_id', $document->id)->orderBy('line_number')->lockForUpdate()->get();
             $this->assertDomain($document, $lines, $source);
-            [$arAccount, $sourceOpenItem] = $source ? $this->creditAr($source) : [$this->mappings->resolve('SALES_AR'), null];
+            $event = $document->document_type === 'INVOICE' ? 'sales_invoice' : 'sales_credit_note';
+            $taxAccount = null;
+            $postingMetadata = null;
+            if ($source) {
+                [$arAccount, $sourceOpenItem] = $this->creditAr($source);
+                $provenance = [[
+                    'event_code' => $event, 'account_role' => 'ACCOUNTS_RECEIVABLE', 'account_id' => $arAccount->id,
+                    'source' => 'ORIGINAL', 'source_type' => 'JOURNAL_ENTRY', 'source_id' => (string) $source->journal_entry_id,
+                    'mapping_id' => null, 'mapping_version' => null,
+                ]];
+                if ($lines->contains(fn (SalesDocumentLine $line): bool => $line->tax_amount !== '0.00')) {
+                    $taxAccount = $this->creditTaxAccount($source);
+                    $provenance[] = [
+                        'event_code' => $event, 'account_role' => 'DEFERRED_OUTPUT_VAT', 'account_id' => $taxAccount->id,
+                        'source' => 'ORIGINAL', 'source_type' => 'JOURNAL_ENTRY', 'source_id' => (string) $source->journal_entry_id,
+                        'mapping_id' => null, 'mapping_version' => null,
+                    ];
+                }
+                $postingMetadata = ['contract_version' => 1, 'event_code' => $event, 'accounts' => $provenance];
+            } else {
+                $arResolution = $this->mappings->resolveForEvent($event, 'ACCOUNTS_RECEIVABLE');
+                $arAccount = $arResolution['account'];
+                $provenance = [$arResolution['provenance']];
+                if ($lines->contains(fn (SalesDocumentLine $line): bool => $line->tax_amount !== '0.00')) {
+                    $taxResolution = $this->mappings->resolveForEvent($event, 'DEFERRED_OUTPUT_VAT');
+                    $taxAccount = $taxResolution['account'];
+                    $provenance[] = $taxResolution['provenance'];
+                }
+                $postingMetadata = ['contract_version' => 1, 'event_code' => $event, 'accounts' => $provenance];
+                $sourceOpenItem = null;
+            }
             $journal = $this->journals->post([
                 'source_type' => 'POS',
                 'source_id' => (string) $document->id,
                 'source_reference' => $document->document_number,
-                'event_code' => $document->document_type === 'INVOICE' ? 'sales_invoice' : 'sales_credit_note',
+                'event_code' => $event,
                 'entry_date' => $postingDate,
                 'document_date' => $document->document_date->format('Y-m-d'),
                 'description' => ($document->document_type === 'INVOICE' ? 'ใบแจ้งหนี้ ' : 'ใบลดหนี้ ').$document->document_number,
-                'lines' => $this->journalLines($document, $lines, $arAccount),
+                'posting_metadata' => $postingMetadata,
+                'lines' => $this->journalLines($document, $lines, $arAccount, $taxAccount),
             ], $warehouse, $actor);
 
             $controlLines = $journal->lines()->where('account_id', $arAccount->id)->where('subledger_type', 'CUSTOMER')->where('subledger_id', (string) $document->party_id)->get()
@@ -230,6 +291,20 @@ final class SalesDocumentPostingService
         return $openItems->first();
     }
 
+    private function creditTaxAccount(SalesDocument $source): Account
+    {
+        $accounts = JournalEntryLine::query()->with('account')
+            ->where('journal_entry_id', $source->journal_entry_id)->where('subledger_type', 'TAX')
+            ->get()->pluck('account')->filter()->unique('id')->values();
+        if ($accounts->count() !== 1) {
+            throw ValidationException::withMessages(['source_invoice_id' => 'ใบลดหนี้ VAT ต้องใช้บัญชีภาษีจาก Journal Invoice ต้นทางเพียงหนึ่งบัญชี']);
+        }
+        $account = $accounts->sole();
+        $this->mappings->assertCompatible('DEFERRED_OUTPUT_VAT', $account);
+
+        return $account;
+    }
+
     private function assertCreditRevenueCeiling(SalesDocument $document, $lines, SalesDocument $source): void
     {
         $sourceTotals = SalesDocumentLine::query()->where('sales_document_id', $source->id)->get(['revenue_account_id', 'line_total'])
@@ -278,7 +353,7 @@ final class SalesDocumentPostingService
         }
     }
 
-    private function journalLines(SalesDocument $document, $lines, Account $arAccount): array
+    private function journalLines(SalesDocument $document, $lines, Account $arAccount, ?Account $taxAccount = null): array
     {
         $invoice = $document->document_type === 'INVOICE';
         $result = [[
@@ -297,7 +372,9 @@ final class SalesDocumentPostingService
         }
         $taxGroups = $lines->filter(fn (SalesDocumentLine $line) => $line->tax_amount !== '0.00')->groupBy('tax_code_id');
         if ($taxGroups->isNotEmpty()) {
-            $taxAccount = $this->mappings->resolve('DEFERRED_OUTPUT_VAT');
+            if (! $taxAccount) {
+                throw ValidationException::withMessages(['tax_amount' => 'ไม่พบการตั้งค่าบัญชีภาษีขายพักรอรับรู้']);
+            }
             foreach ($taxGroups as $taxCodeId => $group) {
                 $base = $group->reduce(fn (string $sum, SalesDocumentLine $line) => JournalBalance::add($sum, $line->tax_base), '0.00');
                 $tax = $group->reduce(fn (string $sum, SalesDocumentLine $line) => JournalBalance::add($sum, $line->tax_amount), '0.00');

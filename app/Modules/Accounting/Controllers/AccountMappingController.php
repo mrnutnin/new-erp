@@ -28,11 +28,16 @@ class AccountMappingController extends Controller
         $dataTable = DataTables::eloquent($this->mappingsQuery())
             ->filter(fn (Builder $query) => $this->applySearch($query, $request, $mappings))
             ->order(fn (Builder $query) => $this->applyOrder($query, $request))
-            ->addColumn('key_label', fn (AccountMapping $mapping) => $mappings->label($mapping->key))
+            ->addColumn('module_label', fn (AccountMapping $mapping) => $mapping->event_code ? ($mappings->configurationEvents()[$mapping->event_code]['module'] ?? '-') : 'Legacy')
+            ->addColumn('document_label', fn (AccountMapping $mapping) => $mapping->event_code ? ($mappings->configurationEvents()[$mapping->event_code]['document'] ?? $mapping->event_code) : 'Mapping เดิม')
+            ->addColumn('key_label', fn (AccountMapping $mapping) => $mappings->roleLabel($mapping->key))
             ->addColumn('account_label', fn (AccountMapping $mapping) => $mapping->account_code.' · '.$mapping->account_name);
 
         if ($request->user()->hasPermission('accounting.account-mappings.update')) {
             $dataTable->addColumn('edit_url', fn (AccountMapping $mapping) => route('accounting.account-mappings.edit', $mapping));
+        }
+        if ($request->user()->hasPermission('accounting.account-mappings.create')) {
+            $dataTable->addColumn('copy_url', fn (AccountMapping $mapping) => $mapping->event_code === null ? route('accounting.account-mappings.create', ['copy_legacy' => $mapping->id]) : null);
         }
 
         return $dataTable->toJson();
@@ -40,25 +45,18 @@ class AccountMappingController extends Controller
 
     public function accountOptions(Request $request, AccountMappingService $mappings): JsonResponse
     {
-        $values = $request->validate(['key' => ['required', Rule::in($mappings->keys())], 'q' => ['nullable', 'string', 'max:100'], 'page' => ['nullable', 'integer', 'min:1']]);
+        $values = $request->validate(['event_code' => ['nullable', Rule::in(array_keys($mappings->configurationEvents()))], 'key' => ['required', 'string', 'max:80'], 'q' => ['nullable', 'string', 'max:100'], 'page' => ['nullable', 'integer', 'min:1']]);
+        if ($values['event_code'] ?? null) {
+            $mappings->assertEventRole($values['event_code'], $values['key']);
+        } elseif (! in_array($values['key'], $mappings->keys(), true)) {
+            abort(422, 'ไม่รองรับ Legacy Account Mapping นี้');
+        }
         $search = trim((string) ($values['q'] ?? ''));
         $page = max(1, (int) ($values['page'] ?? 1));
-        $accounts = Account::query()->with('type:id,code')
-            ->where('is_active', true)->where('is_postable', true)
-            ->when($values['key'] === 'SALES_AR', fn (Builder $query) => $query->where('control_account_type', 'AR'))
-            ->when($values['key'] === 'PURCHASE_AP', fn (Builder $query) => $query->where('control_account_type', 'AP'))
-            ->when($values['key'] === 'CUSTOMER_ADVANCE', fn (Builder $query) => $query->whereNull('control_account_type')->whereHas('type', fn (Builder $query) => $query->where('code', 'LIABILITY')))
-            ->when($values['key'] === 'SUPPLIER_ADVANCE', fn (Builder $query) => $query->whereNull('control_account_type')->whereHas('type', fn (Builder $query) => $query->where('code', 'ASSET')))
-            ->when($values['key'] === 'SALES_REVENUE_DEFAULT', fn (Builder $query) => $query->whereNull('control_account_type')->whereHas('type', fn (Builder $query) => $query->where('code', 'REVENUE')))
-            ->when($values['key'] === 'PURCHASE_EXPENSE_DEFAULT', fn (Builder $query) => $query->whereNull('control_account_type')->whereHas('type', fn (Builder $query) => $query->whereIn('code', ['EXPENSE', 'ASSET'])))
-            ->when(in_array($values['key'], ['DEFERRED_INPUT_VAT', 'INPUT_VAT'], true), fn (Builder $query) => $query->where('control_account_type', 'INPUT_VAT'))
-            ->when(in_array($values['key'], ['DEFERRED_OUTPUT_VAT', 'OUTPUT_VAT'], true), fn (Builder $query) => $query->where('control_account_type', 'OUTPUT_VAT'))
-            ->when(in_array($values['key'], ['WHT_RECEIVABLE', 'WHT_PAYABLE'], true), fn (Builder $query) => $query->where('control_account_type', 'WITHHOLDING_TAX'))
-            ->when($values['key'] === 'INVENTORY_DEFAULT', fn (Builder $query) => $query->where('control_account_type', 'INVENTORY'))
-            ->when(in_array($values['key'], ['COGS_DEFAULT', 'INVENTORY_ADJUSTMENT_LOSS', 'INVENTORY_RECOST_LOSS'], true), fn (Builder $query) => $query->whereNull('control_account_type')->whereHas('type', fn (Builder $query) => $query->where('code', 'EXPENSE')))
-            ->when(in_array($values['key'], ['INVENTORY_ADJUSTMENT_GAIN', 'INVENTORY_RECOST_GAIN'], true), fn (Builder $query) => $query->whereNull('control_account_type')->whereHas('type', fn (Builder $query) => $query->where('code', 'REVENUE')))
-            ->when($search !== '', fn (Builder $query) => $query->where(fn (Builder $query) => $query->where('code', 'like', "%{$search}%")->orWhere('name', 'like', "%{$search}%")))
-            ->orderBy('code')->forPage($page, 31)->get(['id', 'account_type_id', 'code', 'name']);
+        $accounts = Account::query()->with('type:id,code')->where('is_active', true)->where('is_postable', true)
+            ->when($search !== '', fn (Builder $query) => $query->where(fn (Builder $query) => $query->where('code', 'like', "%{$search}%")->orWhere('name', 'like', "%{$search}%")));
+        $mappings->applyCompatibleAccountConstraint($accounts, $values['key']);
+        $accounts = $accounts->orderBy('code')->forPage($page, 31)->get(['id', 'account_type_id', 'code', 'name']);
 
         return response()->json([
             'results' => $accounts->take(30)->map(fn (Account $account) => ['id' => $account->id, 'text' => $account->code.' · '.$account->name])->values(),
@@ -66,14 +64,16 @@ class AccountMappingController extends Controller
         ]);
     }
 
-    public function create(AccountMappingService $mappings): View
+    public function create(Request $request, AccountMappingService $mappings): View
     {
-        $used = AccountMapping::query()->pluck('key')->all();
+        $copy = $request->integer('copy_legacy') ? AccountMapping::query()->whereNull('event_code')->findOrFail($request->integer('copy_legacy')) : null;
 
         return view('Accounting::account-mappings.form', [
             'accountMapping' => new AccountMapping(['is_active' => true]),
-            'availableKeys' => collect($mappings->keys())->reject(fn (string $key) => in_array($key, $used, true))->mapWithKeys(fn (string $key) => [$key => $mappings->label($key)]),
-            'selectedAccount' => null,
+            'events' => $mappings->configurationEvents(),
+            'copyFromLegacy' => $copy,
+            'copyRole' => $copy ? $mappings->legacyRole($copy->key) : null,
+            'selectedAccount' => $copy?->account,
         ]);
     }
 
@@ -81,7 +81,9 @@ class AccountMappingController extends Controller
     {
         return view('Accounting::account-mappings.form', [
             'accountMapping' => $accountMapping,
-            'availableKeys' => collect([$accountMapping->key => $mappings->label($accountMapping->key)]),
+            'events' => $mappings->configurationEvents(),
+            'copyFromLegacy' => null,
+            'copyRole' => null,
             'selectedAccount' => Account::query()->find($accountMapping->account_id, ['id', 'code', 'name']),
         ]);
     }
@@ -90,9 +92,9 @@ class AccountMappingController extends Controller
     {
         $mapping = DB::transaction(function () use ($request, $audit, $mappings) {
             $account = Account::query()->withTrashed()->with('type')->whereKey($request->integer('account_id'))->sharedLock()->firstOrFail();
-            $mappings->assertCompatible($request->validated('key'), $account);
-            $mapping = AccountMapping::query()->create([...$request->validated(), 'created_by' => $request->user()->id, 'updated_by' => $request->user()->id]);
-            $audit->record('accounting.account_mapping.created', $mapping, [], $mapping->only(['key', 'account_id', 'is_active']), $request->user(), $request);
+            $mappings->assertCompatible($request->string('key')->toString(), $account);
+            $mapping = AccountMapping::query()->create([...$request->mappingValues(), 'created_by' => $request->user()->id, 'updated_by' => $request->user()->id]);
+            $audit->record('accounting.account_mapping.created', $mapping, [], [...$mapping->only(['event_code', 'key', 'account_id', 'is_active', 'version']), 'reason' => $request->input('reason')], $request->user(), $request);
 
             return $mapping;
         });
@@ -105,10 +107,12 @@ class AccountMappingController extends Controller
         DB::transaction(function () use ($request, $accountMapping, $audit, $mappings) {
             $mapping = AccountMapping::query()->lockForUpdate()->findOrFail($accountMapping->id);
             $account = Account::query()->withTrashed()->with('type')->whereKey($request->integer('account_id'))->sharedLock()->firstOrFail();
-            $mappings->assertCompatible($request->validated('key'), $account);
-            $before = $mapping->only(['key', 'account_id', 'is_active']);
-            $mapping->update([...$request->validated(), 'updated_by' => $request->user()->id]);
-            $audit->record('accounting.account_mapping.updated', $mapping, $before, $mapping->only(array_keys($before)), $request->user(), $request);
+            $mappings->assertCompatible($request->string('key')->toString(), $account);
+            $before = $mapping->only(['event_code', 'key', 'account_id', 'is_active', 'version']);
+            $values = $request->mappingValues();
+            $values['version'] = $mappings->nextVersion($mapping, (int) $values['account_id'], (bool) $values['is_active']);
+            $mapping->update([...$values, 'updated_by' => $request->user()->id]);
+            $audit->record('accounting.account_mapping.updated', $mapping, $before, [...$mapping->only(array_keys($before)), 'reason' => $request->input('reason')], $request->user(), $request);
         });
 
         return response()->json(['status' => true, 'msg' => 'แก้ไข Account Mapping แล้ว']);
@@ -121,6 +125,19 @@ class AccountMappingController extends Controller
 
     private function applySearch(Builder $query, Request $request, AccountMappingService $mappings): void
     {
+        if ($eventCode = $request->string('event_code')->toString()) {
+            $query->where('accounting_account_mappings.event_code', $eventCode);
+        }
+        if ($module = $request->string('module')->toString()) {
+            $eventCodes = collect($mappings->configurationEvents())->filter(fn (array $event) => $event['module'] === $module)->keys();
+            $query->whereIn('accounting_account_mappings.event_code', $eventCodes);
+        }
+        if (($status = $request->input('is_active')) !== null && $status !== '') {
+            $query->where('accounting_account_mappings.is_active', (bool) $status);
+        }
+        if ($request->boolean('legacy_only')) {
+            $query->whereNull('accounting_account_mappings.event_code');
+        }
         $search = trim((string) $request->input('search.value', ''));
         if ($search !== '') {
             $matchingKeys = collect($mappings->keys())->filter(fn (string $key) => str_contains(mb_strtolower($mappings->label($key)), mb_strtolower($search)));
@@ -130,7 +147,7 @@ class AccountMappingController extends Controller
 
     private function applyOrder(Builder $query, Request $request): void
     {
-        $columns = [0 => 'accounting_account_mappings.key', 1 => 'accounts.code', 2 => 'accounting_account_mappings.is_active'];
+        $columns = [0 => 'accounting_account_mappings.event_code', 1 => 'accounting_account_mappings.key', 2 => 'accounts.code', 3 => 'accounting_account_mappings.version', 4 => 'accounting_account_mappings.is_active'];
         $column = $columns[(int) $request->input('order.0.column', 0)] ?? $columns[0];
         $query->reorder($column, $request->input('order.0.dir') === 'desc' ? 'desc' : 'asc')->orderBy('accounting_account_mappings.id');
     }

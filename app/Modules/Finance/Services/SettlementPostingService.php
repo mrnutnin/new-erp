@@ -7,6 +7,7 @@ use App\Models\PartyRole;
 use App\Models\User;
 use App\Models\Warehouse;
 use App\Modules\Accounting\Models\JournalEntry;
+use App\Modules\Accounting\Models\JournalEntryLine;
 use App\Modules\Accounting\Services\AccountMappingService;
 use App\Modules\Accounting\Services\SettlementPostingService as JournalSettlementPostingService;
 use App\Modules\Accounting\Support\JournalBalance;
@@ -35,6 +36,39 @@ final class SettlementPostingService
         private readonly AccountMappingService $mappings,
         private readonly CommissionCalculationService $commissions,
     ) {}
+
+    /**
+     * Read-only configuration preview. post() remains the authoritative
+     * validation boundary and repeats all document checks under locks.
+     */
+    public function postReadiness(Settlement $settlement): array
+    {
+        if ($settlement->status !== 'APPROVED') {
+            return ['ready' => false, 'blockers' => ['อนุมัติเอกสารก่อนลงบัญชี']];
+        }
+
+        try {
+            $isReceipt = $settlement->document_type === 'RECEIPT';
+            $event = $isReceipt ? 'customer_payment' : 'supplier_payment';
+            $intents = $settlement->relationLoaded('allocationIntents')
+                ? $settlement->allocationIntents
+                : $settlement->allocationIntents()->with('openItem')->get();
+            if ($intents->contains(fn ($intent) => $intent->openItem?->tax_kind === ($isReceipt ? 'VAT_OUT' : 'VAT_IN') && JournalBalance::decimal($intent->openItem?->tax_amount ?? '0.00') !== '0.00')) {
+                $this->mappings->resolveForEvent($event, $isReceipt ? 'OUTPUT_VAT' : 'INPUT_VAT');
+            }
+            if (JournalBalance::decimal($settlement->withholding_amount) !== '0.00') {
+                $this->mappings->resolveForEvent($event, $isReceipt ? 'WHT_RECEIVABLE' : 'WHT_PAYABLE');
+            }
+            $allocated = $intents->reduce(fn (string $total, $intent) => JournalBalance::add($total, $intent->amount), '0.00');
+            if ($isReceipt && JournalBalance::decimal($settlement->gross_amount) !== $allocated) {
+                $this->mappings->resolveForEvent('customer_payment', 'CUSTOMER_ADVANCE');
+            }
+
+            return ['ready' => true, 'blockers' => []];
+        } catch (ValidationException $exception) {
+            return ['ready' => false, 'blockers' => collect($exception->errors())->flatten()->unique()->values()->all()];
+        }
+    }
 
     public function post(Settlement $settlement, Warehouse $warehouse, User $actor, Request $request): Settlement
     {
@@ -123,6 +157,39 @@ final class SettlementPostingService
                 throw ValidationException::withMessages(['tenders' => 'ยอดช่องทางรับ/จ่ายต้องเท่ากับยอดสุทธิหลังหัก ณ ที่จ่าย']);
             }
 
+            $provenance = $tenders->map(function ($tender) use ($contract): array {
+                $bank = $tender->bankAccount;
+
+                return [
+                    'event_code' => $contract['event'], 'account_role' => 'BANK_ACCOUNT', 'account_id' => (int) $bank->account_id,
+                    'source' => 'DOCUMENT', 'source_type' => 'BANK_ACCOUNT', 'source_id' => (string) $bank->id,
+                    'mapping_id' => null, 'mapping_version' => null,
+                ];
+            })->all();
+            foreach ($groups as $group) {
+                $sourceOpenItem = $group['intents']->first()->openItem;
+                $provenance[] = [
+                    'event_code' => $contract['event'], 'account_role' => $contract['ledger'] === 'AR' ? 'ACCOUNTS_RECEIVABLE' : 'ACCOUNTS_PAYABLE',
+                    'account_id' => $group['account_id'], 'source' => 'ORIGINAL', 'source_type' => 'OPEN_ITEM',
+                    'source_id' => (string) $sourceOpenItem->id, 'mapping_id' => null, 'mapping_version' => null,
+                ];
+            }
+            $outputVat = $contract['event'] === 'customer_payment' && $intents->contains(fn ($intent) => $intent->openItem?->tax_kind === 'VAT_OUT' && JournalBalance::decimal($intent->openItem->tax_amount) !== '0.00')
+                ? $this->mappings->resolveForEvent('customer_payment', 'OUTPUT_VAT') : null;
+            $inputVat = $contract['event'] === 'supplier_payment' && $intents->contains(fn ($intent) => $intent->openItem?->tax_kind === 'VAT_IN' && JournalBalance::decimal($intent->openItem->tax_amount) !== '0.00')
+                ? $this->mappings->resolveForEvent('supplier_payment', 'INPUT_VAT') : null;
+            $whtReceivable = $contract['event'] === 'customer_payment' && $whtCalculations !== []
+                ? $this->mappings->resolveForEvent('customer_payment', 'WHT_RECEIVABLE') : null;
+            $whtPayable = $contract['event'] === 'supplier_payment' && $whtCalculations !== []
+                ? $this->mappings->resolveForEvent('supplier_payment', 'WHT_PAYABLE') : null;
+            $customerAdvance = $advanceAmount !== '0.00' && $contract['event'] === 'customer_payment'
+                ? $this->mappings->resolveForEvent('customer_payment', 'CUSTOMER_ADVANCE') : null;
+            foreach ([$outputVat, $inputVat, $whtReceivable, $whtPayable, $customerAdvance] as $resolution) {
+                if ($resolution) {
+                    $provenance[] = $resolution['provenance'];
+                }
+            }
+
             $lines = $tenders->map(function ($tender) use ($settlement, $contract): array {
                 $bank = $tender->bankAccount;
 
@@ -140,7 +207,7 @@ final class SettlementPostingService
                 ];
             }
             if ($advanceAmount !== '0.00') {
-                $advanceAccount = $this->mappings->resolve('CUSTOMER_ADVANCE');
+                $advanceAccount = $customerAdvance['account'];
                 $lines[] = [
                     'account_id' => (int) $advanceAccount->id,
                     'subledger_type' => null,
@@ -152,7 +219,7 @@ final class SettlementPostingService
                     'tax_amount' => '0.00',
                 ];
             }
-            $lines = [...$lines, ...$this->vatJournalLines($intents, $settlementDate), ...$this->whtJournalLines($whtCalculations, $contract['bank_debit'])];
+            $lines = [...$lines, ...$this->vatJournalLines($intents, $settlementDate, $outputVat, $inputVat), ...$this->whtJournalLines($whtCalculations, $contract['bank_debit'], $whtReceivable, $whtPayable)];
 
             $entry = $this->journalPosting->post([
                 'source_type' => 'FINANCE', 'source_id' => (string) $settlement->id,
@@ -160,6 +227,7 @@ final class SettlementPostingService
                 'entry_date' => $settlement->settlement_date->format('Y-m-d'),
                 'document_date' => $settlement->document_date->format('Y-m-d'),
                 'description' => $settlement->description ?: $settlement->document_number,
+                'posting_metadata' => ['contract_version' => 1, 'event_code' => $contract['event'], 'accounts' => $provenance],
                 'lines' => $lines,
             ], $warehouse, $actor);
 
@@ -221,7 +289,7 @@ final class SettlementPostingService
         }, 3);
     }
 
-    private function vatJournalLines($intents, string $settlementDate): array
+    private function vatJournalLines($intents, string $settlementDate, ?array $customerOutputVat = null, ?array $supplierInputVat = null): array
     {
         $groups = [];
         $virtual = [];
@@ -244,8 +312,10 @@ final class SettlementPostingService
             if ($calculated['tax'] === '0.00') {
                 continue;
             }
-            $deferred = $this->mappings->resolve($invoice->tax_kind === 'VAT_IN' ? 'DEFERRED_INPUT_VAT' : 'DEFERRED_OUTPUT_VAT');
-            $actual = $this->mappings->resolve($invoice->tax_kind === 'VAT_IN' ? 'INPUT_VAT' : 'OUTPUT_VAT');
+            $deferred = $this->sourceDeferredVatAccount($invoice);
+            $actual = $invoice->tax_kind === 'VAT_OUT'
+                ? ($customerOutputVat['account'] ?? throw ValidationException::withMessages(['account_mapping' => 'ไม่พบ Mapping ภาษีขายสำหรับรับชำระ']))
+                : ($supplierInputVat['account'] ?? throw ValidationException::withMessages(['account_mapping' => 'ไม่พบ Mapping ภาษีซื้อสำหรับจ่ายชำระ']));
             $key = $invoice->tax_kind.':'.$invoice->tax_code_id;
             $built = VatRealizationJournalLines::build($invoice->tax_kind, $deferred->id, $actual->id, $calculated['base'], $calculated['tax'], (int) $invoice->tax_code_id,
                 $invoice->tax_point_date?->format('Y-m-d') ?? $invoice->document_date->format('Y-m-d'), $settlementDate);
@@ -281,20 +351,23 @@ final class SettlementPostingService
             $calc = WhtRealizationCalculator::calculate($invoice->original_amount, $invoice->withholding_base, $invoice->withholding_amount, $intent->amount, JournalBalance::add((string) $allocated, $offset['allocated']), JournalBalance::add((string) $realized, $offset['realized']));
             $virtual[$invoice->id] = ['allocated' => JournalBalance::add($offset['allocated'], $intent->amount), 'realized' => JournalBalance::add($offset['realized'], $calc['tax'])];
             $direction = $invoice->ledger_type === 'AR' ? 'RECEIVABLE' : 'PAYABLE';
-            $result[$intent->id] = ['calc' => $calc, 'account' => $this->mappings->resolve($direction === 'RECEIVABLE' ? 'WHT_RECEIVABLE' : 'WHT_PAYABLE'), 'direction' => $direction];
+            $result[$intent->id] = ['calc' => $calc, 'direction' => $direction];
         }
 
         return $result;
     }
 
-    private function whtJournalLines(array $calculations, bool $receipt): array
+    private function whtJournalLines(array $calculations, bool $receipt, ?array $customerWhtReceivable = null, ?array $supplierWhtPayable = null): array
     {
         $groups = [];
         foreach ($calculations as $row) {
-            $key = $row['account']->id.':'.$row['direction'];
+            $account = $row['direction'] === 'RECEIVABLE'
+                ? ($customerWhtReceivable['account'] ?? throw ValidationException::withMessages(['account_mapping' => 'ไม่พบ Mapping ภาษีหัก ณ ที่จ่ายรอรับสำหรับรับชำระ']))
+                : ($supplierWhtPayable['account'] ?? throw ValidationException::withMessages(['account_mapping' => 'ไม่พบ Mapping ภาษีหัก ณ ที่จ่ายรอจ่ายสำหรับจ่ายชำระ']));
+            $key = $account->id.':'.$row['direction'];
             $amount = $row['calc']['tax'];
             if (! isset($groups[$key])) {
-                $groups[$key] = ['account_id' => $row['account']->id, 'subledger_type' => 'TAX', 'subledger_id' => (string) $row['account']->id, 'description' => 'WHT realization', 'debit' => '0.00', 'credit' => '0.00', 'tax_base' => '0.00', 'tax_amount' => '0.00'];
+                $groups[$key] = ['account_id' => $account->id, 'subledger_type' => 'TAX', 'subledger_id' => (string) $account->id, 'description' => 'WHT realization', 'debit' => '0.00', 'credit' => '0.00', 'tax_base' => '0.00', 'tax_amount' => '0.00'];
             }
             if ($row['direction'] === 'RECEIVABLE' && $receipt) {
                 $groups[$key]['debit'] = JournalBalance::add($groups[$key]['debit'], $amount);
@@ -304,6 +377,21 @@ final class SettlementPostingService
         }
 
         return array_values(array_filter($groups, fn ($line) => $line['debit'] !== '0.00' || $line['credit'] !== '0.00'));
+    }
+
+    private function sourceDeferredVatAccount($invoice)
+    {
+        $journalEntryId = JournalEntryLine::query()->whereKey($invoice->journal_entry_line_id)->value('journal_entry_id');
+        $accounts = $journalEntryId ? JournalEntryLine::query()->with('account.type')
+            ->where('journal_entry_id', $journalEntryId)->where('tax_code_id', $invoice->tax_code_id)->where('subledger_type', 'TAX')
+            ->get()->pluck('account')->filter()->unique('id')->values() : collect();
+        if ($accounts->count() !== 1) {
+            throw ValidationException::withMessages(['allocations' => 'ต้องพบบัญชีภาษีพักรอรับรู้จาก Journal ใบกำกับต้นทางเพียงหนึ่งบัญชี']);
+        }
+        $account = $accounts->sole();
+        $this->mappings->assertCompatible($invoice->tax_kind === 'VAT_IN' ? 'DEFERRED_INPUT_VAT' : 'DEFERRED_OUTPUT_VAT', $account);
+
+        return $account;
     }
 
     private function verifyRetry(Settlement $settlement, Warehouse $warehouse, array $contract): Settlement

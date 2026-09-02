@@ -113,7 +113,7 @@ final class SalesReturnPostingService
         if ($totals['debit'] !== $totals['credit']) {
             throw ValidationException::withMessages(['total_amount' => 'ยอดคืนเงินไม่สมดุลกับรายการขายต้นทาง']);
         }
-        $journal = $this->journals->postWithinTransaction(['source_type' => 'POS', 'source_id' => "sales-return:{$return->id}:hs", 'source_reference' => $return->document_number, 'event_code' => 'sales_credit_note', 'entry_date' => $date, 'document_date' => $date, 'description' => "คืนเงิน {$sale->document_number}", 'lines' => $lines], $warehouse, $actor);
+        $journal = $this->journals->postWithinTransaction(['source_type' => 'POS', 'source_id' => "sales-return:{$return->id}:hs", 'source_reference' => $return->document_number, 'event_code' => 'sales_credit_note', 'entry_date' => $date, 'document_date' => $date, 'description' => "คืนเงิน {$sale->document_number}", 'posting_metadata' => $this->originalRevenueMetadata($source, collect($lines)->pluck('account_id')->all(), $bank), 'lines' => $lines], $warehouse, $actor);
 
         return ['journal' => $journal, 'bank_account_id' => $bank->id, 'amount' => $refundAmount];
     }
@@ -135,7 +135,7 @@ final class SalesReturnPostingService
         if ($totals['debit'] !== $totals['credit']) {
             throw ValidationException::withMessages(['total_amount' => 'Sales Return นี้มีสัดส่วน/ภาษีที่ปัดเศษไม่ลงตัว ต้องใช้ return allocation contract']);
         }
-        $journal = $this->journals->postWithinTransaction(['source_type' => 'POS', 'source_id' => "sales-return:{$return->id}", 'source_reference' => $return->document_number, 'event_code' => 'sales_credit_note', 'entry_date' => $date, 'document_date' => $date, 'description' => "Sales Return {$sale->document_number}", 'lines' => $lines], $warehouse, $actor);
+        $journal = $this->journals->postWithinTransaction(['source_type' => 'POS', 'source_id' => "sales-return:{$return->id}", 'source_reference' => $return->document_number, 'event_code' => 'sales_credit_note', 'entry_date' => $date, 'document_date' => $date, 'description' => "Sales Return {$sale->document_number}", 'posting_metadata' => $this->originalRevenueMetadata($source, collect($lines)->pluck('account_id')->all()), 'lines' => $lines], $warehouse, $actor);
         $credit = $journal->lines()->where('subledger_type', 'CUSTOMER')->where('subledger_id', (string) $sale->party_id)->where('credit', $return->total_amount)->sole();
         $creditItem = $this->openItems->recordFromJournalLine($credit, ['document_type' => 'CREDIT_NOTE', 'document_number' => $return->document_number]);
         $this->openItems->allocate(['debit_open_item_id' => $invoice->id, 'credit_open_item_id' => $creditItem->id, 'allocation_date' => $date, 'amount' => $return->total_amount, 'source_type' => 'POS', 'source_id' => "sales-return:{$return->id}"], $actor);
@@ -146,5 +146,41 @@ final class SalesReturnPostingService
     private function exactScaled(mixed $amount, BigDecimal $ratio): string
     {
         return BigDecimal::of((string) ($amount ?? '0'))->multipliedBy($ratio)->toScale(2, RoundingMode::HALF_UP)->__toString();
+    }
+
+    private function originalRevenueMetadata(JournalEntry $source, array $lineAccountIds, ?BankAccount $refundBank = null): array
+    {
+        $lineAccountIds = collect($lineAccountIds)->map(fn (int $accountId): int => $accountId)->unique();
+        $original = collect(data_get($source->posting_metadata, 'accounts', []))
+            ->filter(fn (array $account): bool => $lineAccountIds->contains((int) ($account['account_id'] ?? 0)))
+            ->reject(fn (array $account): bool => $refundBank && ($account['source_type'] ?? null) === 'BANK_ACCOUNT')
+            ->map(function (array $account) use ($source): array {
+                $account['event_code'] = 'sales_credit_note';
+                $account['source'] = 'ORIGINAL';
+                $account['source_type'] = 'JOURNAL_ENTRY';
+                $account['source_id'] = (string) $source->id;
+                $account['mapping_id'] = null;
+                $account['mapping_version'] = null;
+
+                return $account;
+            })
+            ->unique('account_role')
+            ->values();
+        if ($original->isEmpty()) {
+            $original = $source->lines->pluck('account_id')->filter(fn (int $accountId): bool => $lineAccountIds->contains($accountId))->unique()->values()->map(fn (int $accountId): array => [
+                'event_code' => 'sales_credit_note', 'account_role' => 'ORIGINAL_ACCOUNT_'.$accountId, 'account_id' => $accountId,
+                'source' => 'ORIGINAL', 'source_type' => 'JOURNAL_ENTRY', 'source_id' => (string) $source->id,
+                'mapping_id' => null, 'mapping_version' => null,
+            ]);
+        }
+        if ($refundBank) {
+            $original->push([
+                'event_code' => 'sales_credit_note', 'account_role' => 'BANK_ACCOUNT_'.(int) $refundBank->id, 'account_id' => (int) $refundBank->account_id,
+                'source' => 'DOCUMENT', 'source_type' => 'BANK_ACCOUNT', 'source_id' => (string) $refundBank->id,
+                'mapping_id' => null, 'mapping_version' => null,
+            ]);
+        }
+
+        return ['contract_version' => 1, 'event_code' => 'sales_credit_note', 'accounts' => $original->unique('account_role')->values()->all()];
     }
 }

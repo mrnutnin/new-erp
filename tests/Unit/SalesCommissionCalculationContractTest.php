@@ -16,6 +16,7 @@ final class SalesCommissionCalculationContractTest extends TestCase
         self::assertStringContainsString("whereIn('plan.basis', ['POSTED_SALE', 'GROSS_PROFIT'])", $service);
         self::assertStringContainsString("where('plan.basis', 'COLLECTED_RECEIPT')", $service);
         self::assertStringContainsString("->where('movements.status', 'POSTED')", $service);
+        self::assertStringContainsString('BigDecimal::of((string) $amount)->toScale(2, RoundingMode::HALF_UP)', $service);
         self::assertStringContainsString('firstOrCreate', $service);
         self::assertStringContainsString("'idempotency_key' => \$key", $service);
         self::assertStringContainsString("'status' => 'PENDING'", $service);

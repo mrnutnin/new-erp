@@ -61,8 +61,8 @@ class InventoryCostPostingContractTest extends TestCase
             'cost_status' => 'FINAL', 'value' => '125.00',
         ];
 
-        $increase = $contract->requirements(new CostAllocation([...$base, 'direction' => 'IN']), 'inventory.adjustment');
-        $decrease = $contract->requirements(new CostAllocation([...$base, 'direction' => 'OUT']), 'inventory.adjustment');
+        $increase = $contract->requirements(new CostAllocation([...$base, 'direction' => 'IN']), 'inventory_adjustment');
+        $decrease = $contract->requirements(new CostAllocation([...$base, 'direction' => 'OUT']), 'inventory_adjustment');
 
         $this->assertSame(['INVENTORY_DEFAULT', 'INVENTORY_ADJUSTMENT_GAIN'], $increase['mapping_keys']);
         $this->assertSame(['INVENTORY_DEFAULT', 'INVENTORY_ADJUSTMENT_LOSS'], $decrease['mapping_keys']);

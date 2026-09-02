@@ -381,7 +381,7 @@ class PurchaseDocumentController extends Controller
         return response()->json(['status' => true, 'msg' => "สร้างร่าง {$document->document_number} แล้ว", 'redirect' => route('wms.purchase-documents.show', $document)]);
     }
 
-    public function show(Request $request, PurchaseDocument $purchaseDocument, GlobalSettings $settings, PurchaseThreeWayMatchGate $matchGate): View
+    public function show(Request $request, PurchaseDocument $purchaseDocument, GlobalSettings $settings, PurchaseThreeWayMatchGate $matchGate, PurchaseDocumentPostingService $posting): View
     {
         $purchaseDocument = $this->scoped($request, $purchaseDocument)->load([
             'supplier', 'paymentTerm', 'originalDocument', 'lines.account', 'lines.item', 'lines.uom',
@@ -402,6 +402,7 @@ class PurchaseDocumentController extends Controller
             'referencePos' => $purchaseDocument->lines->map(fn ($line) => $line->purchaseOrderLine?->purchaseOrder)->filter()->unique('id'),
             'referenceGrs' => $sourceLines->map(fn ($line) => $line->goodsReceipt)->filter()->unique('id'),
             'moduleRoutePrefix' => $this->moduleRoutePrefix(),
+            'postReadiness' => $posting->postReadiness($purchaseDocument),
         ]);
     }
 

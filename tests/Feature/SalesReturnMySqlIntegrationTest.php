@@ -58,6 +58,8 @@ final class SalesReturnMySqlIntegrationTest extends TestCase
             self::assertBalanced($refund->lines);
             self::assertBalanced($cogs->lines);
             self::assertSame($expectedRefund, (string) $refund->lines->where('account_id', $bank->account_id)->sole()->credit);
+            self::assertSame('sales_credit_note', data_get($refund->posting_metadata, 'event_code'));
+            self::assertTrue(collect(data_get($refund->posting_metadata, 'accounts', []))->contains(fn (array $account): bool => $account['account_id'] === $bank->account_id && $account['source'] === 'DOCUMENT'));
 
             $movement = StockMovement::query()->where('source_id', "sales-return:{$posted->id}:line:{$posted->lines()->sole()->id}")->sole();
             self::assertSame('IN', $movement->direction);
@@ -97,6 +99,8 @@ final class SalesReturnMySqlIntegrationTest extends TestCase
             self::assertBalanced($cogs->lines);
             self::assertSame($expectedCredit, (string) $creditNote->lines->where('subledger_type', 'CUSTOMER')->where('credit', $expectedCredit)->sole()->credit);
             self::assertSame($expectedCredit, app(OpenItemService::class)->remainingAt($invoice->fresh(), today()->toDateString()));
+            self::assertSame('sales_credit_note', data_get($creditNote->posting_metadata, 'event_code'));
+            self::assertTrue(collect(data_get($creditNote->posting_metadata, 'accounts', []))->every(fn (array $account): bool => $account['source'] === 'ORIGINAL'));
 
             $movement = StockMovement::query()->where('source_id', "sales-return:{$posted->id}:line:{$posted->lines()->sole()->id}")->sole();
             self::assertSame('IN', $movement->direction);

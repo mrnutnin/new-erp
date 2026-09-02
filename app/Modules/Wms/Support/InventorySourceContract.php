@@ -27,7 +27,7 @@ final class InventorySourceContract
                 'direction' => 'OUT',
                 'source_types' => ['POS'],
             ],
-            'inventory.adjustment' => [
+            'inventory_adjustment' => [
                 'movement_types' => ['ADJUSTMENT', 'COUNT'],
                 'direction' => null,
                 'source_types' => ['INVENTORY'],

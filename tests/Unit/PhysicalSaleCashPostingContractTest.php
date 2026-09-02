@@ -15,8 +15,11 @@ final class PhysicalSaleCashPostingContractTest extends TestCase
         $receiptController = file_get_contents($root.'/app/Modules/Pos/Controllers/PhysicalSaleReceiptController.php');
 
         self::assertStringContainsString("'event_code' => 'sales_invoice'", $plan);
-        self::assertStringContainsString("resolve('WHT_RECEIVABLE')", $plan);
-        self::assertStringContainsString("resolve('CUSTOMER_ADVANCE')", $plan);
+        self::assertStringContainsString("resolveForEvent('sales_invoice', 'WHT_RECEIVABLE')", $plan);
+        self::assertStringContainsString("resolveForEvent('sales_invoice', 'CUSTOMER_ADVANCE')", $plan);
+        self::assertStringContainsString("'source_type' => 'BANK_ACCOUNT'", $plan);
+        self::assertStringContainsString("'source_type' => 'ITEM'", $plan);
+        self::assertStringContainsString("'posting_metadata'", $plan);
         self::assertStringContainsString("if (\$sale->document_type === 'IV')", $posting);
         self::assertStringContainsString('$sale->tenders()->create', $posting);
         self::assertStringContainsString("if (\$sale->document_type === 'HS')", $cancellation);

@@ -57,10 +57,10 @@ final class SalesQuotationState
         return 'REJECTED';
     }
 
-    public static function cancel(string $status): string
+    public static function cancel(string $status, bool $canCancelAccepted = false): string
     {
-        if (! in_array($status, ['DRAFT', 'SENT'], true)) {
-            throw new DomainException('ยกเลิกได้เฉพาะใบเสนอราคาที่ยังไม่ตอบรับเท่านั้น');
+        if (! in_array($status, ['DRAFT', 'SENT'], true) && ! ($status === 'ACCEPTED' && $canCancelAccepted)) {
+            throw new DomainException('ยกเลิกได้เฉพาะใบเสนอราคาที่ยังไม่ตอบรับ หรือใบเสนอราคาที่ไม่มีใบสั่งขายค้างอยู่');
         }
 
         return 'CANCELLED';

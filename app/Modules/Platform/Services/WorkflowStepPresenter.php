@@ -10,6 +10,7 @@ final class WorkflowStepPresenter
         $hasRoute = is_string($step['route'] ?? null) && \Route::has($step['route']);
         $available = $allowed && $hasRoute;
         $runtimeNotReady = $available && (bool) ($step['runtime_not_ready'] ?? false);
+        $configurationWarning = $available && (bool) ($step['configuration_warning'] ?? false);
         $pending = $available && (int) ($step['pending_count'] ?? 0) > 0;
 
         if (! $allowed) {
@@ -19,6 +20,10 @@ final class WorkflowStepPresenter
         } elseif ($runtimeNotReady) {
             $step['status'] = 'ยังไม่พร้อม';
             $step['status_code'] = 'NOT_READY';
+            $step['status_badge_class'] = 'app-status-warning';
+        } elseif ($configurationWarning) {
+            $step['status'] = 'ตรวจ Mapping';
+            $step['status_code'] = 'CONFIGURATION_WARNING';
             $step['status_badge_class'] = 'app-status-warning';
         } elseif ($pending) {
             $step['status'] = 'มีงานค้าง · '.number_format((int) $step['pending_count']).' รายการ';
@@ -35,7 +40,7 @@ final class WorkflowStepPresenter
         }
 
         $step['url'] = $available && ! $runtimeNotReady ? route($step['route']) : null;
-        $step['block_reason'] = $available && ! $pending && ! $runtimeNotReady
+        $step['block_reason'] = $available && ! $pending && ! $runtimeNotReady && ! $configurationWarning
             ? null
             : ($step['block_reason'] ?? ($allowed
                 ? ($pending ? (($step['pending_label'] ?? 'มีรายการค้างที่ต้องตรวจสอบ').' จำนวน '.number_format((int) $step['pending_count']).' รายการ') : 'ยังไม่มีหน้าหรือความสามารถนี้ใน MVP')

@@ -2,12 +2,13 @@
     $intake = $sourceIntake ?? null;
     $documentDate = $document->document_date?->format('d/m/Y') ?? '—';
     $validUntil = $document->valid_until?->format('d/m/Y');
-    $taxLines = $document->relationLoaded('lines') ? $document->lines : ($intake?->lines ?? collect());
+    $taxLines = $intake?->lines ?? ($document->relationLoaded('lines') ? $document->lines : collect());
     $taxRates = collect($taxLines)->pluck('tax_rate')->filter(fn ($rate) => (float) $rate > 0)->unique()->sort()->values();
     $hasTax = (float) ($document->tax_amount ?? $intake?->tax_amount ?? 0) > 0 || $taxRates->isNotEmpty();
+    $pricesIncludeVat = (bool) ($intake?->prices_include_vat ?? $document->prices_include_vat ?? $document->price_includes_vat ?? false);
     $taxMethod = $hasTax
-        ? (array_key_exists('price_includes_vat', $document->getAttributes()) && $document->price_includes_vat ? 'ราคารวมภาษี' : 'ราคาไม่รวมภาษี')
-        : 'ไม่คิดภาษี';
+        ? ($pricesIncludeVat ? 'รวมภาษี' : 'ภาษีนอก')
+        : 'ไม่มีภาษี';
     if ($taxRates->isNotEmpty()) {
         $taxMethod .= ' · VAT '.$taxRates->map(fn ($rate) => rtrim(rtrim(number_format((float) $rate, 4, '.', ''), '0'), '.').'%')->join(', ');
     }

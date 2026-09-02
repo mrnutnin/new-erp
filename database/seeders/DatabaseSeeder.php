@@ -163,7 +163,7 @@ class DatabaseSeeder extends Seeder
         ])->refresh();
 
         foreach ([
-            ['ASSET_REGISTER', 'รหัสสินทรัพย์', 'FA'], ['ASSET_CAPITALIZATION', 'ใบรับรู้สินทรัพย์', 'AC'],
+            ['ASSET_REGISTER', 'รหัสสินทรัพย์', 'FA'], ['ASSET_CAPITALIZATION', 'ใบรับรู้สินทรัพย์', 'AC'], ['ASSET_ADDITION', 'ใบเพิ่มมูลค่าสินทรัพย์', 'AA'],
             ['ASSET_TRANSFER', 'ใบโอน/ย้ายสินทรัพย์', 'AT'], ['ASSET_COUNT', 'ใบตรวจนับสินทรัพย์', 'FC'],
             ['ASSET_MAINTENANCE', 'ใบแจ้งซ่อมสินทรัพย์', 'MR'], ['ASSET_DEPRECIATION', 'ชุดคำนวณค่าเสื่อม', 'DP'],
             ['ASSET_IMPAIRMENT', 'ใบบันทึกด้อยค่าสินทรัพย์', 'IM'], ['ASSET_DISPOSAL', 'ใบจำหน่าย/ตัดออก', 'AD'],

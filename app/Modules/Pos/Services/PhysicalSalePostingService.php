@@ -5,6 +5,7 @@ namespace App\Modules\Pos\Services;
 use App\Models\User;
 use App\Models\Warehouse;
 use App\Modules\Accounting\Models\JournalEntry;
+use App\Modules\Accounting\Services\AccountMappingService;
 use App\Modules\Accounting\Services\JournalPostingService;
 use App\Modules\Accounting\Support\JournalBalance;
 use App\Modules\Finance\Services\AdvanceDepositApplicationService;
@@ -36,7 +37,36 @@ final class PhysicalSalePostingService
         private readonly PhysicalSaleRevenuePostingPlan $revenue,
         private readonly CommissionCalculationService $commissions,
         private readonly AuditLogger $audit,
+        private readonly AccountMappingService $mappings,
     ) {}
+
+    /**
+     * Checks only configuration that is knowable before the payment modal is
+     * completed. Tender and advance-dependent validation remains in post().
+     */
+    public function postReadiness(PhysicalSale $sale): array
+    {
+        if ($sale->status !== 'DRAFT') {
+            return ['ready' => false, 'blockers' => ['ยืนยันขายได้เฉพาะเอกสารร่าง']];
+        }
+
+        try {
+            if ($sale->document_type === 'IV') {
+                $this->revenue->build($sale, [], [], false);
+            } else {
+                if (JournalBalance::decimal($sale->tax_amount) !== '0.00') {
+                    $this->mappings->resolveForEvent('sales_invoice', 'DEFERRED_OUTPUT_VAT');
+                }
+                if (JournalBalance::decimal($sale->withholding_amount) !== '0.00') {
+                    $this->mappings->resolveForEvent('sales_invoice', 'WHT_RECEIVABLE');
+                }
+            }
+
+            return ['ready' => true, 'blockers' => []];
+        } catch (ValidationException $exception) {
+            return ['ready' => false, 'blockers' => collect($exception->errors())->flatten()->unique()->values()->all()];
+        }
+    }
 
     public function post(PhysicalSale $sale, string $postingDate, Warehouse $warehouse, User $actor, Request $request, array $tenders = []): PhysicalSale
     {

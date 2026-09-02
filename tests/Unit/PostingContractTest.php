@@ -22,6 +22,9 @@ class PostingContractTest extends TestCase
         );
         $this->assertSame('PURCHASE', PostingEvent::bookType('supplier_invoice.inventory'));
         $this->assertSame('GENERAL', PostingEvent::bookType('inventory_adjustment'));
+        $this->assertSame(['INVENTORY', 'ACCOUNTS_PAYABLE'], PostingEvent::roles('supplier_invoice.inventory'));
+        $this->assertSame('NO_GL', PostingEvent::contract('asset.branch_transfer')['status']);
+        $this->assertSame('DEFERRED', PostingEvent::contract('expense_payment')['status']);
     }
 
     public function test_unknown_events_are_rejected(): void

@@ -23,6 +23,15 @@ final class WorkflowCatalog
         if ($program === 'finance') {
             return self::decorate([
                 [
+                    'code' => 'finance-posting-readiness', 'title' => 'ค่าเริ่มต้นการลงบัญชี', 'mode' => 'setup',
+                    'description' => 'ตรวจ Account Mapping ที่ใช้เป็นค่าเริ่มต้นของเหตุการณ์รับ–จ่าย โดยเอกสารยังตรวจบัญชีเงินสด/ธนาคารและข้อมูลต้นทางซ้ำก่อน Post', 'duration' => 'ตรวจอัตโนมัติ',
+                    'steps' => [
+                        ['label' => 'รับชำระจากลูกค้า', 'route' => 'finance.settlements.index', 'permission' => 'finance.settlements.view', 'effect' => 'ตรวจบัญชีลูกหนี้และบัญชีเงินสด/ธนาคารที่รับชำระ', 'event_code' => 'customer_payment', 'mode' => 'setup'],
+                        ['label' => 'รับเงินล่วงหน้า', 'route' => 'finance.advance-deposits.index', 'permission' => 'finance.advance-deposits.view', 'effect' => 'ตรวจบัญชีเงินล่วงหน้ารับและบัญชีเงินสด/ธนาคาร', 'event_code' => 'customer_advance', 'mode' => 'setup'],
+                        ['label' => 'จ่ายชำระเจ้าหนี้', 'route' => 'finance.settlements.index', 'permission' => 'finance.settlements.view', 'effect' => 'ตรวจบัญชีเจ้าหนี้และบัญชีเงินสด/ธนาคารที่จ่าย', 'event_code' => 'supplier_payment', 'mode' => 'setup'],
+                    ],
+                ],
+                [
                     'code' => 'finance-first-time-setup', 'title' => 'ตั้งค่าการเงินก่อนเริ่มใช้งาน', 'mode' => 'setup',
                     'description' => 'เตรียมข้อมูลกลางและบัญชีที่ใช้ซ้ำ เพื่อให้ทีมเล็กทำงานรับ–จ่ายได้โดยไม่ต้องตั้งค่าซ้ำทุกเอกสาร', 'duration' => 'ประมาณ 15 นาที',
                     'steps' => [
@@ -65,6 +74,13 @@ final class WorkflowCatalog
 
         if ($program === 'pos') {
             return self::decorate([
+                [
+                    'code' => 'sales-posting-readiness', 'title' => 'ค่าเริ่มต้นการลงบัญชี', 'mode' => 'setup',
+                    'description' => 'ตรวจ Account Mapping สำหรับการขายก่อนออก HS/IV โดยเอกสารยังตรวจ Tax Code และข้อมูลสินค้า/การชำระเงินซ้ำก่อน Post', 'duration' => 'ตรวจอัตโนมัติ',
+                    'steps' => [
+                        ['label' => 'ขายสด / ขายเชื่อ (HS/IV)', 'route' => 'pos.physical-sales.index', 'permission' => 'pos.physical-sales.view', 'effect' => 'ตรวจบัญชีรายได้ ภาษีขาย และลูกหนี้ตามค่าเริ่มต้น', 'event_code' => 'sales_invoice', 'mode' => 'setup'],
+                    ],
+                ],
                 [
                     'code' => 'sales-setup', 'title' => '1. ตั้งค่าพร้อมขาย', 'mode' => 'setup',
                     'description' => 'ตั้งค่าข้อมูลที่มีผลต่อราคาและผลตอบแทนก่อนเริ่มออกเอกสารขาย', 'duration' => 'ก่อนเริ่มรอบขาย',
@@ -121,6 +137,14 @@ final class WorkflowCatalog
 
         if ($program === 'wms') {
             return self::decorate([
+                [
+                    'code' => 'purchase-posting-readiness', 'title' => 'ค่าเริ่มต้นการลงบัญชี', 'mode' => 'setup',
+                    'description' => 'ตรวจ Account Mapping สำหรับใบซื้อเชื่อ โดยเอกสารยังตรวจ Item/Category หรือบัญชีค่าใช้จ่ายที่เลือกซ้ำก่อน Post', 'duration' => 'ตรวจอัตโนมัติ',
+                    'steps' => [
+                        ['label' => 'ใบซื้อเชื่อสินค้า', 'route' => 'purchasing.purchase-documents.index', 'permission' => 'purchasing.purchase-documents.view', 'effect' => 'ตรวจบัญชีสินค้าคงคลังและเจ้าหนี้ตามค่าเริ่มต้น', 'event_code' => 'supplier_invoice.inventory', 'mode' => 'setup'],
+                        ['label' => 'ใบซื้อเชื่อบริการ / ค่าใช้จ่าย', 'route' => 'purchasing.purchase-documents.index', 'permission' => 'purchasing.purchase-documents.view', 'effect' => 'ตรวจบัญชีค่าใช้จ่ายและเจ้าหนี้ตามค่าเริ่มต้น', 'event_code' => 'supplier_invoice.expense', 'mode' => 'setup'],
+                    ],
+                ],
                 [
                     'code' => 'procure-to-pay', 'title' => 'Procure-to-Pay', 'mode' => 'daily',
                     'description' => 'ตั้งแต่ข้อมูล Supplier จนถึงรับสินค้า ใบซื้อเชื่อ ตั้งเจ้าหนี้ และการชำระเงิน', 'duration' => 'ประมาณ 20 นาที',
@@ -199,6 +223,14 @@ final class WorkflowCatalog
                     ['label' => 'Asset Dashboard', 'route' => 'asset.index', 'permission' => 'asset.dashboard.view', 'effect' => 'ตรวจรายการค้างและความพร้อมของสาขาปัจจุบัน', 'mode' => 'setup'],
                     ['label' => 'หมวดสินทรัพย์และบัญชี', 'route' => 'asset.categories.index', 'permission' => 'asset.categories.view', 'effect' => 'กำหนดบัญชีสินทรัพย์ ค่าเสื่อม ด้อยค่า และกำไร/ขาดทุน', 'mode' => 'setup'],
                     ['label' => 'สถานที่สินทรัพย์', 'route' => 'asset.locations.index', 'permission' => 'asset.locations.view', 'effect' => 'เตรียมสถานที่และโครงสร้างตำแหน่งตามสาขา', 'mode' => 'setup'],
+                ]],
+                ['code' => 'asset-posting-readiness', 'title' => 'ค่าเริ่มต้นการลงบัญชี', 'mode' => 'setup', 'description' => 'ตรวจ Account Mapping ที่ใช้เป็นค่าเริ่มต้นของแต่ละเหตุการณ์ โดยเอกสารยังตรวจ Category/Source override ซ้ำก่อน Post', 'duration' => 'ตรวจอัตโนมัติ', 'steps' => [
+                    ['label' => 'รับรู้สินทรัพย์', 'route' => 'asset.capitalizations.index', 'permission' => 'asset.capitalizations.view', 'effect' => 'ตรวจบัญชีสินทรัพย์และบัญชีพักการรับรู้', 'event_code' => 'asset.capitalization', 'mode' => 'setup'],
+                    ['label' => 'เพิ่มมูลค่าสินทรัพย์', 'route' => 'asset.additions.index', 'permission' => 'asset.capitalizations.view', 'effect' => 'ตรวจบัญชีสินทรัพย์และบัญชีพักการรับรู้', 'event_code' => 'asset.addition', 'mode' => 'setup'],
+                    ['label' => 'ค่าเสื่อมราคา', 'route' => 'asset.depreciations.index', 'permission' => 'asset.depreciation.view', 'effect' => 'ตรวจบัญชีค่าเสื่อมและค่าเสื่อมสะสม', 'event_code' => 'asset.depreciation', 'mode' => 'setup'],
+                    ['label' => 'ด้อยค่าสินทรัพย์', 'route' => 'asset.impairments.index', 'permission' => 'asset.impairments.view', 'effect' => 'ตรวจบัญชีขาดทุนด้อยค่าและด้อยค่าสะสม', 'event_code' => 'asset.impairment', 'mode' => 'setup'],
+                    ['label' => 'จำหน่ายสินทรัพย์', 'route' => 'asset.disposals.index', 'permission' => 'asset.disposals.view', 'effect' => 'ตรวจบัญชีสินทรัพย์ ค่าเสื่อมสะสม และกำไร/ขาดทุน', 'event_code' => 'asset.disposal', 'mode' => 'setup'],
+                    ['label' => 'ตัดออกสินทรัพย์', 'route' => 'asset.disposals.index', 'permission' => 'asset.disposals.view', 'effect' => 'ตรวจบัญชีสินทรัพย์ ค่าเสื่อมสะสม และขาดทุนจากการตัดออก', 'event_code' => 'asset.write_off', 'mode' => 'setup'],
                 ]],
                 ['code' => 'asset-daily', 'title' => 'งานประจำวัน: สินทรัพย์', 'mode' => 'daily', 'description' => 'สร้างทะเบียน รับรู้ต้นทุน คำนวณค่าเสื่อม และควบคุมการเปลี่ยนแปลงสินทรัพย์', 'duration' => 'ตามรายการจริง', 'steps' => [
                     ['label' => 'ทะเบียนสินทรัพย์', 'route' => 'asset.assets.index', 'permission' => 'asset.register.view', 'effect' => 'สร้าง แก้ไข และติดตามสถานะสินทรัพย์ในสาขาปัจจุบัน', 'mode' => 'daily'],

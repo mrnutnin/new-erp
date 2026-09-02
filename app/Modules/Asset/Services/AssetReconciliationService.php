@@ -18,28 +18,35 @@ final class AssetReconciliationService
 
     public function query(Branch $branch, FiscalPeriod $period, ?int $accountId = null, ?string $balanceType = null): Builder
     {
+        $capitalizationAccounts = $this->postingAccounts(['asset.capitalization', 'asset.addition'], 'ASSET_COST');
+        $depreciationAccounts = $this->postingAccounts(['asset.depreciation'], 'ACCUMULATED_DEPRECIATION');
+        $impairmentAccounts = $this->postingAccounts(['asset.impairment'], 'ACCUMULATED_IMPAIRMENT');
+
         $events = fn (): Builder => DB::table('asset_value_events as events')
             ->join('assets', 'assets.id', '=', 'events.asset_id')
             ->join('asset_categories as categories', 'categories.id', '=', 'assets.asset_category_id')
             ->where('events.branch_id', $branch->id)
             ->whereDate('events.event_date', '<=', $period->end_date);
 
-        $cost = $events()->leftJoin('asset_capitalization_lines as capitalization_lines', 'capitalization_lines.id', '=', 'events.source_line_id')
-            ->selectRaw("COALESCE(capitalization_lines.asset_account_id, categories.asset_account_id) AS account_id, 'COST' AS balance_type")
-            ->selectRaw("SUM(CASE WHEN events.event_type = 'OPENING' THEN 0 ELSE events.cost_delta END) AS subledger_balance")
-            ->selectRaw("SUM(CASE WHEN events.event_type = 'OPENING' THEN events.cost_delta ELSE 0 END) AS opening_balance")
-            ->groupBy('account_id');
+        $costRows = $events()->leftJoin('asset_capitalization_lines as capitalization_lines', 'capitalization_lines.id', '=', 'events.source_line_id')
+            ->leftJoinSub($capitalizationAccounts, 'capitalization_accounts', 'capitalization_accounts.source_id', '=', 'events.source_id')
+            ->selectRaw('COALESCE(capitalization_lines.asset_account_id, capitalization_accounts.account_id, categories.asset_account_id) AS account_id')
+            ->addSelect('events.event_type')
+            ->selectRaw('events.cost_delta AS balance_delta');
+        $cost = $this->aggregateEventBalances($costRows, 'COST');
 
-        $depreciation = $events()->leftJoin('asset_depreciation_lines as depreciation_lines', 'depreciation_lines.id', '=', 'events.source_line_id')
-            ->selectRaw("COALESCE(CAST(NULLIF(JSON_UNQUOTE(JSON_EXTRACT(depreciation_lines.calculation_input_snapshot, '$.accumulated_depreciation_account_id')), 'null') AS UNSIGNED), categories.accumulated_depreciation_account_id) AS account_id, 'ACCUMULATED_DEPRECIATION' AS balance_type")
-            ->selectRaw("SUM(CASE WHEN events.event_type = 'OPENING' THEN 0 ELSE events.depreciation_delta END) AS subledger_balance")
-            ->selectRaw("SUM(CASE WHEN events.event_type = 'OPENING' THEN events.depreciation_delta ELSE 0 END) AS opening_balance")
-            ->groupBy('account_id');
+        $depreciationRows = $events()->leftJoin('asset_depreciation_lines as depreciation_lines', 'depreciation_lines.id', '=', 'events.source_line_id')
+            ->leftJoinSub($depreciationAccounts, 'depreciation_accounts', 'depreciation_accounts.source_id', '=', 'events.source_id')
+            ->selectRaw("COALESCE(CAST(NULLIF(JSON_UNQUOTE(JSON_EXTRACT(depreciation_lines.calculation_input_snapshot, '$.accumulated_depreciation_account_id')), 'null') AS UNSIGNED), depreciation_accounts.account_id, categories.accumulated_depreciation_account_id) AS account_id")
+            ->addSelect('events.event_type')
+            ->selectRaw('events.depreciation_delta AS balance_delta');
+        $depreciation = $this->aggregateEventBalances($depreciationRows, 'ACCUMULATED_DEPRECIATION');
 
-        $impairment = $events()->selectRaw("categories.accumulated_impairment_account_id AS account_id, 'ACCUMULATED_IMPAIRMENT' AS balance_type")
-            ->selectRaw("SUM(CASE WHEN events.event_type = 'OPENING' THEN 0 ELSE events.impairment_delta END) AS subledger_balance")
-            ->selectRaw("SUM(CASE WHEN events.event_type = 'OPENING' THEN events.impairment_delta ELSE 0 END) AS opening_balance")
-            ->groupBy('account_id');
+        $impairmentRows = $events()->leftJoinSub($impairmentAccounts, 'impairment_accounts', 'impairment_accounts.source_id', '=', 'events.source_id')
+            ->selectRaw('COALESCE(impairment_accounts.account_id, categories.accumulated_impairment_account_id) AS account_id')
+            ->addSelect('events.event_type')
+            ->selectRaw('events.impairment_delta AS balance_delta');
+        $impairment = $this->aggregateEventBalances($impairmentRows, 'ACCUMULATED_IMPAIRMENT');
 
         $assetBalances = DB::query()->fromSub($cost->unionAll($depreciation)->unionAll($impairment), 'asset_rows')
             ->whereNotNull('account_id')->groupBy('account_id', 'balance_type')
@@ -75,5 +82,37 @@ final class AssetReconciliationService
             'gl_balance' => (string) $row->gl_balance,
             'variance' => (string) $row->variance,
         ];
+    }
+
+    /**
+     * Uses the immutable account snapshot persisted on the source Journal when a
+     * legacy source line does not have its explicit account selection.
+     *
+     * @param  list<string>  $eventCodes
+     */
+    private function postingAccounts(array $eventCodes, string $accountRole): Builder
+    {
+        $role = str_replace("'", "''", $accountRole);
+        $accountPath = "REPLACE(JSON_UNQUOTE(JSON_SEARCH(entries.posting_metadata, 'one', '{$role}', NULL, '$.accounts[*].account_role')), '.account_role', '.account_id')";
+
+        return DB::table('journal_entries as entries')
+            ->where('entries.source_type', 'ASSET')
+            ->whereIn('entries.source_event', $eventCodes)
+            ->whereIn('entries.status', ['POSTED', 'REVERSED'])
+            ->whereNotNull('entries.posting_metadata')
+            ->groupBy('entries.source_id')
+            ->select('entries.source_id')
+            ->selectRaw("MAX(CAST(NULLIF(JSON_UNQUOTE(JSON_EXTRACT(entries.posting_metadata, {$accountPath})), 'null') AS UNSIGNED)) AS account_id");
+    }
+
+    private function aggregateEventBalances(Builder $eventRows, string $balanceType): Builder
+    {
+        return DB::query()->fromSub($eventRows, 'event_rows')
+            ->whereNotNull('account_id')
+            ->groupBy('account_id')
+            ->select('account_id')
+            ->selectRaw("'{$balanceType}' AS balance_type")
+            ->selectRaw("SUM(CASE WHEN event_type = 'OPENING' THEN 0 ELSE balance_delta END) AS subledger_balance")
+            ->selectRaw("SUM(CASE WHEN event_type = 'OPENING' THEN balance_delta ELSE 0 END) AS opening_balance");
     }
 }

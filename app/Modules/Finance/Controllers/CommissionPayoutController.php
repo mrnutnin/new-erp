@@ -103,13 +103,13 @@ final class CommissionPayoutController extends Controller
         return response()->json(['status' => true, 'redirect' => route('finance.commission-payouts.payouts.show', [$commissionPaymentBatch, $payout])]);
     }
 
-    public function showPayout(Request $request, CommissionPaymentBatch $commissionPaymentBatch, CommissionPayoutBatch $payout): View
+    public function showPayout(Request $request, CommissionPaymentBatch $commissionPaymentBatch, CommissionPayoutBatch $payout, CommissionPayoutService $service): View
     {
         $this->scope($request, $commissionPaymentBatch);
         abort_unless((int) $payout->payment_batch_id === (int) $commissionPaymentBatch->id, 404);
         $payout->load('recipient', 'bankAccount', 'lines.commissionRecord.physicalSale');
 
-        return view('Finance::commission-payouts.payout-show', compact('commissionPaymentBatch', 'payout'));
+        return view('Finance::commission-payouts.payout-show', [...compact('commissionPaymentBatch', 'payout'), 'postReadiness' => $service->postReadiness($payout)]);
     }
 
     public function postPayout(Request $request, CommissionPaymentBatch $commissionPaymentBatch, CommissionPayoutBatch $payout, CommissionPayoutService $service, AuditLogger $audit): JsonResponse

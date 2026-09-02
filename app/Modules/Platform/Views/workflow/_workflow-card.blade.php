@@ -61,6 +61,9 @@
                                     @endif
                                 </div>
                                 <span class="badge {{ $step['status_badge_class'] ?? 'app-status-warning' }}">{{ $step['status'] }}</span>
+                                @if(!empty($step['recovery_url']) && (!isset($step['recovery_permission']) || auth()->user()->hasPermission($step['recovery_permission'])))
+                                    <a class="workflow-recovery-action" href="{{ $step['recovery_url'] }}">{{ $step['recovery_label'] ?? 'เปิดหน้าตั้งค่า' }}</a>
+                                @endif
                                 @if($step['url'])
                                     <a class="workflow-node-action ms-2" href="{{ $step['url'] }}" title="{{ $step['next_action'] ?? 'เริ่มทำงาน' }}" aria-label="{{ $step['next_action'] ?? 'เริ่มทำงาน' }} {{ $step['label'] }}">
                                         <i class="bx bx-play" aria-hidden="true"></i>
@@ -68,7 +71,7 @@
                                 @endif
                             </div>
 
-                            @if(!$step['url'])
+                            @if(!$step['url'] || (!empty($step['configuration_warning']) && !empty($step['block_reason'])))
                                 <p class="small text-warning-emphasis mb-0 mt-2">
                                     <i class="bx bx-info-circle me-1" aria-hidden="true"></i>{{ $step['block_reason'] }}
                                 </p>

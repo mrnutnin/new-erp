@@ -23,6 +23,7 @@ final class InventoryAdjustmentPostingContractTest extends TestCase
         $gain = InventoryAdjustmentPostingContract::preview($this->input());
         $loss = InventoryAdjustmentPostingContract::preview($this->input(['direction' => 'LOSS']));
 
+        $this->assertSame('inventory_adjustment', $gain['event_code']);
         $this->assertSame('IN', $gain['movement_direction']);
         $this->assertSame('INVENTORY_ADJUSTMENT_GAIN', $gain['mapping_key']);
         $this->assertSame('OUT', $loss['movement_direction']);

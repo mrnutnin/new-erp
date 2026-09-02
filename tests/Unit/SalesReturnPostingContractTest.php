@@ -20,5 +20,7 @@ final class SalesReturnPostingContractTest extends TestCase
         self::assertStringContainsString('cogs_journal_entry_id', $source);
         self::assertStringContainsString('finance_advance_deposit_applications', $source);
         self::assertStringContainsString('exactScaled', $source);
+        self::assertStringContainsString('originalRevenueMetadata', $source);
+        self::assertStringContainsString("'source' => 'DOCUMENT'", $source);
     }
 }

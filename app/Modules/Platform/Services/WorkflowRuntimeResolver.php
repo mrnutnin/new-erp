@@ -9,6 +9,7 @@ use App\Modules\Accounting\Models\Account;
 use App\Modules\Accounting\Models\AccountMapping;
 use App\Modules\Accounting\Models\FiscalPeriod;
 use App\Modules\Accounting\Models\JournalEntry;
+use App\Modules\Accounting\Services\AccountMappingService;
 use App\Modules\Finance\Models\BankAccount;
 use App\Modules\Finance\Models\PaymentVoucher;
 use App\Modules\Finance\Models\Settlement;
@@ -22,7 +23,10 @@ use App\Modules\Wms\Models\PurchaseRequisition;
 
 final class WorkflowRuntimeResolver
 {
-    public function __construct(private readonly GlobalSettings $settings) {}
+    public function __construct(
+        private readonly GlobalSettings $settings,
+        private readonly ?AccountMappingService $accountMappings = null,
+    ) {}
 
     public function snapshot(string $module, User $user, ?int $warehouseId = null): WorkflowRuntimeSnapshot
     {
@@ -32,6 +36,7 @@ final class WorkflowRuntimeResolver
             'finance' => $this->financeSnapshot($user, $warehouseId),
             'accounting' => $this->accountingSnapshot($user, $warehouseId),
             'pos' => $this->posSnapshot($user, $warehouseId),
+            'asset' => $this->assetSnapshot(),
             default => new WorkflowRuntimeSnapshot($module),
         };
     }
@@ -40,17 +45,23 @@ final class WorkflowRuntimeResolver
     {
         $snapshot = $this->snapshot($module, $user, $warehouseId);
         $readiness = collect($snapshot->readiness)->keyBy('route');
+        $eventReadiness = collect($snapshot->readiness)->filter(fn (array $item): bool => ! empty($item['event_code']))->keyBy('event_code');
         $pending = collect($snapshot->pending)->keyBy('route');
 
-        return array_map(function (array $workflow) use ($readiness, $pending): array {
-            $workflow['steps'] = array_map(function (array $step) use ($readiness, $pending): array {
+        return array_map(function (array $workflow) use ($readiness, $eventReadiness, $pending): array {
+            $workflow['steps'] = array_map(function (array $step) use ($readiness, $eventReadiness, $pending): array {
                 $route = $step['route'] ?? null;
-                if ($route && $readiness->has($route)) {
-                    $runtime = $readiness->get($route);
+                $eventCode = $step['event_code'] ?? null;
+                if (($eventCode && $eventReadiness->has($eventCode)) || ($route && $readiness->has($route))) {
+                    $runtime = $eventCode ? $eventReadiness->get($eventCode) : $readiness->get($route);
                     $step['readiness'] = $runtime;
                     $step['runtime_not_ready'] = ($runtime['status'] ?? null) === 'NOT_READY';
+                    $step['configuration_warning'] = (bool) ($runtime['configuration_warning'] ?? false);
                     $step['block_reason'] = $runtime['block_reason'] ?? $step['block_reason'] ?? null;
                     $step['next_action'] = $runtime['next_action'] ?? $step['next_action'] ?? null;
+                    $step['recovery_url'] = $runtime['recovery_url'] ?? null;
+                    $step['recovery_label'] = $runtime['recovery_label'] ?? null;
+                    $step['recovery_permission'] = $runtime['recovery_permission'] ?? null;
                 }
                 if ($route && $pending->has($route)) {
                     $pendingRuntime = $pending->get($route);
@@ -89,7 +100,10 @@ final class WorkflowRuntimeResolver
     private function wmsSnapshot(User $user, ?int $warehouseId): WorkflowRuntimeSnapshot
     {
         $pending = [];
-        $readiness = [];
+        $readiness = $this->postingDefaultReadiness([
+            'supplier_invoice.inventory',
+            'supplier_invoice.expense',
+        ]);
         if ($user->hasPermission('wms.items.view')) {
             $readiness[] = $this->readiness('wms.items', Item::query()->where('is_active', true)->count(), 'สร้างข้อมูลสินค้าให้พร้อมก่อนทำรายการ', 'wms.items.index', 'wms.items.view', true);
         }
@@ -108,7 +122,11 @@ final class WorkflowRuntimeResolver
 
     private function financeSnapshot(User $user, ?int $warehouseId): WorkflowRuntimeSnapshot
     {
-        $readiness = [];
+        $readiness = $this->postingDefaultReadiness([
+            'customer_payment',
+            'customer_advance',
+            'supplier_payment',
+        ]);
         $pending = [];
         if ($warehouseId !== null && $user->hasPermission('finance.bank-accounts.view')) {
             $readiness[] = $this->readiness('finance.bank-accounts', BankAccount::query()->where('warehouse_id', $warehouseId)->where('is_active', true)->count(), 'ตั้งค่าบัญชีเงินสดหรือธนาคารก่อนรับจ่าย', 'finance.bank-accounts.index', 'finance.bank-accounts.view', true);
@@ -131,7 +149,7 @@ final class WorkflowRuntimeResolver
             $readiness[] = $this->readiness('accounting.accounts', Account::query()->where('is_active', true)->where('is_postable', true)->count(), 'สร้างผังบัญชีที่ลงรายการได้ก่อนเริ่มบันทึก', 'accounting.accounts.index', 'accounting.accounts.view', true);
         }
         if ($user->hasPermission('accounting.account-mappings.view')) {
-            $readiness[] = $this->readiness('accounting.mappings', AccountMapping::query()->where('is_active', true)->count(), 'ตั้งค่า Account Mapping ที่จำเป็น', 'accounting.account-mappings.index', 'accounting.account-mappings.view', true);
+            $readiness[] = $this->readiness('accounting.mappings', AccountMapping::query()->whereNull('event_code')->where('is_active', true)->count(), 'ตั้งค่า Account Mapping ที่จำเป็น', 'accounting.account-mappings.index', 'accounting.account-mappings.view', true);
         }
         if ($user->hasPermission('accounting.periods.view')) {
             $readiness[] = $this->readiness('accounting.periods', FiscalPeriod::query()->where('status', 'OPEN')->count(), 'เปิดงวดบัญชีสำหรับบันทึกรายการ', 'accounting.fiscal-years.index', 'accounting.periods.view', true);
@@ -150,7 +168,43 @@ final class WorkflowRuntimeResolver
             $pending[] = $this->pending('pos.sales-documents', SalesDocument::query()->where('warehouse_id', $warehouseId)->whereIn('status', ['DRAFT', 'APPROVED'])->count(), 'เอกสารขายที่รออนุมัติหรือ Post', 'pos.sales-documents.index', 'pos.sales-documents.view');
         }
 
-        return new WorkflowRuntimeSnapshot('pos', [], $pending);
+        return new WorkflowRuntimeSnapshot('pos', $this->postingDefaultReadiness(['sales_invoice']), $pending);
+    }
+
+    private function assetSnapshot(): WorkflowRuntimeSnapshot
+    {
+        return new WorkflowRuntimeSnapshot('asset', $this->postingDefaultReadiness([
+            'asset.capitalization',
+            'asset.addition',
+            'asset.depreciation',
+            'asset.impairment',
+            'asset.disposal',
+            'asset.write_off',
+        ]));
+    }
+
+    private function postingDefaultReadiness(array $eventCodes): array
+    {
+        $mappings = $this->accountMappings ?? app(AccountMappingService::class);
+
+        return collect($eventCodes)->map(function (string $eventCode) use ($mappings): array {
+            $result = $mappings->readiness($eventCode);
+            $blocker = $result['blockers'][0] ?? null;
+
+            return [
+                'code' => "posting.{$eventCode}",
+                'event_code' => $eventCode,
+                'status' => $result['ready'] ? 'READY' : 'WARNING',
+                'configuration_warning' => ! $result['ready'],
+                'missing_count' => count($result['blockers']),
+                'block_reason' => $blocker['message'] ?? null,
+                'next_action' => $result['ready'] ? 'เปิดรายการเพื่อดำเนินการต่อ' : ($blocker['recovery_label'] ?? 'ตั้งค่าการลงบัญชี'),
+                'recovery_url' => $blocker['recovery_url'] ?? null,
+                'recovery_label' => $blocker['recovery_label'] ?? null,
+                'recovery_permission' => 'accounting.account-mappings.view',
+                'route' => null,
+            ];
+        })->all();
     }
 
     private function readiness(string $code, int $count, string $nextAction, string $route, string $permission, bool $countIsReady = false): array

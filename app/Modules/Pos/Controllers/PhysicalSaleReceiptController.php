@@ -26,7 +26,7 @@ final class PhysicalSaleReceiptController extends Controller
         $sale = $this->saleWithOpenItem($request, $physicalSale, $openItems);
         $openItem = $sale->getRelation('paymentOpenItem');
         $remaining = $openItems->remainingAt($openItem, today()->format('Y-m-d'));
-        $withholding = $this->withholdingFor($openItem, today()->format('Y-m-d'));
+        $withholding = $this->withholdingFor($openItem, $remaining, today()->format('Y-m-d'));
 
         return view('Pos::physical-sales.receive-payment', [
             'sale' => $sale,
@@ -67,7 +67,7 @@ final class PhysicalSaleReceiptController extends Controller
             throw ValidationException::withMessages(['allocation_amount' => 'ยอดรับชำระเกินยอดคงเหลือของ IV']);
         }
         $openItem->setAttribute('remaining_amount', $remaining);
-        $withholding = $this->withholdingFor($openItem, $values['settlement_date']);
+        $withholding = $this->withholdingFor($openItem, $allocation, $values['settlement_date']);
 
         return response()->json(['remaining' => $remaining, 'allocation' => $allocation, 'withholding' => $withholding, 'net' => JournalBalance::subtract($allocation, $withholding)]);
     }
@@ -103,7 +103,7 @@ final class PhysicalSaleReceiptController extends Controller
         return $physicalSale->setRelation('paymentOpenItem', $openItem);
     }
 
-    private function withholdingFor(OpenItem $item, string $date): string
+    private function withholdingFor(OpenItem $item, string $allocation, string $date): string
     {
         if (! $item->withholding_tax_code_id || JournalBalance::decimal($item->withholding_amount) === '0.00') {
             return '0.00';
@@ -121,7 +121,7 @@ final class PhysicalSaleReceiptController extends Controller
 
         return WhtRealizationCalculator::calculate(
             $item->original_amount, $item->withholding_base, $item->withholding_amount,
-            $item->remaining_amount, (string) $allocated, (string) $realized,
+            $allocation, (string) $allocated, (string) $realized,
         )['tax'];
     }
 }

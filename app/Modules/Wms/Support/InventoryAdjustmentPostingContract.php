@@ -46,7 +46,7 @@ final class InventoryAdjustmentPostingContract
         }
 
         $payload = [
-            'event_code' => 'inventory.adjustment', 'direction' => $direction,
+            'event_code' => 'inventory_adjustment', 'direction' => $direction,
             'warehouse_id' => (int) $input['warehouse_id'], 'item_id' => (int) $input['item_id'],
             'uom_id' => (int) $input['uom_id'], 'business_date' => $date,
             'quantity' => $quantity->toScale(8)->__toString(), 'value' => $value->toScale(8)->__toString(),
@@ -60,7 +60,7 @@ final class InventoryAdjustmentPostingContract
         }
 
         return [
-            'event_code' => 'inventory.adjustment', 'direction' => $direction,
+            'event_code' => 'inventory_adjustment', 'direction' => $direction,
             'movement_direction' => $direction === 'GAIN' ? 'IN' : 'OUT',
             'mapping_key' => $direction === 'GAIN' ? 'INVENTORY_ADJUSTMENT_GAIN' : 'INVENTORY_ADJUSTMENT_LOSS',
             'posting_hash' => $hash, 'creates_journal' => false,

@@ -34,6 +34,34 @@ final class InventoryAdjustmentPostingService
     ) {}
 
     /**
+     * Read-only mapping preview for a document. postAdjustment() repeats all
+     * business, stock and journal checks inside its transaction.
+     */
+    public function documentPostReadiness(iterable $adjustments): array
+    {
+        if (! config('erp.inventory.adjustment_posting_enabled', false)) {
+            return ['ready' => false, 'blockers' => ['Inventory Adjustment → GL ยังไม่เปิดใช้งาน']];
+        }
+
+        try {
+            foreach ($adjustments as $adjustment) {
+                if ($adjustment->status !== 'APPROVED') {
+                    throw ValidationException::withMessages(['status' => 'ลงบัญชีได้เฉพาะรายการที่อนุมัติแล้ว']);
+                }
+                $this->mappings->resolveForEvent('inventory_adjustment', 'INVENTORY');
+                $this->mappings->resolveForEvent(
+                    'inventory_adjustment',
+                    $adjustment->direction === 'GAIN' ? 'ADJUSTMENT_GAIN' : 'ADJUSTMENT_LOSS',
+                );
+            }
+
+            return ['ready' => true, 'blockers' => []];
+        } catch (ValidationException $exception) {
+            return ['ready' => false, 'blockers' => collect($exception->errors())->flatten()->unique()->values()->all()];
+        }
+    }
+
+    /**
      * Owns the complete APPROVED adjustment transaction. The HTTP layer must
      * not create stock movement/allocation rows itself; keeping this here
      * makes the idempotency and rollback boundary explicit.
@@ -161,7 +189,7 @@ final class InventoryAdjustmentPostingService
                 return $lockedAllocation;
             }
 
-            $preview = $this->costPosting->dryRun([$lockedAllocation], 'inventory.adjustment', $this->mappings);
+            $preview = $this->costPosting->dryRun([$lockedAllocation], 'inventory_adjustment', $this->mappings);
             $lines = collect($preview['lines'])->map(fn (array $line): array => [
                 'account_id' => $line['account_id'],
                 'subledger_type' => $line['account_mapping'] === 'INVENTORY_DEFAULT' ? 'ITEM' : null,
@@ -174,7 +202,7 @@ final class InventoryAdjustmentPostingService
                 'source_type' => $context['source_type'], 'source_id' => $context['source_id'],
                 'event_code' => 'inventory_adjustment', 'entry_date' => $context['business_date'],
                 'document_date' => $context['business_date'], 'source_reference' => $context['source_reference'],
-                'description' => 'ปรับปรุงสินค้าคงเหลือ: '.$context['reason'], 'lines' => $lines,
+                'description' => 'ปรับปรุงสินค้าคงเหลือ: '.$context['reason'], 'posting_metadata' => $preview['posting_metadata'], 'lines' => $lines,
             ], $warehouse, $actor);
             $inventoryAccountId = (int) collect($lines)
                 ->firstWhere('subledger_type', 'ITEM')['account_id'];

@@ -11,7 +11,7 @@ final class SettlementPhysicalSaleReceiptPrefillContractTest extends TestCase
         $root = dirname(__DIR__, 2);
         $controller = file_get_contents($root.'/app/Modules/Finance/Controllers/SettlementController.php');
 
-        $this->assertStringContainsString("->where('warehouse_id', \$warehouseId)", $controller);
+        $this->assertStringContainsString("->whereIn('warehouse_id', \$warehouseIds)", $controller);
         $this->assertStringContainsString("->where('ledger_type', 'AR')", $controller);
         $this->assertStringContainsString("->where('party_type', 'CUSTOMER')", $controller);
         $this->assertStringContainsString("->where('balance_side', 'DEBIT')", $controller);

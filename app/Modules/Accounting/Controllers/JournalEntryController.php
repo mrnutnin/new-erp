@@ -9,7 +9,12 @@ use App\Modules\Accounting\Models\TaxCode;
 use App\Modules\Accounting\Requests\ChangeJournalEntryStatusRequest;
 use App\Modules\Accounting\Requests\SaveJournalEntryRequest;
 use App\Modules\Accounting\Services\JournalEntryWriter;
+use App\Modules\Finance\Models\AdvanceDeposit;
 use App\Modules\Platform\Services\AuditLogger;
+use App\Modules\Pos\Models\CommissionPayoutBatch;
+use App\Modules\Pos\Models\PhysicalSale;
+use App\Modules\Pos\Models\SalesDocument;
+use App\Modules\Pos\Models\SalesReturn;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -95,7 +100,9 @@ class JournalEntryController extends Controller
             'validatedBy', 'postedBy', 'reversedBy', 'reversalOf', 'reversal',
         ]);
 
-        return view('Accounting::journal-entries.show', compact('journalEntry'));
+        $sourceDocument = $this->sourceDocumentLink($journalEntry);
+
+        return view('Accounting::journal-entries.show', compact('journalEntry', 'sourceDocument'));
     }
 
     public function preview(Request $request, JournalEntry $journalEntry): JsonResponse
@@ -196,6 +203,68 @@ class JournalEntryController extends Controller
         return JournalEntry::query()->with(['book:id,code,name', 'branch:id,name'])
             ->whereIn('warehouse_id', $this->authorizedWarehouseIds($request))
             ->withSum('lines as debit_total', 'debit')->withSum('lines as credit_total', 'credit');
+    }
+
+    /** @return array{label:string,url:string,permission:string}|null */
+    private function sourceDocumentLink(JournalEntry $entry): ?array
+    {
+        $sourceId = (string) $entry->source_id;
+        $event = (string) ($entry->posting_metadata['event_code'] ?? $entry->source_event);
+
+        if (ctype_digit($sourceId)) {
+            if ($event === 'sales_commission_payout') {
+                $payout = CommissionPayoutBatch::query()->whereKey($sourceId)->where('journal_entry_id', $entry->id)->first();
+                if ($payout) {
+                    return ['label' => 'เอกสารจ่ายคอมมิชชั่น', 'url' => route('finance.commission-payouts.payouts.show', ['commissionPaymentBatch' => $payout->payment_batch_id, 'payout' => $payout]), 'permission' => 'finance.commission-payouts.view'];
+                }
+            }
+
+            return match ($event) {
+                'asset.capitalization' => ['label' => 'เอกสารรับรู้สินทรัพย์', 'url' => route('asset.capitalizations.show', $sourceId), 'permission' => 'asset.capitalizations.view'],
+                'asset.addition' => ['label' => 'เอกสารเพิ่มมูลค่าสินทรัพย์', 'url' => route('asset.additions.show', $sourceId), 'permission' => 'asset.capitalizations.view'],
+                'asset.depreciation' => ['label' => 'รายการค่าเสื่อมราคา', 'url' => route('asset.depreciations.show', $sourceId), 'permission' => 'asset.depreciation.view'],
+                'asset.impairment' => ['label' => 'เอกสารด้อยค่าสินทรัพย์', 'url' => route('asset.impairments.show', $sourceId), 'permission' => 'asset.impairments.view'],
+                'asset.disposal', 'asset.write_off' => ['label' => 'เอกสารจำหน่ายสินทรัพย์', 'url' => route('asset.disposals.show', $sourceId), 'permission' => 'asset.disposals.view'],
+                'supplier_invoice.expense', 'supplier_invoice.inventory' => ['label' => 'เอกสารซื้อ', 'url' => route('wms.purchase-documents.show', $sourceId), 'permission' => 'wms.purchase-documents.view'],
+                'customer_payment', 'supplier_payment', 'customer_advance' => ['label' => 'เอกสารรับ/จ่ายชำระ', 'url' => route('finance.settlements.show', $sourceId), 'permission' => 'finance.settlements.view'],
+                default => $this->posSourceDocumentLink($entry, (int) $sourceId),
+            };
+        }
+
+        if (preg_match('/^adjustment:(\d+)/', $sourceId, $matches)) {
+            return ['label' => 'รายการปรับปรุงสต็อก', 'url' => route('wms.inventory-adjustments.show', $matches[1]), 'permission' => 'wms.inventory-adjustments.view'];
+        }
+        if (preg_match('/^AI:(\d+)/', $sourceId, $matches)) {
+            return ['label' => 'ใบรับเงินล่วงหน้า', 'url' => route('pos.advance-deposits.show', $matches[1]), 'permission' => 'pos.advance-deposits.view'];
+        }
+        if (preg_match('/^sales-return:(\d+)/', $sourceId, $matches)) {
+            return ['label' => 'ใบรับคืนสินค้า', 'url' => route('pos.sales-returns.show', $matches[1]), 'permission' => 'pos.sales-returns.view'];
+        }
+
+        return null;
+    }
+
+    /** @return array{label:string,url:string,permission:string}|null */
+    private function posSourceDocumentLink(JournalEntry $entry, int $sourceId): ?array
+    {
+        if ($entry->source_type !== 'POS') {
+            return null;
+        }
+
+        if (PhysicalSale::query()->whereKey($sourceId)->where(fn (Builder $query) => $query->where('journal_entry_id', $entry->id)->orWhere('cogs_journal_entry_id', $entry->id))->exists()) {
+            return ['label' => 'เอกสารขาย HS/IV', 'url' => route('pos.physical-sales.show', $sourceId), 'permission' => 'pos.physical-sales.view'];
+        }
+        if (SalesDocument::query()->whereKey($sourceId)->where('journal_entry_id', $entry->id)->exists()) {
+            return ['label' => 'เอกสารขาย', 'url' => route('pos.sales-documents.show', $sourceId), 'permission' => 'pos.sales-documents.view'];
+        }
+        if (SalesReturn::query()->whereKey($sourceId)->where(fn (Builder $query) => $query->where('journal_entry_id', $entry->id)->orWhere('cogs_journal_entry_id', $entry->id))->exists()) {
+            return ['label' => 'ใบรับคืนสินค้า', 'url' => route('pos.sales-returns.show', $sourceId), 'permission' => 'pos.sales-returns.view'];
+        }
+        if (AdvanceDeposit::query()->whereKey($sourceId)->where('journal_entry_id', $entry->id)->exists()) {
+            return ['label' => 'ใบรับเงินล่วงหน้า', 'url' => route('pos.advance-deposits.show', $sourceId), 'permission' => 'pos.advance-deposits.view'];
+        }
+
+        return null;
     }
 
     private function ensureWarehouseScope(Request $request, JournalEntry $entry): void

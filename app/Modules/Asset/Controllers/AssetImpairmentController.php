@@ -35,9 +35,11 @@ final class AssetImpairmentController extends Controller
         return view('Asset::impairments.form', ['impairment' => new AssetImpairment(['assessment_date' => today()])]);
     }
 
-    public function show(Request $request, AssetImpairment $impairment): View
+    public function show(Request $request, AssetImpairment $impairment, AssetImpairmentService $service): View
     {
-        return view('Asset::impairments.show', ['impairment' => $this->scoped($request, $impairment)->load(['asset', 'createdBy'])]);
+        $impairment = $this->scoped($request, $impairment)->load(['asset.category', 'createdBy']);
+
+        return view('Asset::impairments.show', ['impairment' => $impairment, 'postReadiness' => $impairment->status === 'APPROVED' ? $service->postReadiness($impairment) : null]);
     }
 
     public function store(Request $request, AssetImpairmentService $service, DocumentSequenceService $sequences): JsonResponse

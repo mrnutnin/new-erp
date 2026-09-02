@@ -97,14 +97,21 @@ final class AdvanceDepositPostingService
                     throw ValidationException::withMessages(['tenders' => 'บัญชีรับเงินของใบรับเงินล่วงหน้าต้อง active, THB และผูกบัญชีคุมตรงประเภท']);
                 }
             }
-            $advance = $this->mappings->resolve('CUSTOMER_ADVANCE');
+            $advanceResolution = $this->mappings->resolveForEvent('customer_advance', 'CUSTOMER_ADVANCE');
+            $advance = $advanceResolution['account'];
             $lines = $tenders->map(fn ($tender): array => ['account_id' => $tender->bankAccount->account_id, 'subledger_type' => strtoupper($tender->bankAccount->type), 'subledger_id' => (string) $tender->bank_account_id, 'description' => $deposit->document_number, 'debit' => $tender->amount, 'credit' => '0.00'])->all();
             if ($wht['withholding_amount'] !== '0.00') {
-                $account = $this->mappings->resolve('WHT_RECEIVABLE');
+                $whtResolution = $this->mappings->resolveForEvent('customer_advance', 'WHT_RECEIVABLE');
+                $account = $whtResolution['account'];
                 $lines[] = ['account_id' => $account->id, 'subledger_type' => 'TAX', 'subledger_id' => (string) $account->id, 'description' => "WHT {$deposit->document_number}", 'debit' => $wht['withholding_amount'], 'credit' => '0.00'];
             }
             $lines[] = ['account_id' => $advance->id, 'description' => "เงินรับมัดจำ {$deposit->document_number}", 'debit' => '0.00', 'credit' => $gross];
-            $journal = $this->journals->postWithinTransaction(['source_type' => 'POS', 'source_id' => "AI:{$deposit->id}", 'source_reference' => $deposit->document_number, 'event_code' => 'customer_advance', 'entry_date' => $postingDate, 'document_date' => $deposit->document_date->format('Y-m-d'), 'description' => $deposit->description ?: $deposit->document_number, 'lines' => $lines], $warehouse, $actor);
+            $metadata = $tenders->map(fn ($tender): array => ['event_code' => 'customer_advance', 'account_role' => 'BANK_ACCOUNT_'.(int) $tender->bank_account_id, 'account_id' => (int) $tender->bankAccount->account_id, 'source' => 'DOCUMENT', 'source_type' => 'BANK_ACCOUNT', 'source_id' => (string) $tender->bank_account_id, 'mapping_id' => null, 'mapping_version' => null])->all();
+            $metadata[] = $advanceResolution['provenance'];
+            if (isset($whtResolution)) {
+                $metadata[] = $whtResolution['provenance'];
+            }
+            $journal = $this->journals->postWithinTransaction(['source_type' => 'POS', 'source_id' => "AI:{$deposit->id}", 'source_reference' => $deposit->document_number, 'event_code' => 'customer_advance', 'entry_date' => $postingDate, 'document_date' => $deposit->document_date->format('Y-m-d'), 'description' => $deposit->description ?: $deposit->document_number, 'posting_metadata' => ['contract_version' => 1, 'event_code' => 'customer_advance', 'accounts' => $metadata], 'lines' => $lines], $warehouse, $actor);
             $deposit->update(['status' => 'POSTED', 'posting_date' => $postingDate, 'journal_entry_id' => $journal->id, 'posted_by' => $actor->id, 'posted_at' => now(), 'balance_amount' => $gross]);
 
             return $deposit->fresh('tenders');

@@ -49,6 +49,14 @@ final class InventoryCostJournalAdapter
             'entry_date' => $movement->business_date?->format('Y-m-d') ?: (string) $movement->business_date,
             'document_date' => $movement->business_date?->format('Y-m-d') ?: (string) $movement->business_date,
             'description' => "COGS จาก WMS movement #{$movement->id}",
+            'posting_metadata' => [
+                'contract_version' => 1,
+                'event_code' => 'sales_cogs',
+                'accounts' => [
+                    ['event_code' => 'sales_cogs', 'account_role' => 'COGS', 'account_id' => (int) $cogs->id, 'source' => 'MASTER', 'source_type' => 'ITEM', 'source_id' => (string) $item->id, 'mapping_id' => null, 'mapping_version' => null],
+                    ['event_code' => 'sales_cogs', 'account_role' => 'INVENTORY', 'account_id' => (int) $inventory->id, 'source' => 'MASTER', 'source_type' => 'ITEM', 'source_id' => (string) $item->id, 'mapping_id' => null, 'mapping_version' => null],
+                ],
+            ],
             'lines' => [
                 [
                     'account_id' => (int) $cogs->id,

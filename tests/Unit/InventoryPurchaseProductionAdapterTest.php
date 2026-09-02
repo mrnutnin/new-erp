@@ -30,7 +30,7 @@ class InventoryPurchaseProductionAdapterTest extends TestCase
     {
         $source = file_get_contents(base_path('app/Modules/Wms/Services/InventoryPurchaseProductionAdapter.php'));
 
-        $this->assertStringContainsString("where('key', 'PURCHASE_AP')", $source);
+        $this->assertStringContainsString("resolveForEvent('supplier_invoice.inventory', 'ACCOUNTS_PAYABLE')", $source);
         $this->assertStringContainsString('->sole()', $source);
         $this->assertStringNotContainsString("orderBy('id')->first", $source);
     }

@@ -36,9 +36,9 @@ class WorkflowCatalogTest extends TestCase
         }
 
         $wms = WorkflowCatalog::for('wms');
-        $this->assertSame(['daily', 'setup', 'daily'], array_column($wms, 'mode'));
-        $inventorySetup = $wms[1];
-        $inventoryDaily = $wms[2];
+        $this->assertSame(['setup', 'daily', 'setup', 'daily'], array_column($wms, 'mode'));
+        $inventorySetup = $wms[2];
+        $inventoryDaily = $wms[3];
         $this->assertSame('นโยบายต้นทุน AVG/FIFO', $inventorySetup['steps'][1]['label']);
         $preflight = collect($inventoryDaily['steps'])->firstWhere('label', 'Inventory→GL Preflight');
         $valuation = collect($inventoryDaily['steps'])->firstWhere('label', 'Valuation / RECOST');
@@ -81,10 +81,10 @@ class WorkflowCatalogTest extends TestCase
     {
         $catalog = WorkflowCatalog::for('pos');
 
-        $this->assertSame(['setup', 'daily', 'daily', 'daily', 'daily'], array_column($catalog, 'mode'));
-        $this->assertSame('pos.customer-groups.index', $catalog[0]['steps'][0]['route']);
-        $this->assertSame('pos.sales-intakes.index', $catalog[1]['steps'][0]['route']);
-        $this->assertNotEmpty($catalog[1]['steps'][0]['recovery_hint']);
+        $this->assertSame(['setup', 'setup', 'daily', 'daily', 'daily', 'daily'], array_column($catalog, 'mode'));
+        $this->assertSame('pos.customer-groups.index', $catalog[1]['steps'][0]['route']);
+        $this->assertSame('pos.sales-intakes.index', $catalog[2]['steps'][0]['route']);
+        $this->assertNotEmpty($catalog[2]['steps'][0]['recovery_hint']);
     }
 
     public function test_pos_catalog_exposes_all_operational_workstreams_with_real_routes(): void
@@ -92,6 +92,7 @@ class WorkflowCatalogTest extends TestCase
         $catalog = collect(WorkflowCatalog::for('pos'));
 
         $this->assertSame([
+            'sales-posting-readiness',
             'sales-setup',
             'sales-documents',
             'sales-aftercare',
@@ -230,6 +231,38 @@ class WorkflowCatalogTest extends TestCase
                 }
             }
         }
+    }
+
+    public function test_asset_workflow_exposes_posting_readiness_per_live_event(): void
+    {
+        $workflow = collect(WorkflowCatalog::for('asset'))->firstWhere('code', 'asset-posting-readiness');
+
+        $this->assertNotNull($workflow);
+        $this->assertSame([
+            'asset.capitalization',
+            'asset.addition',
+            'asset.depreciation',
+            'asset.impairment',
+            'asset.disposal',
+            'asset.write_off',
+        ], collect($workflow['steps'])->pluck('event_code')->all());
+        $this->assertSame('setup', $workflow['mode']);
+        $this->assertSame('asset.capitalizations.index', $workflow['steps'][0]['route']);
+        $this->assertSame('asset.disposals.index', $workflow['steps'][5]['route']);
+    }
+
+    public function test_finance_pos_and_purchasing_workflows_expose_live_posting_defaults(): void
+    {
+        $finance = collect(WorkflowCatalog::for('finance'))->firstWhere('code', 'finance-posting-readiness');
+        $pos = collect(WorkflowCatalog::for('pos'))->firstWhere('code', 'sales-posting-readiness');
+        $purchasing = collect(WorkflowCatalog::for('wms'))->firstWhere('code', 'purchase-posting-readiness');
+
+        $this->assertSame(['customer_payment', 'customer_advance', 'supplier_payment'], collect($finance['steps'])->pluck('event_code')->all());
+        $this->assertSame(['sales_invoice'], collect($pos['steps'])->pluck('event_code')->all());
+        $this->assertSame(['supplier_invoice.inventory', 'supplier_invoice.expense'], collect($purchasing['steps'])->pluck('event_code')->all());
+        $this->assertSame('setup', $finance['mode']);
+        $this->assertSame('setup', $pos['mode']);
+        $this->assertSame('setup', $purchasing['mode']);
     }
 
     public function test_all_existing_catalog_steps_expose_runtime_permission_and_navigation_contract(): void

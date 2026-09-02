@@ -69,6 +69,21 @@ Route::middleware(['auth', 'program:asset', 'capability:asset', 'branch'])
         Route::post('/capitalizations/{capitalization}/post', [AssetCapitalizationController::class, 'post'])->middleware('permission:asset.capitalizations.post')->name('capitalizations.post');
         Route::post('/capitalizations/{capitalization}/reverse', [AssetCapitalizationController::class, 'reverse'])->middleware('permission:asset.capitalizations.reverse')->name('capitalizations.reverse');
 
+        Route::get('/additions', [AssetCapitalizationController::class, 'index'])->middleware('permission:asset.capitalizations.view')->name('additions.index');
+        Route::get('/additions/data', [AssetCapitalizationController::class, 'data'])->middleware('permission:asset.capitalizations.view')->name('additions.data');
+        Route::get('/additions/sources', [AssetCapitalizationController::class, 'sourceOptions'])->middleware('permission:asset.capitalizations.create')->name('additions.sources');
+        Route::get('/additions/assets', [AssetCapitalizationController::class, 'assetOptions'])->middleware('permission:asset.capitalizations.create')->name('additions.assets');
+        Route::get('/additions/accounts', [AssetCapitalizationController::class, 'accountOptions'])->middleware('permission:asset.capitalizations.create')->name('additions.accounts');
+        Route::get('/additions/create', [AssetCapitalizationController::class, 'create'])->middleware('permission:asset.capitalizations.create')->name('additions.create');
+        Route::post('/additions', [AssetCapitalizationController::class, 'store'])->middleware('permission:asset.capitalizations.create')->name('additions.store');
+        Route::get('/additions/{capitalization}', [AssetCapitalizationController::class, 'show'])->middleware('permission:asset.capitalizations.view')->name('additions.show');
+        Route::delete('/additions/{capitalization}', [AssetCapitalizationController::class, 'destroy'])->middleware('permission:asset.capitalizations.create')->name('additions.destroy');
+        Route::post('/additions/{capitalization}/submit', [AssetCapitalizationController::class, 'submit'])->middleware('permission:asset.capitalizations.submit')->name('additions.submit');
+        Route::post('/additions/{capitalization}/approve', [AssetCapitalizationController::class, 'approve'])->middleware('permission:asset.capitalizations.approve')->name('additions.approve');
+        Route::post('/additions/{capitalization}/void', [AssetCapitalizationController::class, 'void'])->middleware('permission:asset.capitalizations.approve')->name('additions.void');
+        Route::post('/additions/{capitalization}/post', [AssetCapitalizationController::class, 'post'])->middleware('permission:asset.capitalizations.post')->name('additions.post');
+        Route::post('/additions/{capitalization}/reverse', [AssetCapitalizationController::class, 'reverse'])->middleware('permission:asset.capitalizations.reverse')->name('additions.reverse');
+
         Route::get('/transfers', [AssetTransferController::class, 'index'])->middleware('permission:asset.transfers.view')->name('transfers.index');
         Route::get('/transfers/data', [AssetTransferController::class, 'data'])->middleware('permission:asset.transfers.view')->name('transfers.data');
         Route::get('/transfers/options', [AssetTransferController::class, 'options'])->middleware('permission:asset.transfers.create')->name('transfers.options');

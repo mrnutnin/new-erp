@@ -22,6 +22,9 @@
             @if ($asset->status === 'DRAFT' && auth()->user()->hasPermission('asset.capitalizations.create'))
                 <a class="btn btn-dark" href="{{ route('asset.capitalizations.create', ['source_type' => 'MANUAL_RECLASS', 'asset_id' => $asset->id]) }}"><i class="bx bx-book-add me-1" aria-hidden="true"></i>ตั้งทุนและลงบัญชี</a>
             @endif
+            @if ($asset->status === 'ACTIVE' && auth()->user()->hasPermission('asset.capitalizations.create'))
+                <a class="btn btn-dark" href="{{ route('asset.additions.create', ['source_type' => 'MANUAL_RECLASS', 'asset_id' => $asset->id]) }}"><i class="bx bx-plus-circle me-1" aria-hidden="true"></i>เพิ่มมูลค่า</a>
+            @endif
             <a class="btn btn-outline-secondary" href="{{ route('asset.assets.index') }}">กลับรายการ</a>
         </div>
     </div>

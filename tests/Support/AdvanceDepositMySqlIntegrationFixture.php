@@ -59,7 +59,7 @@ final class AdvanceDepositMySqlIntegrationFixture
         }
 
         $mapping = $partyType === 'CUSTOMER' ? 'CUSTOMER_ADVANCE' : 'SUPPLIER_ADVANCE';
-        if (AccountMapping::query()->where('key', $mapping)->where('is_active', true)->count() !== 1) {
+        if (AccountMapping::query()->whereNull('event_code')->where('key', $mapping)->where('is_active', true)->count() !== 1) {
             throw new RuntimeException("{$mapping} mapping must have exactly one active row.");
         }
 
@@ -78,7 +78,7 @@ final class AdvanceDepositMySqlIntegrationFixture
             throw new RuntimeException('No active warehouse-scoped bank account is available for the dedicated integration DB.');
         }
         $warehouse = $bank->warehouse;
-        $advanceAccountId = (int) AccountMapping::query()->where('key', $mapping)->where('is_active', true)->value('account_id');
+        $advanceAccountId = (int) AccountMapping::query()->whereNull('event_code')->where('key', $mapping)->where('is_active', true)->value('account_id');
 
         return compact('warehouse', 'bank', 'party', 'advanceAccountId');
     }

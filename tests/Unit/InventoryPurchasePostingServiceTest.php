@@ -57,6 +57,14 @@ class InventoryPurchasePostingServiceTest extends TestCase
         $this->assertSame([], $result['blockers']);
     }
 
+    public function test_preflight_reloads_a_partially_loaded_line_graph_before_validating(): void
+    {
+        $source = file_get_contents(base_path('app/Modules/Wms/Services/InventoryPurchasePostingService.php'));
+
+        $this->assertStringContainsString('$document->load([', $source);
+        $this->assertStringNotContainsString('$document->loadMissing([', $source);
+    }
+
     public function test_post_gate_rejects_any_closed_preflight(): void
     {
         $this->expectException(ValidationException::class);

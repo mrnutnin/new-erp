@@ -139,13 +139,18 @@ final class InventoryAdjustmentController extends Controller
         return response()->json(['status' => true, 'msg' => 'บันทึกร่าง Adjustment แล้ว', 'redirect' => route('wms.inventory-adjustments.documents.show', $document)]);
     }
 
-    public function showDocument(Request $request, InventoryAdjustmentDocument $document, GlobalSettings $settings): View
+    public function showDocument(Request $request, InventoryAdjustmentDocument $document, GlobalSettings $settings, InventoryAdjustmentPostingService $posting): View
     {
         $this->scopeDocument($request, $document);
         $document->load(['warehouse:id,code,name', 'lines.item:id,code,name', 'lines.uom:id,code,name', 'lines.movement', 'lines.allocation.journalEntry.lines.account:id,code,name', 'creator:id,name']);
         $history = AuditLog::query()->with('user:id,name')->where('subject_type', $document->getMorphClass())->where('subject_id', $document->id)->latest('created_at')->latest('id')->get();
 
-        return view('Wms::inventory-adjustments.documents.show', ['document' => $document, 'history' => $history, 'dateFormat' => (string) ($settings->value('date_format') ?: 'd/m/Y')]);
+        return view('Wms::inventory-adjustments.documents.show', [
+            'document' => $document,
+            'history' => $history,
+            'dateFormat' => (string) ($settings->value('date_format') ?: 'd/m/Y'),
+            'postReadiness' => $posting->documentPostReadiness($document->lines),
+        ]);
     }
 
     public function approveDocument(Request $request, InventoryAdjustmentDocument $document, AuditLogger $audit): JsonResponse

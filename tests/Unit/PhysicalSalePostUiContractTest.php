@@ -20,6 +20,8 @@ final class PhysicalSalePostUiContractTest extends TestCase
         self::assertStringContainsString('js-post-physical-sale', $view);
         self::assertStringContainsString("route('pos.physical-sales.post', \$sale)", $view);
         self::assertStringContainsString('physical-sale-post-modal', $view);
+        self::assertStringContainsString('ยอดก่อนภาษี', $view);
+        self::assertStringContainsString('ใช้ยอดก่อนภาษีได้สูงสุด', $view);
         self::assertStringContainsString('modal-dialog modal-xl', $view);
         self::assertStringContainsString('post-wht-code', $view);
         self::assertStringContainsString('withholding_tax_code_id', $view);
@@ -27,7 +29,7 @@ final class PhysicalSalePostUiContractTest extends TestCase
         self::assertStringContainsString("submit.data('submitting', 1).prop('disabled', true)", $view);
         self::assertStringContainsString(".always(() => submit.data('submitting', 0).prop('disabled', false))", $view);
         self::assertStringContainsString("\$sale->status === 'POSTED' && \$paymentOpenItem", $view);
-        self::assertStringContainsString("hasPermission('pos.physical-sales.receive-payment')", $view);
+        self::assertStringContainsString("hasPermission('pos.receipts.create')", $view);
         self::assertStringContainsString("route('pos.physical-sales.receive-payment.create', \$sale)", $view);
         self::assertStringContainsString("where('document_number', \$sale->document_number)", $controller);
         self::assertStringContainsString("remainingAt(\$candidate, today()->format('Y-m-d')) !== '0.00'", $controller);

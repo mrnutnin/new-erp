@@ -10,11 +10,11 @@ class AccountMapping extends Model
 {
     protected $table = 'accounting_account_mappings';
 
-    protected $fillable = ['key', 'account_id', 'is_active', 'created_by', 'updated_by'];
+    protected $fillable = ['key', 'event_code', 'account_id', 'is_active', 'version', 'created_by', 'updated_by'];
 
     protected function casts(): array
     {
-        return ['is_active' => 'boolean'];
+        return ['is_active' => 'boolean', 'version' => 'integer'];
     }
 
     public function account(): BelongsTo

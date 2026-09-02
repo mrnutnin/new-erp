@@ -73,8 +73,8 @@ class SalesOrderController extends Controller
         $this->scope($request, $salesQuotation);
         $order = DB::transaction(function () use ($request, $salesQuotation, $sequences, $audit) {
             $quotation = SalesQuotation::query()->with('lines')->lockForUpdate()->findOrFail($salesQuotation->id);
-            if (! in_array($quotation->status, ['SENT', 'ACCEPTED'], true)) {
-                throw ValidationException::withMessages(['quotation' => 'ใบเสนอราคาต้องส่งแล้วหรือตอบรับแล้วจึงสร้างใบสั่งขายได้']);
+            if ($quotation->status !== 'ACCEPTED') {
+                throw ValidationException::withMessages(['quotation' => 'ใบเสนอราคาต้องตอบรับแล้วจึงสร้างใบสั่งขายได้']);
             }
             $existing = SalesOrder::query()->where('sales_quotation_id', $quotation->id)->first();
             if ($existing) {
@@ -117,7 +117,7 @@ class SalesOrderController extends Controller
         return view('Pos::sales-orders.show', ['order' => $order, 'history' => $history, 'flowDocuments' => SalesDocumentTrail::for($order)]);
     }
 
-    public function fromIntake(Request $request, SalesIntake $salesIntake, DocumentSequenceService $sequences, AuditLogger $audit): JsonResponse
+    public function fromIntake(Request $request, SalesIntake $salesIntake, DocumentSequenceService $sequences, AuditLogger $audit): JsonResponse|RedirectResponse
     {
         abort_unless((int) $salesIntake->branch_id === (int) $request->attributes->get('selectedBranch')->id, 404);
         $order = DB::transaction(function () use ($request, $salesIntake, $sequences, $audit) {
@@ -157,7 +157,11 @@ class SalesOrderController extends Controller
             return $order;
         });
 
-        return response()->json(['status' => true, 'redirect' => route('pos.sales-orders.show', $order)]);
+        if ($request->expectsJson()) {
+            return response()->json(['status' => true, 'redirect' => route('pos.sales-orders.show', $order)]);
+        }
+
+        return redirect()->route('pos.sales-orders.show', $order)->with('success', 'สร้างใบสั่งขายจากใบรับข้อมูลแล้ว');
     }
 
     public function confirm(ChangeSalesOrderStatusRequest $request, SalesOrder $salesOrder, AuditLogger $audit): JsonResponse

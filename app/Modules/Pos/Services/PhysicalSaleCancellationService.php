@@ -141,6 +141,7 @@ final class PhysicalSaleCancellationService
     {
         $journal = $this->journals->postWithinTransaction(['source_type' => 'POS', 'source_id' => "sales-return:{$return->id}", 'source_reference' => $return->document_number,
             'event_code' => 'sales_credit_note', 'entry_date' => $date, 'document_date' => $date, 'description' => "ยกเลิก {$sale->document_number}",
+            'posting_metadata' => $this->originalRevenueMetadata($revenue),
             'lines' => $revenue->lines->map(fn (JournalEntryLine $line) => ['account_id' => $line->account_id, 'tax_code_id' => $line->tax_code_id,
                 'subledger_type' => $line->subledger_type, 'subledger_id' => $line->subledger_id, 'description' => $return->document_number,
                 'debit' => $line->credit, 'credit' => $line->debit, 'tax_base' => $line->tax_base, 'tax_amount' => $line->tax_amount,
@@ -153,6 +154,33 @@ final class PhysicalSaleCancellationService
             'amount' => $sale->total_amount, 'source_type' => 'POS', 'source_id' => "physical-sale-cancel:{$sale->id}"], $actor);
 
         return $journal;
+    }
+
+    private function originalRevenueMetadata(JournalEntry $revenue): array
+    {
+        $original = collect(data_get($revenue->posting_metadata, 'accounts', []))
+            ->filter(fn (array $account): bool => $revenue->lines->contains('account_id', (int) ($account['account_id'] ?? 0)))
+            ->map(function (array $account) use ($revenue): array {
+                $account['event_code'] = 'sales_credit_note';
+                $account['source'] = 'ORIGINAL';
+                $account['source_type'] = 'JOURNAL_ENTRY';
+                $account['source_id'] = (string) $revenue->id;
+                $account['mapping_id'] = null;
+                $account['mapping_version'] = null;
+
+                return $account;
+            })
+            ->unique('account_role')
+            ->values();
+        if ($original->isEmpty()) {
+            $original = $revenue->lines->pluck('account_id')->unique()->values()->map(fn (int $accountId): array => [
+                'event_code' => 'sales_credit_note', 'account_role' => 'ORIGINAL_ACCOUNT_'.$accountId, 'account_id' => $accountId,
+                'source' => 'ORIGINAL', 'source_type' => 'JOURNAL_ENTRY', 'source_id' => (string) $revenue->id,
+                'mapping_id' => null, 'mapping_version' => null,
+            ]);
+        }
+
+        return ['contract_version' => 1, 'event_code' => 'sales_credit_note', 'accounts' => $original->all()];
     }
 
     private function assertNoPostedReceipts(PhysicalSale $sale): void

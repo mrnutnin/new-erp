@@ -4,19 +4,24 @@ namespace App\Modules\Asset\Services;
 
 use App\Models\Branch;
 use App\Models\User;
+use App\Modules\Accounting\Models\Account;
 use App\Modules\Accounting\Models\FiscalPeriod;
 use App\Modules\Accounting\Services\JournalPostingService;
 use App\Modules\Asset\Models\Asset;
 use App\Modules\Asset\Models\AssetDepreciationRun;
 use App\Modules\Asset\Models\AssetDisposal;
 use App\Modules\Asset\Models\AssetValueEvent;
+use App\Modules\Asset\Support\AssetPostingAccountResolver;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\ValidationException;
 
 final class AssetDisposalService
 {
-    public function __construct(private readonly JournalPostingService $journals) {}
+    public function __construct(
+        private readonly JournalPostingService $journals,
+        private readonly ?AssetPostingAccountResolver $accounts = null,
+    ) {}
 
     public function createDraft(Branch $branch, array $attributes, User $actor): AssetDisposal
     {
@@ -91,7 +96,9 @@ final class AssetDisposalService
 
     public function post(AssetDisposal $disposal, User $actor): AssetDisposal
     {
-        return DB::transaction(function () use ($disposal, $actor): AssetDisposal {
+        $accounts = $this->accounts ?? app(AssetPostingAccountResolver::class);
+
+        return DB::transaction(function () use ($disposal, $actor, $accounts): AssetDisposal {
             $disposal = AssetDisposal::query()->with('lines.asset.category')->lockForUpdate()->findOrFail($disposal->id);
             if ($disposal->status === 'POSTED') {
                 return $disposal->fresh(['lines', 'journalEntry']);
@@ -103,26 +110,26 @@ final class AssetDisposalService
                 throw ValidationException::withMessages(['lines' => 'เอกสารต้องมีสินทรัพย์อย่างน้อยหนึ่งรายการ']);
             }
             $journalLines = [];
+            $provenance = [];
             foreach ($lines as $line) {
                 $asset = Asset::query()->with('category')->lockForUpdate()->findOrFail($line->asset_id);
                 // The current document itself is not a duplicate blocker.
                 $this->assertDisposable($asset, $disposal->id);
                 $category = $asset->category;
-                foreach (['asset_account_id', 'accumulated_depreciation_account_id', 'accumulated_impairment_account_id'] as $field) {
-                    if (! $category?->{$field}) {
-                        throw ValidationException::withMessages(['accounts' => 'หมวดสินทรัพย์ยังตั้งค่าบัญชีไม่ครบ']);
-                    }
+                if (! $category) {
+                    throw ValidationException::withMessages(['accounts' => 'ไม่พบหมวดสินทรัพย์สำหรับลงบัญชีจำหน่าย']);
                 }
-                if ($disposal->disposal_type === 'SALE' && (! $category->disposal_clearing_account_id || ! $category->disposal_gain_account_id || (($line->gain_loss < 0) && ! $category->disposal_loss_account_id))) {
-                    throw ValidationException::withMessages(['accounts' => 'หมวดสินทรัพย์ยังตั้งค่าบัญชีกำไร/ขาดทุนจากการจำหน่ายไม่ครบ']);
-                }
-                $journalLines = [...$journalLines, ...$this->lineJournal($line, $asset)];
+                [$lineAccounts, $lineProvenance] = $this->resolveLineAccounts($disposal, $line, $category, $accounts);
+                $journalLines = [...$journalLines, ...$this->lineJournal($line, $asset, $lineAccounts)];
+                $provenance = [...$provenance, ...$lineProvenance];
             }
             $journal = $this->journals->postForBranchWithinTransaction([
                 'source_type' => 'ASSET', 'source_id' => (string) $disposal->id, 'source_reference' => $disposal->document_number,
                 'event_code' => $disposal->disposal_type === 'WRITE_OFF' ? 'asset.write_off' : 'asset.disposal',
                 'entry_date' => $disposal->disposal_date->toDateString(), 'document_date' => $disposal->disposal_date->toDateString(),
-                'description' => 'จำหน่ายสินทรัพย์ '.$disposal->document_number, 'lines' => $journalLines,
+                'description' => 'จำหน่ายสินทรัพย์ '.$disposal->document_number,
+                'posting_metadata' => ['contract_version' => 1, 'event_code' => $disposal->disposal_type === 'WRITE_OFF' ? 'asset.write_off' : 'asset.disposal', 'accounts' => $provenance],
+                'lines' => $journalLines,
             ], $disposal->branch, null, $actor);
             foreach ($lines as $line) {
                 $asset = Asset::query()->lockForUpdate()->findOrFail($line->asset_id);
@@ -133,6 +140,31 @@ final class AssetDisposalService
 
             return $disposal->fresh(['lines', 'journalEntry']);
         }, 3);
+    }
+
+    public function postReadiness(AssetDisposal $disposal): array
+    {
+        try {
+            $this->assertStatus($disposal, 'APPROVED');
+            $this->assertFinalDepreciationReady($disposal, false);
+            $lines = $disposal->lines()->with('asset.category')->get();
+            $accounts = $this->accounts ?? app(AssetPostingAccountResolver::class);
+            foreach ($lines as $line) {
+                $asset = $line->asset;
+                if (! $asset) {
+                    throw ValidationException::withMessages(['lines' => 'ไม่พบสินทรัพย์สำหรับลงบัญชีจำหน่าย']);
+                }
+                $this->assertDisposable($asset, $disposal->id);
+                if (! $asset->category) {
+                    throw ValidationException::withMessages(['accounts' => 'ไม่พบหมวดสินทรัพย์สำหรับลงบัญชีจำหน่าย']);
+                }
+                $this->resolveLineAccounts($disposal, $line, $asset->category, $accounts, false);
+            }
+
+            return ['ready' => true, 'blockers' => []];
+        } catch (ValidationException $exception) {
+            return ['ready' => false, 'blockers' => collect($exception->errors())->flatten()->unique()->values()->all()];
+        }
     }
 
     public function reverse(AssetDisposal $original, string $date, string $reason, User $actor): AssetDisposal
@@ -164,35 +196,63 @@ final class AssetDisposalService
             $reversal->save();
             foreach ($original->lines as $line) {
                 $reversal->lines()->create($line->only(['asset_id', 'original_status', 'cost', 'accumulated_depreciation', 'accumulated_impairment', 'carrying_amount', 'proceeds', 'gain_loss']));
-                AssetValueEvent::query()->create(['asset_id' => $line->asset_id, 'branch_id' => $original->branch_id, 'event_date' => $date, 'event_type' => 'DISPOSAL_REVERSAL', 'cost_delta' => $line->cost, 'depreciation_delta' => $line->accumulated_depreciation, 'impairment_delta' => $line->accumulated_impairment, 'source_type' => 'ASSET_DISPOSAL', 'source_id' => $reversal->id, 'source_line_id' => $line->id, 'journal_entry_id' => $journal?->id, 'idempotency_key' => hash('sha256', 'ASSET_DISPOSAL_REVERSAL|'.$original->id.'|'.$line->id), 'created_by' => $actor->id]);
+                AssetValueEvent::query()->create(['asset_id' => $line->asset_id, 'branch_id' => $original->branch_id, 'event_date' => $date, 'event_type' => 'REVERSAL', 'cost_delta' => $line->cost, 'depreciation_delta' => $line->accumulated_depreciation, 'impairment_delta' => $line->accumulated_impairment, 'source_type' => 'ASSET_DISPOSAL', 'source_id' => $reversal->id, 'source_line_id' => $line->id, 'journal_entry_id' => $journal?->id, 'idempotency_key' => hash('sha256', 'ASSET_DISPOSAL_REVERSAL|'.$original->id.'|'.$line->id), 'created_by' => $actor->id]);
             }
 
             return $reversal->fresh('lines');
         }, 3);
     }
 
-    private function lineJournal($line, Asset $asset): array
+    /** @return array{0: array<string, array{account: Account, provenance: array<string, int|string|null>}>, 1: array<int, array<string, int|string|null>>} */
+    private function resolveLineAccounts(AssetDisposal $disposal, $line, $category, AssetPostingAccountResolver $resolver, bool $lockForUpdate = true): array
     {
-        $category = $asset->category;
+        $event = $disposal->disposal_type === 'WRITE_OFF' ? 'asset.write_off' : 'asset.disposal';
+        $fields = ['ASSET_COST' => 'asset_account_id'];
+        if ((float) $line->accumulated_depreciation > 0) {
+            $fields['ACCUMULATED_DEPRECIATION'] = 'accumulated_depreciation_account_id';
+        }
+        if ((float) $line->accumulated_impairment > 0) {
+            $fields['ACCUMULATED_IMPAIRMENT'] = 'accumulated_impairment_account_id';
+        }
+        if ((float) $line->carrying_amount > (float) $line->proceeds) {
+            $fields['DISPOSAL_LOSS'] = 'disposal_loss_account_id';
+        }
+        if ($disposal->disposal_type === 'SALE' && (float) $line->proceeds > 0) {
+            $fields['DISPOSAL_CLEARING'] = 'disposal_clearing_account_id';
+        }
+        if ($disposal->disposal_type === 'SALE' && (float) $line->proceeds > (float) $line->carrying_amount) {
+            $fields['DISPOSAL_GAIN'] = 'disposal_gain_account_id';
+        }
+
+        $resolved = [];
+        foreach ($fields as $role => $field) {
+            $resolved[$role] = $resolver->resolve($event, $role, $category->{$field}, 'ASSET_CATEGORY', (string) $category->id, 'MASTER', $lockForUpdate);
+        }
+
+        return [$resolved, array_values(array_map(fn (array $item) => $item['provenance'], $resolved))];
+    }
+
+    private function lineJournal($line, Asset $asset, array $accounts): array
+    {
         $rows = [];
-        foreach ([['id' => $category->accumulated_depreciation_account_id, 'amount' => $line->accumulated_depreciation, 'debit' => true, 'label' => 'ตัดค่าเสื่อมสะสม'], ['id' => $category->accumulated_impairment_account_id, 'amount' => $line->accumulated_impairment, 'debit' => true, 'label' => 'ตัดด้อยค่าสะสม']] as $item) {
+        foreach ([['role' => 'ACCUMULATED_DEPRECIATION', 'amount' => $line->accumulated_depreciation, 'label' => 'ตัดค่าเสื่อมสะสม'], ['role' => 'ACCUMULATED_IMPAIRMENT', 'amount' => $line->accumulated_impairment, 'label' => 'ตัดด้อยค่าสะสม']] as $item) {
             if ((float) $item['amount'] > 0) {
-                $rows[] = ['account_id' => $item['id'], 'debit' => $item['amount'], 'credit' => 0, 'subledger_type' => 'ASSET', 'subledger_id' => (string) $asset->id, 'description' => $item['label']];
+                $rows[] = ['account_id' => $accounts[$item['role']]['account']->id, 'debit' => $item['amount'], 'credit' => 0, 'subledger_type' => 'ASSET', 'subledger_id' => (string) $asset->id, 'description' => $item['label']];
             }
         }
         $proceeds = (float) $line->proceeds;
         if ($proceeds > 0) {
-            $rows[] = ['account_id' => $category->disposal_clearing_account_id, 'debit' => $proceeds, 'credit' => 0, 'description' => 'เงินรับจากการจำหน่าย'];
+            $rows[] = ['account_id' => $accounts['DISPOSAL_CLEARING']['account']->id, 'debit' => $proceeds, 'credit' => 0, 'description' => 'เงินรับจากการจำหน่าย'];
         }
         $loss = max(0, (float) $line->carrying_amount - $proceeds);
         $gain = max(0, $proceeds - (float) $line->carrying_amount);
         if ($loss > 0) {
-            $rows[] = ['account_id' => $category->disposal_loss_account_id, 'debit' => $loss, 'credit' => 0, 'description' => 'ขาดทุนจากการจำหน่าย'];
+            $rows[] = ['account_id' => $accounts['DISPOSAL_LOSS']['account']->id, 'debit' => $loss, 'credit' => 0, 'description' => 'ขาดทุนจากการจำหน่าย'];
         }
         if ($gain > 0) {
-            $rows[] = ['account_id' => $category->disposal_gain_account_id, 'debit' => 0, 'credit' => $gain, 'description' => 'กำไรจากการจำหน่าย'];
+            $rows[] = ['account_id' => $accounts['DISPOSAL_GAIN']['account']->id, 'debit' => 0, 'credit' => $gain, 'description' => 'กำไรจากการจำหน่าย'];
         }
-        $rows[] = ['account_id' => $category->asset_account_id, 'debit' => 0, 'credit' => $line->cost, 'subledger_type' => 'ASSET', 'subledger_id' => (string) $asset->id, 'description' => 'ตัดต้นทุนสินทรัพย์'];
+        $rows[] = ['account_id' => $accounts['ASSET_COST']['account']->id, 'debit' => 0, 'credit' => $line->cost, 'subledger_type' => 'ASSET', 'subledger_id' => (string) $asset->id, 'description' => 'ตัดต้นทุนสินทรัพย์'];
 
         return $rows;
     }
@@ -201,7 +261,13 @@ final class AssetDisposalService
     {
         if (! in_array($asset->status, ['ACTIVE', 'SUSPENDED', 'UNDER_REPAIR', 'HELD_FOR_DISPOSAL'], true)) {
             throw ValidationException::withMessages(['asset_ids' => "สินทรัพย์ {$asset->asset_number} ไม่อยู่ในสถานะที่จำหน่ายได้"]);
-        } if (AssetDisposal::query()->whereHas('lines', fn ($q) => $q->where('asset_id', $asset->id))->when($exceptDisposalId !== null, fn ($q) => $q->where('id', '<>', $exceptDisposalId))->whereIn('status', ['SUBMITTED', 'APPROVED', 'POSTED'])->exists()) {
+        } if (AssetDisposal::query()
+            ->whereNull('reversal_of_id')
+            ->whereHas('lines', fn ($q) => $q->where('asset_id', $asset->id))
+            ->when($exceptDisposalId !== null, fn ($q) => $q->where('id', '<>', $exceptDisposalId))
+            ->where(fn ($q) => $q->whereIn('status', ['SUBMITTED', 'APPROVED'])
+                ->orWhere(fn ($q) => $q->where('status', 'POSTED')->whereDoesntHave('reversal')))
+            ->exists()) {
             throw ValidationException::withMessages(['asset_ids' => "สินทรัพย์ {$asset->asset_number} มีเอกสารจำหน่ายค้างอยู่แล้ว"]);
         }
     }
@@ -232,20 +298,20 @@ final class AssetDisposalService
      * removing an asset using a stale carrying amount and also keeps posting in
      * an open fiscal period.
      */
-    private function assertFinalDepreciationReady(AssetDisposal $disposal): void
+    private function assertFinalDepreciationReady(AssetDisposal $disposal, bool $lockForUpdate = true): void
     {
         $date = $disposal->disposal_date?->toDateString();
         $period = FiscalPeriod::query()
             ->where('status', 'OPEN')
             ->whereDate('start_date', '<=', $date)
             ->whereDate('end_date', '>=', $date)
-            ->lockForUpdate()
+            ->when($lockForUpdate, fn ($query) => $query->lockForUpdate())
             ->first();
         if (! $period) {
             throw ValidationException::withMessages(['disposal_date' => 'วันที่จำหน่ายต้องอยู่ในงวดบัญชีที่เปิดอยู่']);
         }
 
-        $lines = $disposal->lines()->with('asset')->lockForUpdate()->get();
+        $lines = $disposal->lines()->with('asset')->when($lockForUpdate, fn ($query) => $query->lockForUpdate())->get();
         if ($lines->isEmpty()) {
             throw ValidationException::withMessages(['lines' => 'เอกสารต้องมีสินทรัพย์อย่างน้อยหนึ่งรายการ']);
         }

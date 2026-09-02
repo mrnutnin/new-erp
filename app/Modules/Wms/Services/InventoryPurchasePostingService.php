@@ -36,7 +36,12 @@ final class InventoryPurchasePostingService
                     || (! $line->item && ! $line->relationLoaded('account')),
             );
             if ($needsLineRelations) {
-                $document->loadMissing([
+                // `lines` can already be partially eager-loaded by the
+                // three-way-match preview.  `loadMissing()` then retains
+                // those partial nested relations, which makes a valid item
+                // look unavailable to the posting contract. Reload this
+                // small, bounded graph so validation is deterministic.
+                $document->load([
                     'lines.item.inventoryAccount',
                     'lines.item.baseUom.fromConversions',
                     'lines.account',

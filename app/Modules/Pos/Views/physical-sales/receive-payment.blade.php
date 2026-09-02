@@ -73,7 +73,7 @@
                 if (received + withholding + 0.00001 < allocation) {
                     event.preventDefault();
                     event.stopImmediatePropagation();
-                    Swal.fire({ icon: 'error', text: 'ยอดเงินรับรวมภาษีหัก ณ ที่จ่ายต้องไม่น้อยกว่ายอดบิล' });
+                    Swal.fire({ icon: 'error', text: 'ยอดเงินรับรวม WHT ต้องไม่น้อยกว่ายอดที่ต้องการตัดชำระ' });
                 }
             });
             sync();

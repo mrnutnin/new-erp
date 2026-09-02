@@ -1,98 +1,89 @@
-# Platform: Tab-scoped Program Context
+# Platform: Route-scoped Program Authorization
 
 ## เป้าหมาย
 
-รองรับผู้ใช้คนเดียวเปิดหลายโปรแกรมพร้อมกัน เช่น Accounting และ Asset คนละแท็บหรือหน้าต่าง โดยบริบทของแต่ละแท็บไม่เขียนทับกัน และยังคงตรวจสิทธิ์ โปรแกรม สาขา และคลังทุก request ตามเดิม
+ให้ผู้ใช้คนเดียวเปิดหลายโปรแกรมพร้อมกัน เช่น Accounting และ Asset คนละแท็บหรือหน้าต่างได้ โดยแต่ละ route ตรวจสิทธิ์จากโปรแกรมที่ route กำหนดไว้ ไม่พึ่ง `selected_program_id` ใน Session เพื่อระบุโปรแกรมของ request
+
+`branch_id` และ `warehouse_id` ยังคงเก็บและทำงานผ่าน Session ตามระบบเดิม ไม่มีการเปลี่ยนแปลงในงานนี้
 
 ## ปัญหาปัจจุบัน
 
-ระบบเก็บโปรแกรมที่กำลังใช้งานไว้ใน Session key เดียวคือ `selected_program_id` เมื่อผู้ใช้เลือกโปรแกรมใหม่จากอีกแท็บ ค่าใน Session จะถูกเขียนทับ ทำให้แท็บเดิมถูก middleware มองว่าอยู่ผิดโปรแกรมและ redirect ไปหน้าเลือกโปรแกรม
+ระบบใช้ Session key เดียวคือ `selected_program_id` เมื่อผู้ใช้เลือกโปรแกรมใหม่จากอีกแท็บ ค่าใน Session ถูกเขียนทับ ทำให้แท็บเดิมถูก middleware มองว่าอยู่ผิดโปรแกรมและ redirect ไปหน้าเลือกโปรแกรม
 
-สิทธิ์ของ System Admin ไม่ได้แก้ปัญหานี้ เพราะ permission ใช้ตอบว่า “เข้าได้หรือไม่” ขณะที่ selected program ใช้ตอบว่า “request นี้อยู่ในโปรแกรมใด”
+สิทธิ์ของ System Admin ไม่ได้แก้ปัญหานี้ เพราะ permission ตอบว่า “เข้าได้หรือไม่” แต่ `selected_program_id` ถูกใช้เป็นทั้งตัวเลือกโปรแกรมและตัวระบุบริบทของ request
 
 ## หลักการออกแบบ
 
-- ใช้ context token ที่ผูกกับแท็บ/หน้าต่าง แทนการพึ่ง `selected_program_id` ค่าเดียว
-- ทุก request ต้องตรวจ token กับ user, program และสถานะโปรแกรมที่เปิดใช้งาน
-- ห้ามให้ token ข้าม user หรือใช้เปิดโปรแกรมที่ไม่มีสิทธิ์
-- Branch และ Warehouse context ต้องอยู่ในขอบเขตเดียวกับ program context
-- การเปลี่ยนโปรแกรมในแท็บหนึ่งต้องไม่เปลี่ยนบริบทของแท็บอื่น
-- รองรับ backward compatibility สำหรับ session เดิมระหว่าง migration
-- Audit การเลือก/เปลี่ยนโปรแกรมต้องระบุ context token หรือ context id ที่ใช้
+- route ของแต่ละ module ระบุ required program อย่างชัดเจน เช่น `program:accounting` หรือ `program:asset`
+- middleware ตรวจ user, program assignment, `is_enabled` และ `ModuleCapability` ทุก request
+- ห้ามอนุญาตให้ user เข้า route ของโปรแกรมที่ไม่มีสิทธิ์ แม้เป็น System Admin หากโปรแกรมถูกปิดใช้งาน
+- ไม่ใช้ cookie, token, `program_contexts` หรือ query parameter ใหม่
+- `selected_program_id` อาจคงไว้เพื่อจำโปรแกรมล่าสุดและ navigation แต่ไม่ใช้เป็นหลักในการ authorize route
+- branch และ warehouse ใช้ Session เดิมต่อไป
+- ไม่เปลี่ยนระบบ permission/RBAC และไม่เปลี่ยน business flow ของ module ใด
 
 ## แนวทางที่เลือก
 
-เพิ่ม `program_contexts` เป็น server-side context registry และส่งค่า context id ผ่าน signed cookie หรือ query fallback ตามแท็บ โดยไม่เก็บสิทธิ์ไว้ใน client
+เพิ่มหรือปรับ middleware กลาง เช่น `EnsureProgramAccess` ให้รับ required program จาก route middleware:
 
-ข้อมูลขั้นต่ำ:
+```php
+Route::middleware(['auth', 'program:accounting'])->group(function () {
+    // Accounting routes
+});
+```
 
-- `id` หรือ opaque token
-- `user_id`
-- `program_id`
-- `branch_id` nullable
-- `warehouse_id` nullable
-- `last_seen_at`
-- `expires_at`
-- `revoked_at` nullable
+ลำดับการตรวจ:
 
-Middleware `EnsureProgramSelected` จะ resolve context ตามลำดับ:
+1. user ต้อง authenticated
+2. required program ต้องมีอยู่และเปิดใช้งาน
+3. user ต้องมี program assignment ที่ใช้งานได้
+4. `ModuleCapability` ต้องอนุญาตให้บริษัทเปิดโปรแกรมนี้
+5. หากไม่ผ่าน ให้ตอบ `403` หรือ redirect ไปหน้าเลือกโปรแกรมตามชนิด request
 
-1. context token ของ request ปัจจุบัน
-2. session เดิมเพื่อ backward compatibility
-3. redirect ไปหน้าเลือกโปรแกรมเมื่อไม่พบหรือหมดอายุ
-
-หน้าเลือกโปรแกรมจะสร้าง context ใหม่แทนการเขียนทับ `selected_program_id` โดยตรง และลิงก์เมนู/การ handoff ข้ามโปรแกรมต้องแนบ context ใหม่ของปลายทาง
+หน้า Select Program ยังเขียน `selected_program_id` ได้เพื่อใช้เป็นค่าเริ่มต้นของ navigation แต่การเปิด route ในแท็บอื่นจะไม่ถูกตัดสินจากค่านี้
 
 ## ขอบเขตงาน
 
-### Phase A — Foundation
+### Phase A — Authorization middleware
 
-- migration/model/repository สำหรับ `program_contexts`
-- service สำหรับ create, resolve, touch และ revoke context
-- signed context cookie พร้อมอายุและ rotation
-- ปรับ `EnsureProgramSelected`
-- เพิ่ม unit tests เรื่อง user isolation, expired/revoked context และ required program
+- สร้างหรือปรับ middleware ตรวจ required program จาก route parameter
+- ผูก middleware กับ route ของ Accounting, Asset, Finance, POS, Purchasing และ WMS/Inventory ตาม code จริง
+- คง `EnsureProgramSelected` สำหรับ flow เลือกโปรแกรม/entry route ที่จำเป็น โดยไม่ใช้เป็น authorization หลักของ module route
+- รักษาการตรวจ permission ราย action และ branch/warehouse Session เดิม
 
-### Phase B — Navigation และ handoff
+### Phase B — Navigation, handoff และ regression
 
-- ปรับหน้า Select Program ให้เปิด context ใหม่
-- ปรับ sidebar, program switcher และ cross-program handoff
-- คงปุ่ม “เปลี่ยนโปรแกรม” ให้เปลี่ยนเฉพาะแท็บปัจจุบัน
-- ปรับ Accounting ↔ Asset reconciliation handoff
-- เพิ่มข้อความแจ้งเมื่อ context หมดอายุ
-
-### Phase C — Branch/Warehouse และ hardening
-
-- ผูก branch/warehouse กับ context อย่างชัดเจน
-- ตรวจ branch isolation และ permission ทุก route
-- ป้องกัน token fixation, replay หลัง revoke และการเดา id
-- เพิ่ม cleanup job สำหรับ context ที่หมดอายุ
-- วัดจำนวน context ที่ active และอัตรา resolve failure
+- ปรับ Select Program, sidebar และ cross-program handoff ให้ทำงานกับ route-scoped authorization
+- handoff ยังส่ง query/filter เดิม เช่น period, account และ asset scope โดยไม่ต้องมี context token
+- เพิ่มข้อความ error ที่เหมาะสมเมื่อ user ไม่มีสิทธิ์หรือโปรแกรมถูกปิด
+- เพิ่ม unit/feature tests และ manual QA สำหรับหลายแท็บ
 
 ## สิ่งที่ไม่ทำในงานนี้
 
-- ไม่เปลี่ยนระบบ permission/RBAC
-- ไม่อนุญาตให้ข้ามสาขาหรือคลังที่ผู้ใช้ไม่มีสิทธิ์
-- ไม่เก็บ program permission หรือข้อมูลลับไว้ใน cookie
-- ไม่แก้ business flow ของ Asset, Accounting หรือ WMS นอกเหนือจาก context handoff
+- ไม่สร้างตาราง `program_contexts`
+- ไม่สร้าง context token, signed cookie หรือ query token
+- ไม่แยก branch/warehouse ตามแท็บ
+- ไม่เปลี่ยนวิธีเก็บ `selected_branch_id` และ `selected_warehouse_id`
+- ไม่เปลี่ยน permission/RBAC
+- ไม่แก้ business flow ของ Asset, Accounting, Finance, POS หรือ WMS นอกเหนือจาก middleware และ handoff
 
 ## Acceptance criteria
 
 - System Admin เปิด Accounting และ Asset คนละแท็บพร้อมกันได้ โดยแท็บหนึ่งไม่ redirect เพราะอีกแท็บเปลี่ยนโปรแกรม
-- ผู้ใช้ทั่วไปเปิดได้เฉพาะโปรแกรมที่มีสิทธิ์
-- Required program middleware ปฏิเสธ context ที่อยู่ผิดโปรแกรม
-- เปลี่ยนสาขา/คลังในแท็บหนึ่งไม่เปลี่ยนอีกแท็บ
-- context หมดอายุหรือถูก revoke แล้วต้องเข้าสู่หน้าเลือกโปรแกรมอย่างปลอดภัย
-- Cross-program handoff จาก Asset reconciliation ไป Accounting ทำงานโดยไม่สูญเสีย period/account/Asset scope
+- ผู้ใช้ทั่วไปเข้าได้เฉพาะ route ของโปรแกรมที่ตนมีสิทธิ์
+- required program middleware ปฏิเสธ route ที่ user ไม่มีสิทธิ์หรือโปรแกรมถูกปิดใช้งาน
+- permission ของ action และ branch/warehouse isolation ยังทำงานเหมือนเดิม
+- cross-program handoff จาก Asset reconciliation ไป Accounting ยังรักษา period/account/asset scope
+- refresh, back button, logout/login และ request แบบ JSON ได้ผลลัพธ์ที่ปลอดภัย
 - ผ่าน unit tests, feature tests และ manual QA หลายแท็บ/หลายหน้าต่าง
 
 ## แผนทดสอบ
 
-- Unit tests: context lifecycle, authorization และ expiry
-- Feature tests: concurrent tabs, required program, branch/warehouse isolation
-- Manual QA: Accounting + Asset, Asset + Purchasing, refresh/back button, logout/login ใหม่ และ context หมดอายุ
-- Security QA: ปลอม/แก้ cookie, replay token, เปลี่ยน user id และเปิด URL ข้ามโปรแกรม
+- Unit tests: middleware authorization, required program, disabled program และ capability denial
+- Feature tests: concurrent tabs, wrong-program route, permission denial และ JSON/HTML response
+- Regression: Select Program, Entry route, branch/warehouse selection และ Accounting ↔ Asset handoff
+- Manual QA: เปิด Accounting + Asset พร้อมกัน, เปลี่ยนโปรแกรม, เปลี่ยนสาขา/คลัง และ refresh แต่ละแท็บ
 
 ## สถานะ
 
-ยังไม่เริ่มพัฒนา เป็นงาน Platform แยกจาก Phase 7 ของ Asset และควรทำหลังมีข้อสรุปเรื่องการจัดการ context กลางของทุกโปรแกรม
+ยังไม่เริ่มพัฒนา เป็นงาน Platform แยกจาก Phase 7 ของ Asset โดยลดขอบเขตเหลือ route-scoped program authorization ตามมติล่าสุด และคง branch/warehouse ใน Session เดิม

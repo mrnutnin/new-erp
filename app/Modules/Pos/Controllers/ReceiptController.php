@@ -101,12 +101,12 @@ final class ReceiptController extends Controller
         return response()->json([...$payload, 'redirect' => route('pos.receipts.show', $settlement)]);
     }
 
-    public function show(Request $request, Settlement $receipt, GlobalSettings $settings): View
+    public function show(Request $request, Settlement $receipt, GlobalSettings $settings, SettlementPostingService $posting): View
     {
         $receipt = $this->receipt($request, $receipt)->load(['party', 'bankAccount', 'journalEntry', 'tenders.bankAccount', 'allocationIntents.openItem']);
         $history = AuditLog::query()->with('user')->where('subject_type', $receipt->getMorphClass())->where('subject_id', $receipt->id)->latest('created_at')->latest('id')->get();
 
-        return view('Pos::receipts.show', ['receipt' => $receipt, 'history' => $history, 'dateFormat' => (string) $settings->value('date_format')]);
+        return view('Pos::receipts.show', ['receipt' => $receipt, 'history' => $history, 'dateFormat' => (string) $settings->value('date_format'), 'postReadiness' => $posting->postReadiness($receipt)]);
     }
 
     public function approve(ChangeSettlementStatusRequest $request, Settlement $receipt, AuditLogger $audit): JsonResponse
