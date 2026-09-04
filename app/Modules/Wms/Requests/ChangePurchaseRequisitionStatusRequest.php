@@ -2,17 +2,5 @@
 
 namespace App\Modules\Wms\Requests;
 
-use Illuminate\Foundation\Http\FormRequest;
-
-class ChangePurchaseRequisitionStatusRequest extends FormRequest
-{
-    public function authorize(): bool
-    {
-        return true;
-    }
-
-    public function rules(): array
-    {
-        return ['reason' => ['nullable', 'string', 'max:500']];
-    }
-}
+/** @deprecated Use App\Modules\Purchasing\Requests\ChangePurchaseRequisitionStatusRequest. */
+class ChangePurchaseRequisitionStatusRequest extends \App\Modules\Purchasing\Requests\ChangePurchaseRequisitionStatusRequest {}

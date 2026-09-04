@@ -65,9 +65,14 @@ class User extends Authenticatable
         return $this->belongsTo(Branch::class, 'primary_branch_id');
     }
 
+    public function branches(): BelongsToMany
+    {
+        return $this->belongsToMany(Branch::class, 'user_branch');
+    }
+
     public function warehouses(): BelongsToMany
     {
-        return $this->belongsToMany(Warehouse::class);
+        return $this->belongsToMany(Warehouse::class, 'user_warehouse');
     }
 
     public function roles(): BelongsToMany
@@ -79,21 +84,10 @@ class User extends Authenticatable
     {
         $this->loadMissing('roles.permissions');
 
-        // Purchasing is being extracted from the historical WMS surface. Keep
-        // both permission namespaces equivalent during the staged cut-over so
-        // existing WMS users do not lose access while Purchasing can seed and
-        // use its own canonical codes.
-        $codes = [$permission];
-        if (str_starts_with($permission, 'purchasing.')) {
-            $codes[] = 'wms.'.substr($permission, strlen('purchasing.'));
-        } elseif (str_starts_with($permission, 'wms.')) {
-            $codes[] = 'purchasing.'.substr($permission, strlen('wms.'));
-        }
-
         return $this->roles
             ->where('is_active', true)
             ->contains(fn (Role $role) => $role->permissions->contains(
-                fn (Permission $rolePermission): bool => in_array($rolePermission->code, $codes, true)
+                fn (Permission $rolePermission): bool => $rolePermission->code === $permission
             ));
     }
 }

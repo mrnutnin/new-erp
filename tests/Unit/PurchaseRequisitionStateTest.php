@@ -2,7 +2,7 @@
 
 namespace Tests\Unit;
 
-use App\Modules\Wms\Support\PurchaseRequisitionState;
+use App\Modules\Purchasing\Support\PurchaseRequisitionState;
 use DomainException;
 use PHPUnit\Framework\TestCase;
 

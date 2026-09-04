@@ -36,8 +36,8 @@ class EntryController extends Controller
     private function canonicalEntryRoute(?string $programCode, string $entryRoute): string
     {
         return match ($programCode) {
-            'wms' => 'purchasing.index',
-            'inventory' => 'wms.index',
+            'purchasing' => 'purchasing.index',
+            'wms' => 'wms.index',
             default => $entryRoute,
         };
     }

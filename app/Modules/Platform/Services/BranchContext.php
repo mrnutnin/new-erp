@@ -22,7 +22,9 @@ class BranchContext
         }
 
         $branch = Branch::query()->whereKey($branchId)->where('is_active', true)
-            ->whereIn('id', $request->user()->warehouses()->where('warehouses.is_active', true)->select('warehouses.branch_id'))
+            ->when($request->user()->branches()->exists(),
+                fn ($query) => $query->whereIn('id', $request->user()->branches()->select('branches.id')),
+                fn ($query) => $query->whereIn('id', $request->user()->warehouses()->where('warehouses.is_active', true)->select('warehouses.branch_id')))
             ->first();
         if ($branch === null) {
             $request->session()->forget(['selected_branch_id', 'selected_warehouse_id']);

@@ -69,13 +69,13 @@ Route::middleware(['auth', 'program:accounting'])->group(function () {
 
 ## Acceptance criteria
 
-- System Admin เปิด Accounting และ Asset คนละแท็บพร้อมกันได้ โดยแท็บหนึ่งไม่ redirect เพราะอีกแท็บเปลี่ยนโปรแกรม
-- ผู้ใช้ทั่วไปเข้าได้เฉพาะ route ของโปรแกรมที่ตนมีสิทธิ์
-- required program middleware ปฏิเสธ route ที่ user ไม่มีสิทธิ์หรือโปรแกรมถูกปิดใช้งาน
-- permission ของ action และ branch/warehouse isolation ยังทำงานเหมือนเดิม
-- cross-program handoff จาก Asset reconciliation ไป Accounting ยังรักษา period/account/asset scope
-- refresh, back button, logout/login และ request แบบ JSON ได้ผลลัพธ์ที่ปลอดภัย
-- ผ่าน unit tests, feature tests และ manual QA หลายแท็บ/หลายหน้าต่าง
+- [x] System Admin เปิด Accounting และ Asset คนละแท็บพร้อมกันได้ โดยแท็บหนึ่งไม่ redirect เพราะอีกแท็บเปลี่ยนโปรแกรม (Manual QA ผ่านโดย Owner)
+- [x] ผู้ใช้ทั่วไปเข้าได้เฉพาะ route ของโปรแกรมที่ตนมีสิทธิ์
+- [x] required program middleware ปฏิเสธ route ที่ user ไม่มีสิทธิ์หรือโปรแกรมถูกปิดใช้งาน
+- [x] permission ของ action และ branch/warehouse isolation ยังทำงานเหมือนเดิม
+- [x] cross-program handoff จาก Asset reconciliation ไป Accounting ยังรักษา period/account/asset scope
+- [x] refresh, back button, logout/login และ request แบบ JSON ได้ผลลัพธ์ที่ปลอดภัย
+- [x] ผ่าน unit tests, feature tests และ manual QA หลายแท็บ/หลายหน้าต่าง
 
 ## แผนทดสอบ
 
@@ -86,4 +86,4 @@ Route::middleware(['auth', 'program:accounting'])->group(function () {
 
 ## สถานะ
 
-ยังไม่เริ่มพัฒนา เป็นงาน Platform แยกจาก Phase 7 ของ Asset โดยลดขอบเขตเหลือ route-scoped program authorization ตามมติล่าสุด และคง branch/warehouse ใน Session เดิม
+ปิด Phase B แล้ว เป็นงาน Platform แยกจาก Phase 7 ของ Asset โดยใช้ route-scoped program authorization ตามมติล่าสุด และคง branch/warehouse ใน Session เดิม

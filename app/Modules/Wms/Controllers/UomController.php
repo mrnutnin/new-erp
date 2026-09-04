@@ -23,9 +23,10 @@ class UomController extends Controller
         return view('Wms::uoms.index');
     }
 
-    public function data(): JsonResponse
+    public function data(Request $request): JsonResponse
     {
-        return DataTables::eloquent(Uom::query())->addColumn('status_label', fn ($r) => $r->is_active ? 'ใช้งาน' : 'ปิดใช้งาน')->addColumn('edit_url', fn ($r) => auth()->user()->hasPermission('wms.uoms.update') ? route('wms.uoms.edit', $r) : null)->toJson();
+        $query = Uom::query()->when($request->input('is_active') !== null && $request->input('is_active') !== '', fn ($q) => $q->where('is_active', $request->boolean('is_active')));
+        return DataTables::eloquent($query)->addColumn('status_label', fn ($r) => $r->is_active ? 'ใช้งาน' : 'ปิดใช้งาน')->addColumn('edit_url', fn ($r) => auth()->user()->hasPermission('wms.uoms.update') ? route('wms.uoms.edit', $r) : null)->toJson();
     }
 
     public function options(Request $request): JsonResponse

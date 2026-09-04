@@ -5,7 +5,7 @@ namespace App\Modules\Wms\Services;
 use App\Models\User;
 use App\Models\Warehouse;
 use App\Modules\Accounting\Models\Account;
-use App\Modules\Wms\Models\PurchaseDocument;
+use App\Modules\Purchasing\Models\PurchaseDocument;
 use App\Modules\Wms\Support\InventoryPurchasePostingContract;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;

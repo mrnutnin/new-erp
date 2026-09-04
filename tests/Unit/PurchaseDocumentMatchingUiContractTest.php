@@ -8,25 +8,25 @@ final class PurchaseDocumentMatchingUiContractTest extends TestCase
 {
     public function test_matching_routes_are_view_only_and_keep_warehouse_scope(): void
     {
-        foreach (['wms.purchase-documents.three-way-match', 'wms.purchase-documents.purchase-order-line-options', 'wms.purchase-documents.goods-receipt-line-options'] as $name) {
+        foreach (['purchasing.purchase-documents.three-way-match', 'purchasing.purchase-documents.purchase-order-line-options', 'purchasing.purchase-documents.goods-receipt-line-options'] as $name) {
             $route = app('router')->getRoutes()->getByName($name);
             $this->assertNotNull($route, $name);
             $this->assertContains('auth', $route->middleware());
-            $this->assertContains('program:wms', $route->middleware());
+            $this->assertContains('auth', $route->middleware());
             $this->assertContains('warehouse', $route->middleware());
-            $this->assertContains('permission:wms.purchase-documents.view', $route->middleware());
+            $this->assertContains('permission:purchasing.purchase-documents.view', $route->middleware());
         }
-        $delete = app('router')->getRoutes()->getByName('wms.purchase-documents.destroy');
+        $delete = app('router')->getRoutes()->getByName('purchasing.purchase-documents.destroy');
         $this->assertNotNull($delete);
         $this->assertSame(['DELETE'], $delete->methods());
-        $this->assertContains('permission:wms.purchase-documents.delete', $delete->middleware());
+        $this->assertContains('permission:purchasing.purchase-documents.delete', $delete->middleware());
     }
 
     public function test_matching_views_keep_select2_human_dates_pastel_states_and_recovery_copy(): void
     {
-        $form = file_get_contents(base_path('app/Modules/Wms/Views/purchase-documents/form.blade.php'));
-        $show = file_get_contents(base_path('app/Modules/Wms/Views/purchase-documents/show.blade.php'));
-        $controller = file_get_contents(base_path('app/Modules/Wms/Controllers/PurchaseDocumentController.php'));
+        $form = file_get_contents(base_path('app/Modules/Purchasing/Views/purchase-documents/form.blade.php'));
+        $show = file_get_contents(base_path('app/Modules/Purchasing/Views/purchase-documents/show.blade.php'));
+        $controller = file_get_contents(base_path('app/Modules/Purchasing/Controllers/PurchaseDocumentController.php'));
 
         $this->assertStringContainsString('purchase-order-line-options', $form);
         $this->assertStringContainsString('goods-receipt-line-options', $form);

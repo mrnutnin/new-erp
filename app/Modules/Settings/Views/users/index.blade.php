@@ -8,7 +8,7 @@
             <div>
                 <p class="eyebrow mb-2">SETTINGS</p>
                 <h1 class="h3 mb-2">ผู้ใช้งานและสิทธิ์เข้าถึง</h1>
-                <p class="text-secondary mb-0">จัดการสถานะ โปรแกรม และคลังที่ผู้ใช้เข้าถึงได้</p>
+                <p class="text-secondary mb-0">จัดการสถานะ โปรแกรม สาขา และคลังที่ผู้ใช้เข้าถึงได้</p>
             </div>
             @if (auth()->user()->hasPermission('settings.users.create'))
                 <a class="btn btn-dark" href="{{ route('settings.users.create') }}">
@@ -34,6 +34,7 @@
                                     <tr>
                                         <th>ผู้ใช้งาน</th>
                                         <th>สาขาหลัก</th>
+                                        <th>สาขา</th>
                                         <th>โปรแกรม</th>
                                         <th>คลัง</th>
                                         <th>สถานะ</th>
@@ -88,6 +89,7 @@
                         return value ? text.display(value.code + ' — ' + value.name) : '<span class="text-secondary">—</span>';
                     }
                 },
+                { data: 'branches_count', name: 'branches_count', searchable: false },
                 { data: 'programs_count', name: 'programs_count', searchable: false },
                 { data: 'warehouses_count', name: 'warehouses_count', searchable: false },
                 {

@@ -126,7 +126,7 @@ Manual UI checklist ล่าสุดสำหรับ Purchase Document → I
 
 - Checklist และ QA evidence ถูกทวนกับ flow หลัก `Purchase Document → Inventory Post`; Purchase Receipt ยังคงเป็น Draft foundation และไม่เปิด posting flow แยก
 - Migration status ของ local `new_erp` ไม่มีรายการ Pending; migrations `313` (Transfer) และ `314` (cost-layer lineage) อยู่สถานะ `Ran` พร้อม index/foreign-key contract ที่ตรวจแล้ว
-- Feature gate `erp.inventory.purchase_posting_enabled` ใน config default เป็น `false`; local `.env` ปัจจุบันตั้ง `ERP_INVENTORY_PURCHASE_POSTING_ENABLED=true` เพื่อ smoke เดิม จึงต้องปิดกลับเป็น `false` ก่อน release/ก่อน user sign-off หากยังไม่อนุมัติ. Route และปุ่ม Inventory Post ต้องผ่าน feature gate + permission `wms.purchase-documents.inventory-post` และ warehouse context
+- Feature gate `erp.inventory.purchase_posting_enabled` ใน config default เป็น `false`; local `.env` ปัจจุบันตั้ง `ERP_INVENTORY_PURCHASE_POSTING_ENABLED=true` เพื่อ smoke เดิม จึงต้องปิดกลับเป็น `false` ก่อน release/ก่อน user sign-off หากยังไม่อนุมัติ. Route และปุ่ม Inventory Post ต้องผ่าน feature gate + permission `purchasing.purchase-documents.inventory-post` และ warehouse context
 - Regression evidence ล่าสุดผ่าน: Purchase/Inventory/GL/adapter/source/permission/feature gate/warehouse/period/retry/rollback **50 tests / 140 assertions** และ Transfer transaction suite **6 tests / 24 assertions**
 - Operational blocker ที่ยังต้องให้ User ตัดสินใจ: local mock ถูก Reverse และ allocation เดิมเป็น `PENDING`; ห้ามใช้เป็นหลักฐานเปิด feature เพิ่ม และยังต้องคง gate ปิด
 - สถานะ: **LOCAL_READY_FOR_CONTINUED_DEVELOPMENT**; Manual UI/User sign-off ของ Inventory → GL ผ่านแล้ว แต่ยังไม่ใช่ production-ready และยังไม่ทำ production operational sign-off จนกว่า module ในขอบเขต MVP จะพร้อมครบ
@@ -182,7 +182,7 @@ Manual UI checklist ล่าสุดสำหรับ Purchase Document → I
 - Local recheck after idempotent `InventoryGlMockupSeeder`: Item mock count `1`, Purchase mock remains `POSTED` with Journal `11` and `REVERSED` reversal; Movement count `2`, Cost Allocation count `2`, and immutable Journal-line linkage count `2` (no duplicate transaction rows created).
 - Read-only reconciliation at `HQ-WH`, as-of `2026-08-22`: allocation↔GL difference `0.00`, stock-balance↔allocation difference `0.00`, unlinked allocations `0`, release gate `ตรงกัน`.
 - Release-gate Unit tests: `27 tests / 70 assertions` passed, covering preflight blockers, feature-off safety, atomic rollback, retry identity, reversal contract and reconciliation gate.
-- Route middleware recheck confirms separate permissions for `wms.purchase-documents.approve`, `wms.purchase-documents.post`, `wms.purchase-documents.inventory-post` and `wms.purchase-documents.inventory-reverse`.
+- Route middleware recheck confirms separate permissions for `purchasing.purchase-documents.approve`, `purchasing.purchase-documents.post`, `purchasing.purchase-documents.inventory-post` and `purchasing.purchase-documents.inventory-reverse`.
 - Manual UI owner sign-off (local MVP) passed: duplicate Post is guarded, permission/warehouse isolation is visible and enforced, failed transactions show recovery guidance, and the user is directed to fix the source/preflight blocker before retrying.
 - Local release status is `APPROVED`; production remains a separate deployment gate requiring the same migration, seed, smoke, reconciliation and UI evidence on the target environment.
 
@@ -197,7 +197,7 @@ Manual UI checklist ล่าสุดสำหรับ Purchase Document → I
 1. ตรวจ `ERP_INVENTORY_PURCHASE_POSTING_ENABLED=false` ระหว่าง migration/schema check และตรวจ migration `310000`, `313000`, `314000` เป็น `Ran` ครบ
 2. ตรวจ Item เป็น `is_stock_item`, Inventory Account active/postable/control `INVENTORY`, mapping `PURCHASE_AP` active/postable/control `AP`, Journal Book `PURCHASE` active และ Fiscal Period ของวัน Post เป็น `OPEN`
 3. รัน smoke ใน transaction-only environment: Purchase Document `APPROVED` + `NONE_VAT` → Journal `Dr Inventory / Cr AP` → Movement/Layer/Allocation/Linkage → reconciliation; ต้อง rollback fixture และตรวจ counts เดิม
-4. ตรวจ permission `wms.purchase-documents.inventory-post` และ warehouse scope ด้วยผู้ใช้จริงก่อนเปิด flag
+4. ตรวจ permission `purchasing.purchase-documents.inventory-post` และ warehouse scope ด้วยผู้ใช้จริงก่อนเปิด flag
 5. เปิด flag เฉพาะ environment ที่ owner อนุมัติ และบันทึกเวลา/ผู้เปิด/ผล reconciliation; production ยังต้องมี operational sign-off แยก
 
 **การใช้งานประจำวัน**

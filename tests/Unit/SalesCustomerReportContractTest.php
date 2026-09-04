@@ -15,7 +15,7 @@ class SalesCustomerReportContractTest extends TestCase
         $this->assertStringContainsString("DB::table('pos_physical_sales as sales')", $controller);
         $this->assertStringContainsString("DB::table('pos_sales_returns as returns')", $controller);
         $this->assertStringContainsString("where('invoice_sales.document_type', 'IV')", $controller);
-        $this->assertStringContainsString("where('open_items.warehouse_id', \$request->attributes->get('selectedWarehouse')->id)", $controller);
+        $this->assertStringContainsString("where('invoice_sales.branch_id', \$request->attributes->get('selectedBranch')->id)", $controller);
         $this->assertStringContainsString('finance_advance_deposit_applications', $controller);
         $this->assertStringContainsString('SUM(hs_amount + iv_amount - return_amount) AS net_sales', $controller);
         $this->assertStringContainsString('คงเหลือ ณ วันนี้', $view);

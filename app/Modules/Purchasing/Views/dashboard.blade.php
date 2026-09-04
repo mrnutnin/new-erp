@@ -3,17 +3,24 @@
 @section('title', 'Purchasing Dashboard | New ERP')
 
 @section('content')
-    <div class="container-fluid px-3 px-lg-4 py-4">
-        <p class="eyebrow mb-2">PURCHASING</p>
-        <h1 class="h3 mb-2">Purchasing Dashboard</h1>
-        <p class="text-secondary mb-0">ศูนย์กลางข้อมูล Supplier และกระบวนการจัดซื้อ</p>
-
-        <section class="card border-0 shadow-sm mt-4" aria-labelledby="purchasing-start-title">
-            <div class="card-body p-4">
-                <p class="eyebrow mb-1">START HERE</p>
-                <h2 id="purchasing-start-title" class="h5 mb-2">เริ่มงานจัดซื้อ</h2>
-                <p class="text-secondary mb-0">ตรวจสอบใบขอซื้อที่รอดำเนินการ แล้วสร้างใบสั่งซื้อหรือเอกสารจัดซื้อถัดไปตามขั้นตอน</p>
-            </div>
-        </section>
-    </div>
+<div class="container-fluid px-3 px-lg-4 py-4" id="purchasing-dashboard" data-url="{{ route('purchasing.dashboard.data', ['section' => '__section__']) }}">
+    <div class="d-flex flex-wrap justify-content-between align-items-end gap-3 mb-4"><div><p class="eyebrow mb-2">PURCHASING</p><h1 class="h3 mb-1">Purchasing Dashboard</h1><p class="text-secondary mb-0">ภาพรวมงานจัดซื้อของคลัง {{ $warehouse?->name ?? 'ปัจจุบัน' }}</p></div><div class="d-flex gap-2"><a class="btn btn-app-soft" href="{{ route('purchasing.purchase-orders.create') }}"><i class="bx bx-plus me-1" aria-hidden="true"></i>สร้างใบสั่งซื้อ</a><a class="btn btn-outline-secondary" href="{{ route('purchasing.reports.index') }}">รายงานจัดซื้อ</a></div></div>
+    <section class="row g-3 mb-4" aria-label="Purchasing summary">@foreach ([['po_count','ใบสั่งซื้อเดือนนี้'],['approved_po_amount','ยอด PO อนุมัติ'],['receipt_count','ใบรับของเดือนนี้'],['document_count','เอกสารซื้อเดือนนี้']] as [$key,$label])<div class="col-6 col-xl-3"><div class="card border-0 shadow-sm h-100"><div class="card-body"><div class="small text-secondary">{{ $label }}</div><div class="fs-3 fw-semibold mt-1" data-summary="{{ $key }}">—</div></div></div></div>@endforeach</section>
+    <section class="row g-4 mb-4" aria-label="Purchasing trend and work queue"><div class="col-xl-8"><div class="card border-0 shadow-sm h-100"><div class="card-body p-3 p-lg-4"><h2 class="h5 mb-1">แนวโน้มยอดใบสั่งซื้อ</h2><p class="small text-secondary mb-3">ยอดรวม PO ย้อนหลัง 6 เดือนของคลังนี้</p><div style="height:260px"><canvas id="purchasing-trend-chart" aria-label="กราฟแนวโน้มยอดใบสั่งซื้อ" role="img"></canvas></div></div></div></div><div class="col-xl-4"><div class="card border-0 shadow-sm h-100"><div class="card-body p-3 p-lg-4"><h2 class="h5 mb-3">งานที่ต้องติดตาม</h2><div class="vstack gap-3" id="purchasing-work"><div class="text-secondary small">กำลังโหลด…</div></div></div></div></div></section>
+    <section class="card border-0 shadow-sm" aria-labelledby="purchasing-recent-title"><div class="card-body p-3 p-lg-4"><div class="d-flex justify-content-between align-items-center mb-3"><div><h2 id="purchasing-recent-title" class="h5 mb-1">ใบสั่งซื้อล่าสุด</h2><p class="small text-secondary mb-0">แสดงไม่เกิน 8 รายการ</p></div><a class="btn btn-sm btn-outline-secondary" href="{{ route('purchasing.purchase-orders.index') }}">ดูทั้งหมด</a></div><div class="table-responsive"><table class="table align-middle mb-0"><thead><tr><th>เลขที่</th><th>Supplier</th><th>วันที่</th><th>สถานะ</th><th class="text-end">ยอดรวม</th></tr></thead><tbody id="purchasing-recent"><tr><td colspan="5" class="text-center text-secondary">กำลังโหลด…</td></tr></tbody></table></div></div></section>
+</div>
 @endsection
+
+@push('scripts')
+<script>
+$(function () {
+    var root = $('#purchasing-dashboard'), url = function (s) { return root.data('url').replace('__section__', s); }, money = function (v) { return Number(v || 0).toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }, count = function (v) { return Number(v || 0).toLocaleString('th-TH'); };
+    function load(section, done) { $.getJSON(url(section)).done(done).fail(function () { root.find('[data-'+section+']').text('โหลดไม่สำเร็จ'); }); }
+    load('summary', function (d) { $.each(d, function (k, v) { root.find('[data-summary="'+k+'"]').text(k === 'approved_po_amount' ? money(v) : count(v)); }); });
+    load('work', function (d) { var labels = { draft_requisitions: ['PR ร่าง', '{{ route('purchasing.purchase-requisitions.index') }}?status=DRAFT'], approved_requisitions: ['PR อนุมัติรอสร้าง PO', '{{ route('purchasing.purchase-requisitions.index') }}?status=APPROVED'], draft_orders: ['PO ร่าง', '{{ route('purchasing.purchase-orders.index') }}?status=DRAFT'], approved_receipts: ['GR อนุมัติรอ Post Stock', '{{ route('purchasing.purchase-receipts.index') }}?status=APPROVED'], draft_documents: ['เอกสารซื้อร่าง', '{{ route('purchasing.purchase-documents.index') }}?status=DRAFT'], pending_returns: ['Purchase Return รอดำเนินการ', '{{ route('purchasing.reports.index') }}'], draft_landed_costs: ['Landed Cost รอดำเนินการ', '{{ route('purchasing.landed-costs.index') }}?status=DRAFT'] }; var box = $('#purchasing-work').empty(); $.each(labels, function (k, item) { var row = $('<a>', { href: item[1], class: 'd-flex justify-content-between align-items-center text-reset text-decoration-none border-bottom pb-2' }); row.append($('<span>', { text: item[0] })); row.append($('<span>', { class: 'badge app-badge-soft fs-6', text: count(d[k]) })); box.append(row); }); });
+    load('trend', function (d) { if (!window.Chart) { var script = document.createElement('script'); script.src = 'https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js'; script.onload = function () { draw(d); }; document.head.appendChild(script); } else draw(d); });
+    function draw(d) { new Chart(document.getElementById('purchasing-trend-chart'), { type: 'bar', data: { labels: d.labels, datasets: [{ label: 'ยอด PO', data: d.values, backgroundColor: '#1d70f7', borderRadius: 6 }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }, tooltip: { callbacks: { label: function (c) { return money(c.raw); } } } }, scales: { y: { beginAtZero: true, ticks: { callback: money } } } } }); }
+    load('recent', function (items) { var body = $('#purchasing-recent').empty(); if (!items.length) { body.append($('<tr>').append($('<td>', { colspan: 5, class: 'text-center text-secondary', text: 'ยังไม่มีใบสั่งซื้อ' }))); return; } $.each(items, function (_, item) { var row = $('<tr>'); row.append($('<td>').append($('<a>', { href: item.url, text: item.document_number }))); row.append($('<td>', { text: item.supplier })); row.append($('<td>', { text: item.document_date })); row.append($('<td>').append($('<span>', { class: 'badge app-status-neutral', text: item.status }))); row.append($('<td>', { class: 'text-end', text: money(item.total_amount) })); body.append(row); }); });
+});
+</script>
+@endpush

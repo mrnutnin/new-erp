@@ -24,9 +24,16 @@ class ItemController extends Controller
         return view('Wms::items.index');
     }
 
-    public function data(): JsonResponse
+    public function data(Request $request): JsonResponse
     {
-        return DataTables::eloquent(Item::query()->with(['category', 'baseUom', 'defaultAssetCategory']))->addColumn('category_label', fn ($r) => $r->category?->code.' · '.$r->category?->name)->addColumn('base_uom_label', fn ($r) => $r->baseUom?->code.' · '.$r->baseUom?->name ?: $r->base_uom)->addColumn('asset_capitalization_label', fn ($r) => $r->is_asset_capitalizable ? 'ได้ · '.($r->defaultAssetCategory?->name ?? '-') : 'ไม่ได้')->addColumn('status_label', fn ($r) => $r->is_active ? 'ใช้งาน' : 'ปิดใช้งาน')->addColumn('edit_url', fn ($r) => auth()->user()->hasPermission('wms.items.update') ? route('wms.items.edit', $r) : null)->toJson();
+        $query = Item::query()->with(['category', 'baseUom', 'defaultAssetCategory'])
+            ->when($request->filled('item_type'), fn ($q) => $q->where('item_type', $request->input('item_type')))
+            ->when($request->filled('category_id'), fn ($q) => $q->where('category_id', $request->integer('category_id')))
+            ->when($request->filled('base_uom_id'), fn ($q) => $q->where('base_uom_id', $request->integer('base_uom_id')))
+            ->when($request->input('asset_capitalizable') !== null && $request->input('asset_capitalizable') !== '', fn ($q) => $q->where('is_asset_capitalizable', $request->boolean('asset_capitalizable')))
+            ->when($request->input('is_active') !== null && $request->input('is_active') !== '', fn ($q) => $q->where('is_active', $request->boolean('is_active')));
+
+        return DataTables::eloquent($query)->addColumn('category_label', fn ($r) => $r->category?->code.' · '.$r->category?->name)->addColumn('base_uom_label', fn ($r) => $r->baseUom?->code.' · '.$r->baseUom?->name ?: $r->base_uom)->addColumn('asset_capitalization_label', fn ($r) => $r->is_asset_capitalizable ? 'ได้ · '.($r->defaultAssetCategory?->name ?? '-') : 'ไม่ได้')->addColumn('status_label', fn ($r) => $r->is_active ? 'ใช้งาน' : 'ปิดใช้งาน')->addColumn('edit_url', fn ($r) => auth()->user()->hasPermission('wms.items.update') ? route('wms.items.edit', $r) : null)->toJson();
     }
 
     public function categoryOptions(Request $request): JsonResponse

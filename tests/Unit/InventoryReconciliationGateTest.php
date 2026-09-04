@@ -47,4 +47,16 @@ class InventoryReconciliationGateTest extends TestCase
         $this->assertFalse($result['ready']);
         $this->assertSame(['no_unresolved_legacy_review'], $result['blockers']);
     }
+
+    public function test_rounding_difference_is_explicitly_blocked(): void
+    {
+        $result = InventoryReconciliationGate::evaluate([
+            'allocation_vs_gl_difference' => '0',
+            'balance_vs_allocation_difference' => '0',
+            'rounding_difference' => '0.01',
+        ]);
+
+        $this->assertFalse($result['ready']);
+        $this->assertContains('rounding_difference_zero', $result['blockers']);
+    }
 }

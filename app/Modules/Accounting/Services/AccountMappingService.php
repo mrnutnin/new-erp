@@ -31,6 +31,8 @@ final class AccountMappingService
         'INVENTORY_ADJUSTMENT_LOSS' => 'ขาดทุนจากปรับปรุงสินค้าคงเหลือ',
         'INVENTORY_RECOST_GAIN' => 'กำไรจากปรับต้นทุนสินค้า',
         'INVENTORY_RECOST_LOSS' => 'ขาดทุนจากปรับต้นทุนสินค้า',
+        'INVENTORY_ROUNDING_GAIN' => 'กำไรจากการปัดเศษต้นทุน',
+        'INVENTORY_ROUNDING_LOSS' => 'ขาดทุนจากการปัดเศษต้นทุน',
     ];
 
     private const LEGACY_ROLES = [
@@ -53,6 +55,8 @@ final class AccountMappingService
         'INVENTORY_ADJUSTMENT_LOSS' => 'ADJUSTMENT_LOSS',
         'INVENTORY_RECOST_GAIN' => 'RECOST_GAIN',
         'INVENTORY_RECOST_LOSS' => 'RECOST_LOSS',
+        'INVENTORY_ROUNDING_GAIN' => 'ROUNDING_GAIN',
+        'INVENTORY_ROUNDING_LOSS' => 'ROUNDING_LOSS',
     ];
 
     public function keys(): array

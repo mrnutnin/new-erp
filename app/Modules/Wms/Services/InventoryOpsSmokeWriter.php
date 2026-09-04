@@ -4,10 +4,11 @@ namespace App\Modules\Wms\Services;
 
 use App\Models\AuditLog;
 use App\Models\User;
+use App\Modules\Purchasing\Services\ProcurementSourceBuilder;
 use App\Models\Warehouse;
 use App\Modules\Accounting\Models\JournalEntry;
 use App\Modules\Wms\Models\CostAllocation;
-use App\Modules\Wms\Models\PurchaseDocument;
+use App\Modules\Purchasing\Models\PurchaseDocument;
 use App\Modules\Wms\Models\StockMovement;
 use Closure;
 use Illuminate\Support\Facades\DB;

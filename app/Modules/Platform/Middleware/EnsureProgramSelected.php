@@ -20,8 +20,14 @@ class EnsureProgramSelected
     public function handle(Request $request, Closure $next, ?string $requiredProgram = null): Response
     {
         $program = $request->user()->programs()
-            ->whereKey($request->session()->get('selected_program_id'))
             ->where('is_enabled', true)
+            ->when(
+                $requiredProgram,
+                fn ($query) => $query->where(function ($query) use ($requiredProgram): void {
+                    $query->where('code', $requiredProgram);
+                }),
+                fn ($query) => $query->whereKey($request->session()->get('selected_program_id')),
+            )
             ->first();
         if ($program && ! $this->capability->isProgramAvailable($program->code)) {
             $program = null;
@@ -53,10 +59,6 @@ class EnsureProgramSelected
 
     private function matchesRequiredProgram(string $selectedCode, string $requiredProgram): bool
     {
-        // WMS was split into Purchasing (internal code wms) and warehouse
-        // operations (internal code inventory). Both currently share the Wms
-        // route/provider surface while the domains are being separated.
-        return $selectedCode === $requiredProgram
-            || ($requiredProgram === 'wms' && $selectedCode === 'inventory');
+        return $selectedCode === $requiredProgram;
     }
 }

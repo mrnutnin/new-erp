@@ -66,7 +66,7 @@ class AccountingReportService
             ->first();
     }
 
-    public function generalLedgerQuery(FiscalPeriod $period, Warehouse|array $warehouse, ?int $accountId = null, ?int $assetBranchId = null): Builder
+    public function generalLedgerQuery(FiscalPeriod $period, Warehouse|array $warehouse, ?int $accountId = null, ?int $assetBranchId = null, ?int $journalBookId = null, ?string $dateFrom = null, ?string $dateTo = null): Builder
     {
         return JournalEntryLine::query()
             ->join('journal_entries as entries', 'entries.id', '=', 'journal_entry_lines.journal_entry_id')
@@ -78,7 +78,8 @@ class AccountingReportService
             )
             ->where('entries.status', 'POSTED')
             ->when($accountId, fn ($query) => $query->where('journal_entry_lines.account_id', $accountId))
-            ->whereBetween('entries.entry_date', [$period->start_date, $period->end_date])
+            ->when($journalBookId, fn ($query) => $query->where('entries.journal_book_id', $journalBookId))
+            ->whereBetween('entries.entry_date', [$dateFrom ?: $period->start_date, $dateTo ?: $period->end_date])
             ->select([
                 'journal_entry_lines.id',
                 'entries.id as journal_entry_id',
@@ -100,7 +101,7 @@ class AccountingReportService
             ->orderBy('journal_entry_lines.line_number');
     }
 
-    public function generalLedgerSummary(FiscalPeriod $period, Warehouse|array $warehouse, ?int $accountId = null, ?int $assetBranchId = null): object
+    public function generalLedgerSummary(FiscalPeriod $period, Warehouse|array $warehouse, ?int $accountId = null, ?int $assetBranchId = null, ?int $journalBookId = null, ?string $dateFrom = null, ?string $dateTo = null): object
     {
         $base = DB::table('journal_entry_lines as lines')
             ->join('journal_entries as entries', 'entries.id', '=', 'lines.journal_entry_id')
@@ -109,9 +110,12 @@ class AccountingReportService
                 fn ($query) => $query->whereIn('entries.warehouse_id', $this->warehouseIds($warehouse)),
             )
             ->where('entries.status', 'POSTED')
-            ->when($accountId, fn ($query) => $query->where('lines.account_id', $accountId));
-        $opening = (clone $base)->where('entries.entry_date', '<', $period->start_date)->selectRaw('COALESCE(SUM(lines.debit - lines.credit), 0) AS balance')->value('balance');
-        $movement = (clone $base)->whereBetween('entries.entry_date', [$period->start_date, $period->end_date])->selectRaw('COALESCE(SUM(lines.debit), 0) AS debit, COALESCE(SUM(lines.credit), 0) AS credit')->first();
+            ->when($accountId, fn ($query) => $query->where('lines.account_id', $accountId))
+            ->when($journalBookId, fn ($query) => $query->where('entries.journal_book_id', $journalBookId));
+        $from = $dateFrom ?: $period->start_date;
+        $to = $dateTo ?: $period->end_date;
+        $opening = (clone $base)->where('entries.entry_date', '<', $from)->selectRaw('COALESCE(SUM(lines.debit - lines.credit), 0) AS balance')->value('balance');
+        $movement = (clone $base)->whereBetween('entries.entry_date', [$from, $to])->selectRaw('COALESCE(SUM(lines.debit), 0) AS debit, COALESCE(SUM(lines.credit), 0) AS credit')->first();
         $opening = (string) ($opening ?? '0.00');
         $debit = (string) ($movement->debit ?? '0.00');
         $credit = (string) ($movement->credit ?? '0.00');
@@ -124,7 +128,7 @@ class AccountingReportService
         ];
     }
 
-    public function taxReportQuery(FiscalPeriod $period, Warehouse|array $warehouse, string $dateBasis = 'SETTLEMENT'): Builder
+    public function taxReportQuery(FiscalPeriod $period, Warehouse|array $warehouse, string $dateBasis = 'SETTLEMENT', ?string $taxKind = null): Builder
     {
         $dateColumn = $dateBasis === 'TAX_POINT' ? 'journal_entry_lines.tax_point_date' : 'journal_entry_lines.tax_settlement_date';
 
@@ -137,6 +141,7 @@ class AccountingReportService
             ->whereNotNull('journal_entry_lines.tax_code_id')
             ->whereNotNull($dateColumn)
             ->whereBetween($dateColumn, [$period->start_date, $period->end_date])
+            ->when($taxKind !== null, fn (Builder $query) => $query->where('tax_codes.kind', $taxKind))
             ->select([
                 'journal_entry_lines.id',
                 'entries.id as journal_entry_id',
@@ -156,7 +161,7 @@ class AccountingReportService
             ->orderBy('journal_entry_lines.line_number');
     }
 
-    public function taxReportTotals(FiscalPeriod $period, Warehouse|array $warehouse, string $dateBasis = 'SETTLEMENT'): object
+    public function taxReportTotals(FiscalPeriod $period, Warehouse|array $warehouse, string $dateBasis = 'SETTLEMENT', ?string $taxKind = null): object
     {
         $dateColumn = $dateBasis === 'TAX_POINT' ? 'lines.tax_point_date' : 'lines.tax_settlement_date';
         $row = DB::table('journal_entry_lines as lines')
@@ -167,6 +172,7 @@ class AccountingReportService
             ->whereNotNull('lines.tax_code_id')
             ->whereNotNull($dateColumn)
             ->whereBetween($dateColumn, [$period->start_date, $period->end_date])
+            ->when($taxKind !== null, fn ($query) => $query->where('tax_codes.kind', $taxKind))
             ->selectRaw("COALESCE(SUM(CASE WHEN tax_codes.kind = 'VAT_IN' THEN lines.tax_amount ELSE 0 END), 0) AS vat_in")
             ->selectRaw("COALESCE(SUM(CASE WHEN tax_codes.kind = 'VAT_OUT' THEN lines.tax_amount ELSE 0 END), 0) AS vat_out")
             ->selectRaw("COALESCE(SUM(CASE WHEN tax_codes.kind = 'WHT' THEN lines.tax_amount ELSE 0 END), 0) AS wht")

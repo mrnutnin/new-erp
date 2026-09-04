@@ -1,9 +1,11 @@
 @extends('Accounting::layout')
+@php($accountingDecimalPlaces = max(0, min(4, (int) (\App\Models\CompanySetting::query()->value('tax_decimal_places') ?? 2))))
 
 @section('title', $journalEntry->entry_number.' | New ERP')
 
 @section('content')
     @php($statusLabels = ['DRAFT' => 'Draft', 'VALIDATED' => 'รออนุมัติ', 'POSTED' => 'ลงบัญชีแล้ว', 'REVERSED' => 'กลับรายการแล้ว'])
+    @php($statusClasses = ['DRAFT' => 'text-bg-secondary', 'VALIDATED' => 'text-bg-warning', 'POSTED' => 'text-bg-success', 'REVERSED' => 'text-bg-danger'])
     @php($postingMetadata = (array) ($journalEntry->posting_metadata ?? []))
     @php($metadataAccounts = collect($postingMetadata['accounts'] ?? []))
     @php($accountsById = $journalEntry->lines->mapWithKeys(fn ($line) => [$line->account_id => $line->account]))
@@ -26,7 +28,7 @@
         <div class="card border-0 shadow-sm mb-4">
             <div class="card-body p-4">
                 <div class="row g-3">
-                    <div class="col-6 col-lg-3"><div class="small text-secondary">สถานะ</div><span class="badge text-bg-secondary">{{ $statusLabels[$journalEntry->status] ?? $journalEntry->status }}</span></div>
+                    <div class="col-6 col-lg-3"><div class="small text-secondary">สถานะ</div><span class="badge {{ $statusClasses[$journalEntry->status] ?? 'text-bg-secondary' }}">{{ $statusLabels[$journalEntry->status] ?? $journalEntry->status }}</span></div>
                     <div class="col-6 col-lg-3"><div class="small text-secondary">วันที่ลงบัญชี</div><div class="fw-semibold">{{ $journalEntry->entry_date->format('d/m/Y') }}</div></div>
                     <div class="col-6 col-lg-3"><div class="small text-secondary">สมุดบัญชี</div><div class="fw-semibold">{{ $journalEntry->book->code }} · {{ $journalEntry->book->name }}</div></div>
                     <div class="col-6 col-lg-3"><div class="small text-secondary">งวดบัญชี</div><div class="fw-semibold">{{ $journalEntry->period->fiscalYear->name }} / {{ $journalEntry->period->period_number }}</div></div>
@@ -172,18 +174,18 @@
                                     <td>
                                         @if ($line->taxCode)
                                             <span class="badge text-bg-info">{{ $line->taxCode->code }}</span>
-                                            <div class="small text-secondary">ฐาน {{ number_format((float) $line->tax_base, 2) }} · ภาษี {{ number_format((float) $line->tax_amount, 2) }}</div>
+                                            <div class="small text-secondary">ฐาน {{ number_format((float) $line->tax_base, $accountingDecimalPlaces, '.', ',') }} · ภาษี {{ number_format((float) $line->tax_amount, $accountingDecimalPlaces, '.', ',') }}</div>
                                             <div class="small text-secondary">Tax Point {{ $line->tax_point_date?->format('d/m/Y') ?: '—' }} · รับ/จ่าย {{ $line->tax_settlement_date?->format('d/m/Y') ?: '—' }}</div>
                                         @else
                                             —
                                         @endif
                                     </td>
-                                    <td class="text-end">{{ number_format((float) $line->debit, 2) }}</td>
-                                    <td class="text-end">{{ number_format((float) $line->credit, 2) }}</td>
+                                    <td class="text-end">{{ number_format((float) $line->debit, $accountingDecimalPlaces, '.', ',') }}</td>
+                                    <td class="text-end">{{ number_format((float) $line->credit, $accountingDecimalPlaces, '.', ',') }}</td>
                                 </tr>
                             @endforeach
                         </tbody>
-                        <tfoot><tr class="fw-semibold"><td colspan="4" class="text-end">รวม</td><td class="text-end">{{ number_format((float) $journalEntry->lines->sum('debit'), 2) }}</td><td class="text-end">{{ number_format((float) $journalEntry->lines->sum('credit'), 2) }}</td></tr></tfoot>
+                        <tfoot><tr class="fw-semibold"><td colspan="4" class="text-end">รวม</td><td class="text-end">{{ number_format((float) $journalEntry->lines->sum('debit'), $accountingDecimalPlaces, '.', ',') }}</td><td class="text-end">{{ number_format((float) $journalEntry->lines->sum('credit'), $accountingDecimalPlaces, '.', ',') }}</td></tr></tfoot>
                     </table>
                 </div>
             </div>

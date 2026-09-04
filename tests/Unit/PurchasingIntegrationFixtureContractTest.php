@@ -41,8 +41,8 @@ final class PurchasingIntegrationFixtureContractTest extends TestCase
     {
         $test = file_get_contents(base_path('tests/Feature/InventoryPurchaseMySqlIntegrationReadinessTest.php'));
         $fixture = file_get_contents(base_path('tests/Support/InventoryPurchaseIntegrationFixture.php'));
-        $gate = file_get_contents(base_path('app/Modules/Wms/Support/PurchaseThreeWayMatchGate.php'));
-        $line = file_get_contents(base_path('app/Modules/Wms/Models/PurchaseDocumentLine.php'));
+        $gate = file_get_contents(base_path('app/Modules/Purchasing/Support/PurchaseThreeWayMatchGate.php'));
+        $line = file_get_contents(base_path('app/Modules/Purchasing/Models/PurchaseDocumentLine.php'));
         $movementAdapter = file_get_contents(base_path('app/Modules/Wms/Support/PurchaseLineMovementAdapter.php'));
         $productionAdapter = file_get_contents(base_path('app/Modules/Wms/Services/InventoryPurchaseProductionAdapter.php'));
         foreach (['Warehouse::query()', 'createApprovedPurchase', 'wms_stock_movements', 'wms_cost_allocations', 'wms_cost_allocation_journal_lines', 'DB::beginTransaction()', 'DB::rollBack()'] as $contract) {
@@ -63,8 +63,8 @@ final class PurchasingIntegrationFixtureContractTest extends TestCase
 
     public function test_writer_path_selects_supplier_at_po_creation_and_keeps_source_linkage(): void
     {
-        $controller = file_get_contents(base_path('app/Modules/Wms/Controllers/PurchaseRequisitionController.php'));
-        $service = file_get_contents(base_path('app/Modules/Wms/Services/PurchaseRequisitionPurchaseOrderService.php'));
+        $controller = file_get_contents(base_path('app/Modules/Purchasing/Controllers/PurchaseRequisitionController.php'));
+        $service = file_get_contents(base_path('app/Modules/Purchasing/Services/PurchaseRequisitionPurchaseOrderService.php'));
 
         $this->assertStringContainsString("['supplier_id' => ['required', 'integer', 'min:1']]", $controller);
         $this->assertStringContainsString('createFromApproved', $controller);
@@ -79,7 +79,7 @@ final class PurchasingIntegrationFixtureContractTest extends TestCase
 
     public function test_reusable_procurement_source_builder_returns_chain_ids_without_posting(): void
     {
-        $builder = file_get_contents(base_path('app/Modules/Wms/Services/ProcurementSourceBuilder.php'));
+        $builder = file_get_contents(base_path('app/Modules/Purchasing/Services/ProcurementSourceBuilder.php'));
 
         $this->assertStringContainsString('public function build(User $actor, string $prefix = \'INT\', ?Closure $transaction = null, bool $persistent = false)', $builder);
         $this->assertStringContainsString('DB::transaction($callback)', $builder);
@@ -100,7 +100,7 @@ final class PurchasingIntegrationFixtureContractTest extends TestCase
 
     public function test_persistent_builder_validates_generated_code_lengths_before_writes(): void
     {
-        $builder = file_get_contents(base_path('app/Modules/Wms/Services/ProcurementSourceBuilder.php'));
+        $builder = file_get_contents(base_path('app/Modules/Purchasing/Services/ProcurementSourceBuilder.php'));
 
         $this->assertStringContainsString('strlen($prefix) > 19', $builder);
         $this->assertStringContainsString('assertGeneratedLengths', $builder);
@@ -110,7 +110,7 @@ final class PurchasingIntegrationFixtureContractTest extends TestCase
 
     public function test_posted_source_retry_uses_identity_integrity_before_three_way_preview(): void
     {
-        $builder = file_get_contents(base_path('app/Modules/Wms/Services/ProcurementSourceBuilder.php'));
+        $builder = file_get_contents(base_path('app/Modules/Purchasing/Services/ProcurementSourceBuilder.php'));
 
         $this->assertStringContainsString("if ((string) \$document->status === 'POSTED')", $builder);
         $this->assertStringContainsString('assertPostedSnapshotIntegrity', $builder);
@@ -141,9 +141,9 @@ final class PurchasingIntegrationFixtureContractTest extends TestCase
         $this->assertStringContainsString('PR→PO→GR Draft/UI foundation', $qa);
         $this->assertStringContainsString('Approved Purchase Invoice สำหรับ Inventory→GL integration', $qa);
         $this->assertStringContainsString('ห้าม mark Inventory→GL ready', $qa);
-        $controller = file_get_contents(base_path('app/Modules/Wms/Controllers/PurchaseDocumentController.php'));
-        $this->assertStringContainsString('wms.purchase_document.inventory_posted', $controller);
-        $this->assertStringContainsString('wms.purchase_document.inventory_reversed', $controller);
+        $controller = file_get_contents(base_path('app/Modules/Purchasing/Controllers/PurchaseDocumentController.php'));
+        $this->assertStringContainsString('purchasing.purchase_document.inventory_posted', $controller);
+        $this->assertStringContainsString('purchasing.purchase_document.inventory_reversed', $controller);
         $this->assertStringContainsString('unresolved_legacy_review=0', $qa);
         $this->assertStringContainsString('Quarantine migration prerequisite', $qa);
         $this->assertStringContainsString('Dedicated fixture builder stages', $qa);

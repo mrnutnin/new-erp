@@ -1,14 +1,11 @@
 @extends('Wms::layout')
-@php($isInventory = ($program?->code ?? null) === 'inventory')
+@php($isInventory = ($program?->code ?? null) === 'wms')
 @section('title', 'คู่มือการทำงาน | '.($isInventory ? 'WMS' : 'Purchasing'))
 @section('content')
 <div class="container-fluid px-3 px-lg-4 py-4">
-    <p class="eyebrow mb-2">{{ $isInventory ? 'WMS / INVENTORY' : 'PURCHASING' }} · WORKFLOW CENTER</p>
+    <p class="eyebrow mb-2">WMS · WORKFLOW CENTER</p>
     <div class="d-flex flex-wrap justify-content-between align-items-end gap-3 mb-4">
-        <div><h1 class="h3 mb-2">คู่มือการทำงาน{{ $isInventory ? ' WMS' : ' Purchasing' }}</h1><p class="text-secondary mb-0">{{ $isInventory ? 'ลำดับงานสินค้า ต้นทุน และความเคลื่อนไหวในคลัง' : 'ลำดับงานจัดซื้อและเจ้าหนี้ พร้อมผลกระทบต่อระบบ' }}</p></div>
-        @if($warehouse)
-            <span class="badge app-status-info"><i class="bx bx-building-house me-1" aria-hidden="true"></i>{{ $warehouse->name }}</span>
-        @endif
+        <div><h1 class="h3 mb-2">คู่มือการทำงาน WMS</h1><p class="text-secondary mb-0">เลือกกลุ่มงาน แล้วทำตามลำดับจากต้นทางไปปลายทาง; ปุ่ม <i class="bx bx-play align-middle" aria-hidden="true"></i> จะพาไปยังเมนูที่เกี่ยวข้อง</p></div>
     </div>
     @php($workflowModes = ['setup' => 'เริ่มใช้งานครั้งแรก', 'daily' => 'งานประจำวัน'])
     @php($hasSetupBlocker = collect($workflows)->where('mode', 'setup')->flatMap(fn ($workflow) => $workflow['steps'])->contains(fn ($step) => in_array($step['status_code'] ?? null, ['NOT_READY', 'CONFIGURATION_WARNING'], true)))

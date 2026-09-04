@@ -14,7 +14,8 @@ final class InventoryAdjustmentDetailUiTest extends TestCase
         $audit = file_get_contents(base_path('app/Models/AuditLog.php'));
 
         $this->assertStringContainsString("name('inventory-adjustments.show')", $routes);
-        $this->assertStringContainsString("middleware(['auth', 'program:wms', 'warehouse'])", $routes);
+        $this->assertStringContainsString("middleware(['auth', 'warehouse'])", $routes);
+        $this->assertStringContainsString("middleware('program:wms')", $routes);
         $this->assertStringContainsString("'allocation.journalEntry.lines.account", $controller);
         $this->assertStringContainsString('AuditLog::query()', $controller);
         $this->assertStringContainsString('Stock Movement', $view);

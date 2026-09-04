@@ -18,8 +18,8 @@ use App\Modules\Settings\Services\GlobalSettings;
 use App\Modules\Settings\Support\SettingRegistry;
 use App\Modules\Wms\Models\CostRecalculationRequest;
 use App\Modules\Wms\Models\Item;
-use App\Modules\Wms\Models\PurchaseDocument;
-use App\Modules\Wms\Models\PurchaseRequisition;
+use App\Modules\Purchasing\Models\PurchaseDocument;
+use App\Modules\Purchasing\Models\PurchaseRequisition;
 
 final class WorkflowRuntimeResolver
 {
@@ -104,14 +104,48 @@ final class WorkflowRuntimeResolver
             'supplier_invoice.inventory',
             'supplier_invoice.expense',
         ]);
+        $mappings = $this->accountMappings ?? app(AccountMappingService::class);
+        $mappingBlockers = [];
+        foreach (['INVENTORY_DEFAULT', 'COGS_DEFAULT'] as $key) {
+            try {
+                $mappings->resolve($key);
+            } catch (\Throwable $exception) {
+                $mappingBlockers[] = $exception->getMessage();
+            }
+        }
+        $adjustmentReadiness = $mappings->readiness('inventory_adjustment');
+        if (! $adjustmentReadiness['ready']) {
+            $mappingBlockers[] = $adjustmentReadiness['blockers'][0]['message'] ?? 'Inventory Adjustment Mapping ยังไม่พร้อม';
+        }
+        $readiness[] = [
+            'code' => 'inventory.mapping',
+            'event_code' => 'inventory.mapping',
+            'status' => $mappingBlockers === [] ? 'READY' : 'NOT_READY',
+            'configuration_warning' => $mappingBlockers !== [],
+            'missing_count' => count($mappingBlockers),
+            'block_reason' => $mappingBlockers === [] ? null : $mappingBlockers[0],
+            'next_action' => $mappingBlockers === [] ? 'เริ่มขั้นตอน Inventory ได้' : 'เปิด Account Mapping เพื่อตั้งค่าบัญชี Inventory/COGS',
+            'route' => null,
+        ];
+        $inventoryMissing = $this->settings->missingFor('inventory');
+        $readiness[] = [
+            'code' => 'inventory.cost_policy',
+            'event_code' => 'inventory.cost_policy',
+            'status' => $inventoryMissing === [] ? 'READY' : 'NOT_READY',
+            'configuration_warning' => $inventoryMissing !== [],
+            'missing_count' => count($inventoryMissing),
+            'block_reason' => $inventoryMissing === [] ? null : 'ตั้งค่านโยบายต้นทุนและ SLA ของ Inventory ให้ครบ',
+            'next_action' => $inventoryMissing === [] ? 'เริ่มงานคลังได้' : 'เปิด Global Settings เพื่อตั้งค่า Inventory',
+            'route' => null,
+        ];
         if ($user->hasPermission('wms.items.view')) {
             $readiness[] = $this->readiness('wms.items', Item::query()->where('is_active', true)->count(), 'สร้างข้อมูลสินค้าให้พร้อมก่อนทำรายการ', 'wms.items.index', 'wms.items.view', true);
         }
         if ($warehouseId !== null && $user->hasPermission('purchasing.purchase-documents.view')) {
             $pending[] = $this->pending('purchasing.purchase-drafts', PurchaseDocument::query()->where('warehouse_id', $warehouseId)->whereIn('status', ['DRAFT', 'APPROVED'])->count(), 'ใบซื้อรอดำเนินการ', 'purchasing.purchase-documents.index', 'purchasing.purchase-documents.view');
         }
-        if ($warehouseId !== null && $user->hasPermission('wms.purchase-requisitions.view')) {
-            $pending[] = $this->pending('wms.purchase-requisitions', PurchaseRequisition::query()->where('warehouse_id', $warehouseId)->whereIn('status', ['DRAFT', 'SUBMITTED', 'REJECTED'])->count(), 'ใบขอซื้อที่ยังดำเนินการไม่เสร็จ', 'wms.purchase-requisitions.index', 'wms.purchase-requisitions.view');
+        if ($warehouseId !== null && $user->hasPermission('purchasing.purchase-requisitions.view')) {
+            $pending[] = $this->pending('purchasing.purchase-requisitions', PurchaseRequisition::query()->where('warehouse_id', $warehouseId)->whereIn('status', ['DRAFT', 'SUBMITTED', 'REJECTED'])->count(), 'ใบขอซื้อที่ยังดำเนินการไม่เสร็จ', 'purchasing.purchase-requisitions.index', 'purchasing.purchase-requisitions.view');
         }
         if ($warehouseId !== null && $user->hasPermission('wms.stock-valuation.view')) {
             $pending[] = $this->pending('wms.recost', CostRecalculationRequest::query()->where('warehouse_id', $warehouseId)->whereIn('status', ['PENDING', 'PROCESSING', 'FAILED', 'STALE'])->count(), 'รายการ Recost ที่ต้องดำเนินการ/ตรวจสอบ', 'wms.stock-valuation.index', 'wms.stock-valuation.view');
@@ -146,13 +180,13 @@ final class WorkflowRuntimeResolver
         $readiness = [];
         $pending = [];
         if ($user->hasPermission('accounting.accounts.view')) {
-            $readiness[] = $this->readiness('accounting.accounts', Account::query()->where('is_active', true)->where('is_postable', true)->count(), 'สร้างผังบัญชีที่ลงรายการได้ก่อนเริ่มบันทึก', 'accounting.accounts.index', 'accounting.accounts.view', true);
+            $readiness[] = $this->readiness('accounting.accounts.index', Account::query()->where('is_active', true)->where('is_postable', true)->count(), 'สร้างผังบัญชีที่ลงรายการได้ก่อนเริ่มบันทึก', 'accounting.accounts.index', 'accounting.accounts.view', true);
         }
         if ($user->hasPermission('accounting.account-mappings.view')) {
-            $readiness[] = $this->readiness('accounting.mappings', AccountMapping::query()->whereNull('event_code')->where('is_active', true)->count(), 'ตั้งค่า Account Mapping ที่จำเป็น', 'accounting.account-mappings.index', 'accounting.account-mappings.view', true);
+            $readiness[] = $this->readiness('accounting.account-mappings.index', AccountMapping::query()->where('is_active', true)->count(), 'ตั้งค่า Account Mapping ที่จำเป็น', 'accounting.account-mappings.index', 'accounting.account-mappings.view', true);
         }
         if ($user->hasPermission('accounting.periods.view')) {
-            $readiness[] = $this->readiness('accounting.periods', FiscalPeriod::query()->where('status', 'OPEN')->count(), 'เปิดงวดบัญชีสำหรับบันทึกรายการ', 'accounting.fiscal-years.index', 'accounting.periods.view', true);
+            $readiness[] = $this->readiness('accounting.fiscal-years.index', FiscalPeriod::query()->where('status', 'OPEN')->count(), 'เปิดงวดบัญชีสำหรับบันทึกรายการ', 'accounting.fiscal-years.index', 'accounting.periods.view', true);
         }
         if ($warehouseId !== null && $user->hasPermission('accounting.journal-entries.view')) {
             $pending[] = $this->pending('accounting.journals', JournalEntry::query()->where('warehouse_id', $warehouseId)->whereIn('status', ['DRAFT', 'VALIDATED'])->count(), 'รายการบัญชีที่รออนุมัติหรือ Post', 'accounting.journal-entries.index', 'accounting.journal-entries.view');

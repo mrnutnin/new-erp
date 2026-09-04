@@ -17,14 +17,14 @@ class InventoryPurchaseReleaseGateTest extends TestCase
 
     public function test_inventory_routes_are_separate_and_permission_gated(): void
     {
-        $post = Route::getRoutes()->getByName('wms.purchase-documents.inventory-post');
-        $reverse = Route::getRoutes()->getByName('wms.purchase-documents.inventory-reverse');
+        $post = Route::getRoutes()->getByName('purchasing.purchase-documents.inventory-post');
+        $reverse = Route::getRoutes()->getByName('purchasing.purchase-documents.inventory-reverse');
 
         $this->assertNotNull($post);
         $this->assertNotNull($reverse);
-        $this->assertContains('permission:wms.purchase-documents.inventory-post', $post->middleware());
-        $this->assertContains('permission:wms.purchase-documents.inventory-reverse', $reverse->middleware());
-        $this->assertNotSame('wms.purchase-documents.post', $post->getName());
+        $this->assertContains('permission:purchasing.purchase-documents.inventory-post', $post->middleware());
+        $this->assertContains('permission:purchasing.purchase-documents.inventory-reverse', $reverse->middleware());
+        $this->assertNotSame('purchasing.purchase-documents.post', $post->getName());
     }
 
     public function test_inventory_schema_files_declare_idempotency_and_immutable_linkage(): void

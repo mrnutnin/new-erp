@@ -7,7 +7,7 @@ use Brick\Math\RoundingMode;
 
 final class InventoryReconciliationCalculator
 {
-    public static function totals(string $allocationValue, string $balanceValue, string $glValue, int $unlinkedAllocations = 0): array
+    public static function totals(string $allocationValue, string $balanceValue, string $glValue, int $unlinkedAllocations = 0, int $pendingAllocations = 0, string $pendingValue = '0', int $lineUnlinked = 0, int $lineMismatched = 0, string $roundingDifference = '0'): array
     {
         $allocation = self::decimal($allocationValue);
         $balance = self::decimal($balanceValue);
@@ -23,8 +23,13 @@ final class InventoryReconciliationCalculator
             'allocation_vs_gl_difference' => self::out($allocationVsGl),
             'balance_vs_allocation_difference' => self::out($balanceVsAllocation),
             'unlinked_allocations' => $unlinkedAllocations,
+            'pending_allocations' => $pendingAllocations,
+            'pending_value' => self::decimal($pendingValue),
+            'line_unlinked' => $lineUnlinked,
+            'line_mismatched' => $lineMismatched,
+            'rounding_difference' => self::decimal($roundingDifference),
             // Period-close must surface stock projection drift as well as GL variance.
-            'status' => $unlinkedAllocations > 0 || ! $allocationVsGl->isZero() || ! $balanceVsAllocation->isZero()
+            'status' => $unlinkedAllocations > 0 || $pendingAllocations > 0 || $lineUnlinked > 0 || $lineMismatched > 0 || ! $allocationVsGl->isZero() || ! $balanceVsAllocation->isZero()
                 ? 'ต้องตรวจสอบ'
                 : 'ตรงกัน',
         ];

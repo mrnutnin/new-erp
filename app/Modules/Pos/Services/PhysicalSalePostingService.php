@@ -21,6 +21,7 @@ use App\Modules\Wms\Models\CostAllocation;
 use App\Modules\Wms\Models\Item;
 use App\Modules\Wms\Services\InventoryCostAllocationService;
 use App\Modules\Wms\Services\StockMovementService;
+use App\Modules\Wms\Support\InventoryRoundingAllocator;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -201,6 +202,20 @@ final class PhysicalSalePostingService
         if ($rows === []) {
             throw ValidationException::withMessages(['stock' => 'HS/IV ไม่มี Cost Allocation สำหรับสร้าง COGS']);
         }
+        $roundedAmounts = InventoryRoundingAllocator::allocate(array_map(
+            fn (array $row): string => (string) data_get($row, 'payload.posting_metadata.inventory_cost.exact_amount', '0'),
+            $rows,
+        ));
+        foreach ($rows as $index => &$row) {
+            $amount = $roundedAmounts[$index];
+            $row['payload']['lines'][0]['debit'] = $amount;
+            $row['payload']['lines'][1]['credit'] = $amount;
+            $row['payload']['posting_metadata']['inventory_cost']['posted_amount'] = $amount;
+            $difference = \Brick\Math\BigDecimal::of($amount)->minus(\Brick\Math\BigDecimal::of((string) $row['payload']['posting_metadata']['inventory_cost']['exact_amount']));
+            $row['payload']['posting_metadata']['inventory_cost']['rounding_difference'] = $difference->__toString();
+            $row['payload']['posting_metadata']['inventory_cost']['rounding_direction'] = $difference->isZero() ? 'NONE' : ($difference->isPositive() ? 'LOSS' : 'GAIN');
+        }
+        unset($row);
         $journal = $this->journals->postWithinTransaction([
             'source_type' => 'POS', 'source_id' => (string) $sale->id, 'source_reference' => $sale->document_number,
             'event_code' => 'sales_cogs', 'entry_date' => $postingDate,

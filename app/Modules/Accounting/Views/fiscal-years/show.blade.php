@@ -26,7 +26,7 @@
                                         <th>วันเริ่ม</th>
                                         <th>วันสิ้นสุด</th>
                                         <th>สถานะ</th>
-                                        @if (auth()->user()->hasPermission('accounting.periods.close') || auth()->user()->hasPermission('accounting.periods.reopen') || auth()->user()->hasPermission('accounting.periods.lock'))
+                                        @if (auth()->user()->hasPermission('accounting.periods.view') || auth()->user()->hasPermission('accounting.periods.close') || auth()->user()->hasPermission('accounting.periods.reopen') || auth()->user()->hasPermission('accounting.periods.lock'))
                                             <th class="text-end">จัดการ</th>
                                         @endif
                                     </tr>
@@ -46,8 +46,13 @@
                                                     <div class="small text-secondary mt-1">{{ $period->locked_at->format('d/m/Y H:i') }}</div>
                                                 @endif
                                             </td>
-                                            @if (auth()->user()->hasPermission('accounting.periods.close') || auth()->user()->hasPermission('accounting.periods.reopen') || auth()->user()->hasPermission('accounting.periods.lock'))
+                                            @if (auth()->user()->hasPermission('accounting.periods.view') || auth()->user()->hasPermission('accounting.periods.close') || auth()->user()->hasPermission('accounting.periods.reopen') || auth()->user()->hasPermission('accounting.periods.lock'))
                                                 <td class="text-end">
+                                                    @if (auth()->user()->hasPermission('accounting.periods.view'))
+                                                        <a class="btn btn-sm btn-outline-secondary" href="{{ route('accounting.fiscal-periods.readiness', $period) }}" title="ตรวจรายการค้างก่อนปิดงวด">
+                                                            <i class="bx bx-list-check me-1" aria-hidden="true"></i>ตรวจรายการค้าง
+                                                        </a>
+                                                    @endif
                                                     @if ($period->status === 'OPEN' && auth()->user()->hasPermission('accounting.periods.close'))
                                                         <button class="btn btn-sm btn-outline-dark js-period-status"
                                                                 type="button"

@@ -16,7 +16,7 @@ use App\Modules\Finance\Services\DocumentSequenceService;
 use App\Modules\Platform\Services\AuditLogger;
 use App\Modules\Pos\Models\SalesDocument;
 use App\Modules\Pos\Requests\SaveCustomerRequest;
-use App\Modules\Wms\Models\PurchaseDocument;
+use App\Modules\Purchasing\Models\PurchaseDocument;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\QueryException;
 use Illuminate\Http\JsonResponse;

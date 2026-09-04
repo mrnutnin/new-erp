@@ -20,7 +20,7 @@
                             @csrf
                             <input name="program_id" type="hidden" value="{{ $program->id }}">
                             <button class="program-card card h-100 w-100 text-start border-0 shadow-sm" type="submit" data-busy-text="กำลังเลือก...">
-                                @php($programCode = $program->code === 'wms' ? 'PU' : ($program->code === 'inventory' ? 'WM' : strtoupper(substr($program->code, 0, 2))))
+                                @php($programCode = $program->code === 'purchasing' ? 'PU' : ($program->code === 'wms' ? 'WM' : strtoupper(substr($program->code, 0, 2))))
                                 <span class="program-code">{{ $programCode }}</span>
                                 <span class="h5 mt-4 mb-2">{{ $program->name }}</span>
                                 <span class="text-secondary">{{ $program->description }}</span>

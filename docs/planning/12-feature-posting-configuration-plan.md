@@ -334,7 +334,7 @@ Gate: plan ระบุ target, migration compatibility, phases, tests และ
 - [x] เพิ่ม event-specific resolver + provenance
 - [x] เพิ่ม structured readiness
 - [x] `JournalPostingService` persist metadata และรวม metadata ใน posting hash
-- [ ] caller เดิมยังผ่าน regression โดย behavior ไม่เปลี่ยน
+- [x] caller เดิมยังผ่าน regression โดย behavior ไม่เปลี่ยน (Unit 670 tests / 3,926 assertions และ Feature MySQL 34 tests / 290 assertions)
 - [x] Unit tests: migration contract, version, event identity, compatibility, provenance, readiness, metadata hash
 - [x] รัน migration local MySQL, `optimize:clear`, route/view cache และ `git diff --check`
 
@@ -423,7 +423,7 @@ Gate: cost/accumulated depreciation/impairment/gain-loss ตรง GL และ 
 - [x] report/drill-down แสดง event, account provenance/version และ reversal link
 - [x] audit ว่าไม่มี LIVE operational path ใช้ hard-coded/fallback-first account
 - [x] LIVE caller ไม่พึ่ง legacy `event_code=null`
-- [ ] permission/audit/full targeted regression ผ่าน
+- [x] permission/audit/full targeted regression ผ่าน (Unit และ Feature regression ผ่าน; 2 integration cases ถูก skip ตาม opt-in)
 - [ ] manual UAT ทุก Module ผ่าน Owner sign-off
 - [ ] performance benchmark + rollback/release evidence
 - [ ] อัปเดต user guide/QA/checklist และปิดแผน

@@ -43,6 +43,27 @@ class AccountMappingController extends Controller
         return $dataTable->toJson();
     }
 
+    public function readiness(AccountMappingService $mappings): JsonResponse
+    {
+        $events = collect($mappings->configurationEvents())->map(function (array $event, string $eventCode) use ($mappings): array {
+            $readiness = $mappings->readiness($eventCode);
+
+            return [
+                'event_code' => $eventCode,
+                'module' => $event['module'],
+                'document' => $event['document'],
+                'status' => $event['status'],
+                'ready' => $readiness['ready'],
+                'required_roles' => count($readiness['required_roles']),
+                'resolved_roles' => count($readiness['resolved_accounts']),
+                'blockers' => collect($readiness['blockers'])->pluck('message')->values()->all(),
+                'url' => route('accounting.account-mappings.index', ['event_code' => $eventCode]),
+            ];
+        })->values();
+
+        return response()->json(['data' => $events]);
+    }
+
     public function accountOptions(Request $request, AccountMappingService $mappings): JsonResponse
     {
         $values = $request->validate(['event_code' => ['nullable', Rule::in(array_keys($mappings->configurationEvents()))], 'key' => ['required', 'string', 'max:80'], 'q' => ['nullable', 'string', 'max:100'], 'page' => ['nullable', 'integer', 'min:1']]);
@@ -147,7 +168,16 @@ class AccountMappingController extends Controller
 
     private function applyOrder(Builder $query, Request $request): void
     {
-        $columns = [0 => 'accounting_account_mappings.event_code', 1 => 'accounting_account_mappings.key', 2 => 'accounts.code', 3 => 'accounting_account_mappings.version', 4 => 'accounting_account_mappings.is_active'];
+        // Keep this in the same order as the DataTable columns: module, document,
+        // role, GL account, version, status, actions.
+        $columns = [
+            0 => 'accounting_account_mappings.event_code',
+            1 => 'accounting_account_mappings.event_code',
+            2 => 'accounting_account_mappings.key',
+            3 => 'accounts.code',
+            4 => 'accounting_account_mappings.version',
+            5 => 'accounting_account_mappings.is_active',
+        ];
         $column = $columns[(int) $request->input('order.0.column', 0)] ?? $columns[0];
         $query->reorder($column, $request->input('order.0.dir') === 'desc' ? 'desc' : 'asc')->orderBy('accounting_account_mappings.id');
     }

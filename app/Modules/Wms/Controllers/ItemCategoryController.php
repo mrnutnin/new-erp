@@ -18,9 +18,10 @@ class ItemCategoryController extends Controller
         return view('Wms::item-categories.index');
     }
 
-    public function data(): JsonResponse
+    public function data(Request $request): JsonResponse
     {
-        return DataTables::eloquent(ItemCategory::query())->addColumn('status_label', fn ($r) => $r->is_active ? 'ใช้งาน' : 'ปิดใช้งาน')->addColumn('edit_url', fn ($r) => auth()->user()->hasPermission('wms.item-categories.update') ? route('wms.item-categories.edit', $r) : null)->addColumn('delete_url', fn ($r) => auth()->user()->hasPermission('wms.item-categories.delete') ? route('wms.item-categories.destroy', $r) : null)->toJson();
+        $query = ItemCategory::query()->when($request->input('is_active') !== null && $request->input('is_active') !== '', fn ($q) => $q->where('is_active', $request->boolean('is_active')));
+        return DataTables::eloquent($query)->addColumn('status_label', fn ($r) => $r->is_active ? 'ใช้งาน' : 'ปิดใช้งาน')->addColumn('edit_url', fn ($r) => auth()->user()->hasPermission('wms.item-categories.update') ? route('wms.item-categories.edit', $r) : null)->addColumn('delete_url', fn ($r) => auth()->user()->hasPermission('wms.item-categories.delete') ? route('wms.item-categories.destroy', $r) : null)->toJson();
     }
 
     public function create(): View

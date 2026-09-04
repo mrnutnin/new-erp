@@ -4,8 +4,8 @@ namespace Tests\Unit;
 
 use App\Modules\Accounting\Models\Account;
 use App\Modules\Wms\Models\Item;
-use App\Modules\Wms\Models\PurchaseDocument;
-use App\Modules\Wms\Models\PurchaseDocumentLine;
+use App\Modules\Purchasing\Models\PurchaseDocument;
+use App\Modules\Purchasing\Models\PurchaseDocumentLine;
 use App\Modules\Wms\Models\Uom;
 use App\Modules\Wms\Services\InventoryPurchasePostingService;
 use App\Modules\Wms\Services\PurchaseInventoryEventAdapter;

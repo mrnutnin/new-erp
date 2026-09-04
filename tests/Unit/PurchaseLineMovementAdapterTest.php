@@ -2,12 +2,12 @@
 
 namespace Tests\Unit;
 
-use App\Modules\Wms\Models\GoodsReceipt;
-use App\Modules\Wms\Models\GoodsReceiptLine;
+use App\Modules\Purchasing\Models\GoodsReceipt;
+use App\Modules\Purchasing\Models\GoodsReceiptLine;
 use App\Modules\Wms\Models\Item;
-use App\Modules\Wms\Models\PurchaseDocument;
-use App\Modules\Wms\Models\PurchaseDocumentLine;
-use App\Modules\Wms\Models\PurchaseDocumentReceiptAllocation;
+use App\Modules\Purchasing\Models\PurchaseDocument;
+use App\Modules\Purchasing\Models\PurchaseDocumentLine;
+use App\Modules\Purchasing\Models\PurchaseDocumentReceiptAllocation;
 use App\Modules\Wms\Models\Uom;
 use App\Modules\Wms\Models\UomConversion;
 use App\Modules\Wms\Support\PurchaseLineMovementAdapter;

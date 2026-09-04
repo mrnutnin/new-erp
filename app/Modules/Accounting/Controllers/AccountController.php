@@ -23,7 +23,9 @@ class AccountController extends Controller
 {
     public function index(): View
     {
-        return view('Accounting::accounts.index');
+        return view('Accounting::accounts.index', [
+            'accountTypes' => AccountType::query()->orderBy('code')->get(['id', 'code', 'name']),
+        ]);
     }
 
     public function parentOptions(Request $request): JsonResponse
@@ -247,6 +249,17 @@ class AccountController extends Controller
         if ($search !== '') {
             $query->where(fn (Builder $query) => $query->where('accounts.code', 'like', "%{$search}%")->orWhere('accounts.name', 'like', "%{$search}%"));
         }
+
+        $query->when($request->integer('account_type_id') > 0, fn (Builder $q) => $q->where('accounts.account_type_id', $request->integer('account_type_id')))
+            ->when($request->filled('status') && in_array($request->input('status'), ['active', 'inactive'], true), fn (Builder $q) => $q->where('accounts.is_active', $request->input('status') === 'active'))
+            ->when($request->filled('account_class') && in_array($request->input('account_class'), ['control', 'postable', 'group'], true), function (Builder $q) use ($request) {
+                match ($request->input('account_class')) {
+                    'control' => $q->whereNotNull('accounts.control_account_type'),
+                    'postable' => $q->where('accounts.is_postable', true),
+                    'group' => $q->where('accounts.is_postable', false)->whereNull('accounts.control_account_type'),
+                };
+            })
+            ->when($request->filled('reporting_profile') && in_array($request->input('reporting_profile'), ['PAE', 'NPAE'], true), fn (Builder $q) => $q->where(fn (Builder $profile) => $profile->where('accounts.reporting_profile', $request->input('reporting_profile'))->orWhereNull('accounts.reporting_profile')));
     }
 
     private function applyOrder(Builder $query, Request $request): void

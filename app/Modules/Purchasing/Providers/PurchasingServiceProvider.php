@@ -17,8 +17,5 @@ class PurchasingServiceProvider extends ServiceProvider
     {
         $this->app['router']->middleware('web')->group(__DIR__.'/../Routes/web.php');
         $this->loadViewsFrom(__DIR__.'/../Views', 'Purchasing');
-        // Temporary view seam: reuse the proven supplier layout/template until
-        // the flow is moved without duplicating markup and route contracts.
-        $this->loadViewsFrom(__DIR__.'/../../Wms/Views', 'Purchasing');
     }
 }

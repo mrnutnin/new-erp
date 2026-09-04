@@ -16,7 +16,7 @@ final class PosReceivableUiContractTest extends TestCase
 
         self::assertStringContainsString("where('sales.document_type', 'IV')->where('sales.status', 'POSTED')", $controller);
         self::assertStringContainsString('COALESCE(allocations.amount, 0) + COALESCE(advances.amount, 0)', $controller);
-        self::assertStringContainsString("route('pos.receipts.create', ['open_item_id' => \$row->id])", $controller);
+        self::assertStringContainsString("route('pos.physical-sales.receive-payment.create', \$row->physical_sale_id)", $controller);
         self::assertStringContainsString("route('pos.receivables.show', ['openItem' => \$row->id])", $controller);
         self::assertStringContainsString("Route::get('/receivables'", $routes);
         self::assertStringContainsString("Route::get('/receivables/{openItem}'", $routes);

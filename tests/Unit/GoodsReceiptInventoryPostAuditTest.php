@@ -15,19 +15,19 @@ final class GoodsReceiptInventoryPostAuditTest extends TestCase
     public function test_receipt_has_no_independent_posting_route(): void
     {
         $routes = collect(Route::getRoutes()->getRoutes())
-            ->filter(fn ($route): bool => str_starts_with($route->getName() ?? '', 'wms.purchase-receipts.'))
+            ->filter(fn ($route): bool => str_starts_with($route->getName() ?? '', 'purchasing.purchase-receipts.'))
             ->map(fn ($route): string => $route->getName())
             ->values();
 
-        $this->assertContains('wms.purchase-receipts.index', $routes);
-        $this->assertContains('wms.purchase-receipts.store', $routes);
-        $this->assertContains('wms.purchase-receipts.update', $routes);
+        $this->assertContains('purchasing.purchase-receipts.index', $routes);
+        $this->assertContains('purchasing.purchase-receipts.store', $routes);
+        $this->assertContains('purchasing.purchase-receipts.update', $routes);
         $this->assertFalse($routes->contains(fn (string $name): bool => str_contains($name, 'post')));
     }
 
     public function test_receipt_foundation_is_still_draft_only_and_does_not_create_posting_records(): void
     {
-        $source = file_get_contents(base_path('app/Modules/Wms/Services/PurchaseReceiptFoundationService.php'));
+        $source = file_get_contents(base_path('app/Modules/Purchasing/Services/PurchaseReceiptFoundationService.php'));
 
         $this->assertStringContainsString("'status' => 'DRAFT'", $source);
         $this->assertStringContainsString("'movement_type' => 'RECEIPT'", $source);
@@ -73,7 +73,7 @@ final class GoodsReceiptInventoryPostAuditTest extends TestCase
         $this->assertStringNotContainsString('journal_entries', $source);
 
         $routes = collect(Route::getRoutes()->getRoutes())
-            ->filter(fn ($route): bool => str_starts_with($route->getName() ?? '', 'wms.purchase-receipts.'))
+            ->filter(fn ($route): bool => str_starts_with($route->getName() ?? '', 'purchasing.purchase-receipts.'))
             ->map(fn ($route): string => $route->getName())
             ->values();
 

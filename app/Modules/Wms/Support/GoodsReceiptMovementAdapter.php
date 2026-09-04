@@ -2,7 +2,7 @@
 
 namespace App\Modules\Wms\Support;
 
-use App\Modules\Wms\Models\GoodsReceipt;
+use App\Modules\Purchasing\Models\GoodsReceipt;
 
 /**
  * Converts an approved Goods Receipt snapshot into normalized movement

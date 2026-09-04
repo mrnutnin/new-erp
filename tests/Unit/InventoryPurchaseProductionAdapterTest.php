@@ -4,7 +4,7 @@ namespace Tests\Unit;
 
 use App\Models\User;
 use App\Models\Warehouse;
-use App\Modules\Wms\Models\PurchaseDocument;
+use App\Modules\Purchasing\Models\PurchaseDocument;
 use App\Modules\Wms\Services\InventoryPurchaseProductionAdapter;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Validation\ValidationException;
@@ -38,14 +38,14 @@ class InventoryPurchaseProductionAdapterTest extends TestCase
     public function test_expense_route_remains_separate_from_inventory_route(): void
     {
         $this->assertNotSame(
-            Route::getRoutes()->getByName('wms.purchase-documents.post')->getActionName(),
-            Route::getRoutes()->getByName('wms.purchase-documents.inventory-post')->getActionName(),
+            Route::getRoutes()->getByName('purchasing.purchase-documents.post')->getActionName(),
+            Route::getRoutes()->getByName('purchasing.purchase-documents.inventory-post')->getActionName(),
         );
     }
 
     public function test_inventory_route_uses_the_bounded_adapter_and_posting_date(): void
     {
-        $source = file_get_contents(base_path('app/Modules/Wms/Controllers/PurchaseDocumentController.php'));
+        $source = file_get_contents(base_path('app/Modules/Purchasing/Controllers/PurchaseDocumentController.php'));
 
         $this->assertStringContainsString('$adapter->post(', $source);
         $this->assertStringContainsString("\$request->validated('posting_date')", $source);

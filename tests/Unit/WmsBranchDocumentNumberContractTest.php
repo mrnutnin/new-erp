@@ -2,11 +2,11 @@
 
 namespace Tests\Unit;
 
-use App\Modules\Wms\Controllers\PurchaseReceiptController;
-use App\Modules\Wms\Controllers\PurchaseRequisitionController;
+use App\Modules\Purchasing\Controllers\PurchaseReceiptController;
+use App\Modules\Purchasing\Controllers\PurchaseRequisitionController;
 use App\Modules\Wms\Controllers\StockCountController;
 use App\Modules\Wms\Controllers\TransferController;
-use App\Modules\Wms\Services\GoodsReceiptService;
+use App\Modules\Purchasing\Services\GoodsReceiptService;
 use PHPUnit\Framework\TestCase;
 
 final class WmsBranchDocumentNumberContractTest extends TestCase

@@ -26,6 +26,8 @@ final class PostingEvent
         'ADJUSTMENT_LOSS' => ['label' => 'บัญชีขาดทุนจากปรับปรุงสินค้าคงเหลือ', 'types' => ['EXPENSE']],
         'RECOST_GAIN' => ['label' => 'บัญชีกำไรจากปรับต้นทุนสินค้า', 'types' => ['REVENUE']],
         'RECOST_LOSS' => ['label' => 'บัญชีขาดทุนจากปรับต้นทุนสินค้า', 'types' => ['EXPENSE']],
+        'ROUNDING_GAIN' => ['label' => 'บัญชีกำไรจากการปัดเศษต้นทุน', 'types' => ['REVENUE']],
+        'ROUNDING_LOSS' => ['label' => 'บัญชีขาดทุนจากการปัดเศษต้นทุน', 'types' => ['EXPENSE']],
         // Fixed assets are posted to their FIXED_ASSET control account when a
         // subledger asset is present.  A company may also use a normal ASSET
         // account for an asset-cost mapping, so both are intentionally valid.

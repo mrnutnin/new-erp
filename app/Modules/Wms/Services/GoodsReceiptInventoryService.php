@@ -2,7 +2,7 @@
 
 namespace App\Modules\Wms\Services;
 
-use App\Modules\Wms\Models\GoodsReceipt;
+use App\Modules\Purchasing\Models\GoodsReceipt;
 use App\Modules\Wms\Models\StockMovement;
 use App\Modules\Wms\Support\GoodsReceiptMovementAdapter;
 use Illuminate\Support\Facades\DB;

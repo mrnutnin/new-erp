@@ -5,10 +5,10 @@ namespace Database\Seeders;
 use App\Models\Party;
 use App\Models\User;
 use App\Models\Warehouse;
-use App\Modules\Wms\Models\GoodsReceipt;
+use App\Modules\Purchasing\Models\GoodsReceipt;
 use App\Modules\Wms\Models\Item;
-use App\Modules\Wms\Models\PurchaseOrder;
-use App\Modules\Wms\Models\PurchaseRequisition;
+use App\Modules\Purchasing\Models\PurchaseOrder;
+use App\Modules\Purchasing\Models\PurchaseRequisition;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\DB;
 

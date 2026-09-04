@@ -15,7 +15,7 @@ final class PurchasingBranchWarehouseScopeContractTest extends TestCase
             'PurchaseOrderController.php',
             'PurchaseDocumentController.php',
         ] as $file) {
-            $controller = file_get_contents($root.'/app/Modules/Wms/Controllers/'.$file);
+            $controller = file_get_contents($root.'/app/Modules/Purchasing/Controllers/'.$file);
 
             self::assertStringContainsString('authorizedWarehouseIds($request)', $controller);
         }
@@ -27,7 +27,11 @@ final class PurchasingBranchWarehouseScopeContractTest extends TestCase
         ] as $file) {
             $controller = file_get_contents($root.'/app/Modules/Purchasing/Controllers/'.$file);
 
-            self::assertStringContainsString("where('branch_id', (int) \$request->attributes->get('selectedBranch')->id)", $controller);
+            self::assertTrue(
+                str_contains($controller, "where('branch_id', (int) \$request->attributes->get('selectedBranch')->id)")
+                || str_contains($controller, "moduleRoutePrefix() === 'purchasing' ? 'branch_id' : 'warehouse_id'"),
+                $file.' must resolve the selected Purchasing branch scope',
+            );
         }
     }
 

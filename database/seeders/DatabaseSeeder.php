@@ -47,8 +47,8 @@ class DatabaseSeeder extends Seeder
 
         $programs = collect([
             ['code' => 'settings', 'name' => 'Global Setting', 'description' => 'ตั้งค่าระบบและข้อมูลบริษัท', 'requires_branch' => false, 'requires_warehouse' => false, 'entry_route' => 'settings.index'],
-            ['code' => 'wms', 'name' => 'Purchasing', 'description' => 'บริหารจัดซื้อ', 'requires_branch' => true, 'requires_warehouse' => true, 'entry_route' => 'purchasing.index'],
-            ['code' => 'inventory', 'name' => 'WMS', 'description' => 'บริหารคลังสินค้าและสต็อก', 'requires_branch' => true, 'requires_warehouse' => true, 'entry_route' => 'wms.index'],
+            ['code' => 'purchasing', 'name' => 'Purchasing', 'description' => 'บริหารจัดซื้อ', 'requires_branch' => true, 'requires_warehouse' => true, 'entry_route' => 'purchasing.index'],
+            ['code' => 'wms', 'name' => 'WMS', 'description' => 'บริหารคลังสินค้าและสต็อก', 'requires_branch' => true, 'requires_warehouse' => true, 'entry_route' => 'wms.index'],
             ['code' => 'pos', 'name' => 'POS', 'description' => 'ขายและคำสั่งซื้อ', 'requires_branch' => true, 'requires_warehouse' => true, 'entry_route' => 'pos.index'],
             ['code' => 'production', 'name' => 'Production', 'description' => 'บริหารการผลิต', 'requires_branch' => true, 'requires_warehouse' => true, 'entry_route' => 'dashboard'],
             ['code' => 'finance', 'name' => 'Finance', 'description' => 'บริหารการเงิน', 'requires_branch' => true, 'requires_warehouse' => true, 'entry_route' => 'finance.index'],
@@ -77,6 +77,11 @@ class DatabaseSeeder extends Seeder
                 'is_active' => true,
                 'created_by' => $user->id,
             ],
+        );
+
+        DocumentSequence::query()->firstOrCreate(
+            ['warehouse_id' => null, 'document_type' => 'LANDED_COST'],
+            ['name' => 'ต้นทุนแฝงสินค้า', 'prefix' => 'LC', 'number_format' => '{PREFIX}{BRANCH}{YYMM}{NUMBER:6}', 'reset_rule' => 'MONTHLY', 'next_number' => 1, 'is_active' => true, 'number_reuse_policy' => 'NEVER_REUSE', 'created_by' => $user->id],
         );
 
         DocumentSequence::query()->firstOrCreate(

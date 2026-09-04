@@ -2,7 +2,7 @@
 
 namespace App\Modules\Asset\Services;
 
-use App\Modules\Wms\Models\PurchaseDocumentLine;
+use App\Modules\Purchasing\Models\PurchaseDocumentLine;
 use Illuminate\Database\Eloquent\Builder;
 
 final class PurchaseAssetSourceEligibilityService

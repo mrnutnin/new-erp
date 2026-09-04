@@ -2,8 +2,8 @@
 
 namespace Tests\Unit;
 
-use App\Modules\Wms\Models\PurchaseVarianceApproval;
-use App\Modules\Wms\Support\PurchaseThreeWayMatchPolicy;
+use App\Modules\Purchasing\Models\PurchaseVarianceApproval;
+use App\Modules\Purchasing\Support\PurchaseThreeWayMatchPolicy;
 use Tests\TestCase;
 
 final class PurchaseVarianceApprovalContractTest extends TestCase

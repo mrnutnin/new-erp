@@ -17,6 +17,7 @@ Route::middleware('guest')->group(function () {
 Route::middleware('auth')->group(function () {
     Route::post('/logout', [AuthController::class, 'destroy'])->name('logout');
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
+    Route::get('/profile/audit-data', [ProfileController::class, 'auditData'])->name('profile.audit-data');
     Route::put('/profile', [ProfileController::class, 'update'])->name('profile.update');
 
     Route::get('/select-program', [ContextController::class, 'programs'])->name('programs.index');

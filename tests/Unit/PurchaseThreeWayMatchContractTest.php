@@ -2,9 +2,9 @@
 
 namespace Tests\Unit;
 
-use App\Modules\Wms\Support\PurchaseThreeWayMatchContract;
-use App\Modules\Wms\Support\PurchaseThreeWayMatchPolicy;
-use App\Modules\Wms\Support\PurchaseThreeWayMatchService;
+use App\Modules\Purchasing\Support\PurchaseThreeWayMatchContract;
+use App\Modules\Purchasing\Support\PurchaseThreeWayMatchPolicy;
+use App\Modules\Purchasing\Support\PurchaseThreeWayMatchService;
 use Tests\TestCase;
 
 final class PurchaseThreeWayMatchContractTest extends TestCase

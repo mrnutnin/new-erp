@@ -2,8 +2,8 @@
 
 namespace Tests\Unit;
 
-use App\Modules\Wms\Models\GoodsReceipt;
-use App\Modules\Wms\Models\GoodsReceiptLine;
+use App\Modules\Purchasing\Models\GoodsReceipt;
+use App\Modules\Purchasing\Models\GoodsReceiptLine;
 use App\Modules\Wms\Support\GoodsReceiptInventoryPostingContract;
 use App\Modules\Wms\Support\GoodsReceiptMovementAdapter;
 use Illuminate\Validation\ValidationException;

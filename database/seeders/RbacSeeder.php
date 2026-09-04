@@ -162,6 +162,9 @@ class RbacSeeder extends Seeder
             'wms.uom-conversions.view' => 'ดูอัตราแปลงหน่วย',
             'wms.uom-conversions.create' => 'เพิ่มอัตราแปลงหน่วย',
             'wms.stock.view' => 'ดู Stock Card และยอดคงเหลือ',
+            'wms.opening-balances.view' => 'ดูยอดยกมาสินค้า',
+            'wms.opening-balances.create' => 'สร้างยอดยกมาสินค้า',
+            'wms.opening-balances.post' => 'ลงบัญชียอดยกมาสินค้า',
             'wms.inventory-adjustments.view' => 'ดูรายการปรับปรุงสินค้าคงเหลือ',
             'wms.inventory-adjustments.create' => 'สร้างรายการปรับปรุงสินค้าคงเหลือ',
             'wms.inventory-adjustments.update' => 'แก้ไขร่างรายการปรับปรุงสินค้าคงเหลือ',
@@ -202,39 +205,6 @@ class RbacSeeder extends Seeder
             'wms.transfers.void' => 'ยกเลิก Transfer ที่ปลายทางปฏิเสธ',
             'wms.recost.retry' => 'ส่งรายการ Recost ที่ค้างกลับเข้าคิว',
             'wms.cost-allocation-reviews.view' => 'ดูรายการ Cost Allocation Legacy ที่ต้องตรวจสอบ',
-            'wms.purchase-documents.view' => 'ดูใบตั้งหนี้และใบลดหนี้ซื้อ',
-            'wms.purchase-documents.print' => 'พิมพ์ใบตั้งหนี้และใบลดหนี้ซื้อเป็น PDF',
-            'wms.purchase-documents.create' => 'สร้างใบตั้งหนี้และใบลดหนี้ซื้อ',
-            'wms.purchase-documents.update' => 'แก้ไขร่างใบตั้งหนี้และใบลดหนี้ซื้อ',
-            'wms.purchase-documents.delete' => 'ลบร่างใบตั้งหนี้และใบลดหนี้ซื้อก่อนอนุมัติ',
-            'wms.purchase-documents.approve' => 'อนุมัติใบตั้งหนี้และใบลดหนี้ซื้อ',
-            'wms.purchase-documents.post' => 'Post ใบตั้งหนี้และใบลดหนี้ซื้อเข้าบัญชี',
-            'wms.purchase-documents.inventory-post' => 'Post ใบซื้อเข้าสต็อกและบัญชี Inventory',
-            'wms.purchase-documents.inventory-reverse' => 'กลับรายการใบซื้อ Inventory ที่ลงบัญชีแล้ว',
-            'wms.purchase-documents.void' => 'ยกเลิกใบตั้งหนี้และใบลดหนี้ซื้อที่ยังไม่ลงบัญชี',
-            'wms.purchase-requisitions.view' => 'ดูใบขอซื้อ',
-            'wms.purchase-requisitions.print' => 'พิมพ์ใบขอซื้อเป็น PDF',
-            'wms.purchase-requisitions.create' => 'สร้างใบขอซื้อ',
-            'wms.purchase-requisitions.update' => 'แก้ไขใบขอซื้อร่างหรือตีกลับ',
-            'wms.purchase-requisitions.delete' => 'ลบใบขอซื้อร่างหรือตีกลับ',
-            'wms.purchase-requisitions.submit' => 'ส่งใบขอซื้อเพื่ออนุมัติ',
-            'wms.purchase-requisitions.approve' => 'อนุมัติใบขอซื้อ',
-            'wms.purchase-requisitions.reject' => 'ตีกลับใบขอซื้อ',
-            'wms.purchase-requisitions.void' => 'ยกเลิกใบขอซื้อ',
-            'wms.purchase-requisitions.create-po' => 'สร้าง Purchase Order จากใบขอซื้อที่อนุมัติแล้ว',
-            'wms.purchase-orders.view' => 'ดูใบสั่งซื้อ',
-            'wms.purchase-orders.print' => 'พิมพ์ใบสั่งซื้อเป็น PDF',
-            'wms.purchase-orders.create' => 'สร้างใบสั่งซื้อ',
-            'wms.purchase-orders.update' => 'แก้ไขร่างใบสั่งซื้อและกรอกราคา',
-            'wms.purchase-orders.delete' => 'ลบร่างใบสั่งซื้อ',
-            'wms.purchase-orders.approve' => 'อนุมัติใบสั่งซื้อ',
-            'wms.purchase-orders.void' => 'ยกเลิกใบสั่งซื้อ',
-            'wms.purchase-receipts.view' => 'ดู Draft Receipt จากใบซื้อ',
-            'wms.purchase-receipts.print' => 'พิมพ์ใบรับสินค้าเป็น PDF',
-            'wms.purchase-receipts.create' => 'สร้าง Draft Receipt จากใบซื้อ',
-            'wms.purchase-receipts.update' => 'แก้ไข Draft Receipt',
-            'wms.purchase-receipts.approve' => 'อนุมัติ Receipt',
-            'wms.purchase-receipts.void' => 'ยกเลิก Receipt',
             'pos.dashboard.view' => 'ดู Sales Dashboard',
             'pos.sales-reports.view' => 'ดูรายงานยอดขาย',
             'pos.branch-sales-targets.view' => 'ดูเป้ายอดขายสาขา',
@@ -342,10 +312,7 @@ class RbacSeeder extends Seeder
             $permission->save();
         });
 
-        // Purchasing is the canonical module name. Keep an explicit alias
-        // set for the extracted /purchasing surface; User::hasPermission()
-        // bridges these codes with the legacy wms.* permissions during the
-        // compatibility period.
+        // Purchasing owns its permission namespace after the module cutover.
         collect([
             'purchasing.dashboard.view' => 'ดู Purchasing Dashboard',
             'purchasing.workflow.view' => 'ดูคู่มือการทำงาน Purchasing',
@@ -387,6 +354,12 @@ class RbacSeeder extends Seeder
             'purchasing.purchase-documents.inventory-post' => 'Post ใบซื้อเข้า Inventory',
             'purchasing.purchase-documents.inventory-reverse' => 'กลับรายการใบซื้อ Inventory',
             'purchasing.purchase-documents.void' => 'ยกเลิกใบตั้งหนี้ที่ยังไม่ลงบัญชี',
+            'purchasing.landed-costs.view' => 'ดู Landed Cost',
+            'purchasing.landed-costs.create' => 'สร้าง Landed Cost',
+            'purchasing.landed-costs.submit' => 'ส่ง Landed Cost เพื่ออนุมัติ',
+            'purchasing.landed-costs.approve' => 'อนุมัติ Landed Cost',
+            'purchasing.landed-costs.post' => 'Post Landed Cost',
+            'purchasing.landed-costs.void' => 'ยกเลิก Landed Cost',
         ])->each(function (string $name, string $code) {
             $permission = Permission::query()->withTrashed()->firstOrNew(['code' => $code]);
             $permission->fill(['name' => $name]);

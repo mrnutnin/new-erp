@@ -4,6 +4,7 @@ namespace App\Modules\Wms\Services;
 
 use App\Modules\Wms\Models\CostAllocation;
 use App\Modules\Wms\Models\StockBalance;
+use App\Modules\Wms\Models\StockMovement;
 use App\Modules\Wms\Support\InventoryReconciliationCalculator;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Support\Facades\DB;
@@ -64,6 +65,8 @@ final class InventoryReconciliationService
             ->where('status', '!=', 'REVERSED')
             ->when($itemId, fn ($query) => $query->where('item_id', $itemId))
             ->selectRaw('COALESCE(SUM(value), 0) AS value')
+            ->selectRaw('COALESCE(SUM(CASE WHEN cost_status = "PENDING" THEN value ELSE 0 END), 0) AS pending_value')
+            ->selectRaw('COALESCE(SUM(CASE WHEN cost_status = "PENDING" THEN 1 ELSE 0 END), 0) AS pending_count')
             ->selectRaw('COALESCE(SUM(CASE WHEN journal_entry_id IS NULL THEN 1 ELSE 0 END), 0) AS unlinked_count')
             ->first();
 
@@ -89,6 +92,8 @@ final class InventoryReconciliationService
             ->selectRaw('COALESCE(SUM(lines.debit - lines.credit), 0) AS value')
             ->value('value');
 
+        // Single-warehouse callers historically used where('allocations.warehouse_id', $warehouseId);
+        // this multi-warehouse form preserves the same scope without dropping authorized warehouses.
         $unresolvedLegacyReview = Schema::hasTable('wms_cost_allocation_reviews')
             ? DB::table('wms_cost_allocation_reviews as reviews')
                 ->join('wms_cost_allocations as allocations', 'allocations.id', '=', 'reviews.allocation_id')
@@ -97,6 +102,43 @@ final class InventoryReconciliationService
                 ->when($itemId, fn ($query) => $query->where('allocations.item_id', $itemId))
                 ->count()
             : 0;
+
+        $lineUnlinked = 0;
+        $lineMismatched = 0;
+        if (Schema::hasTable('wms_cost_allocation_journal_lines')) {
+            $allocationIds = CostAllocation::query()
+                ->whereIn('warehouse_id', $warehouseIds)
+                ->where('business_date', '<=', $asOfDate)
+                ->where('status', '!=', 'REVERSED')
+                ->when($itemId, fn ($query) => $query->where('item_id', $itemId));
+            $lineUnlinked = (clone $allocationIds)
+                ->leftJoin('wms_cost_allocation_journal_lines as links', 'links.allocation_id', '=', 'wms_cost_allocations.id')
+                ->whereNull('links.id')->count('wms_cost_allocations.id');
+            $lineMismatched = DB::table('wms_cost_allocations as allocations')
+                ->join('wms_cost_allocation_journal_lines as links', 'links.allocation_id', '=', 'allocations.id')
+                ->leftJoin('journal_entry_lines as lines', 'lines.id', '=', 'links.journal_entry_line_id')
+                ->whereIn('allocations.warehouse_id', $warehouseIds)
+                ->where('allocations.business_date', '<=', $asOfDate)
+                ->where('allocations.status', '!=', 'REVERSED')
+                ->when($itemId, fn ($query) => $query->where('allocations.item_id', $itemId))
+                ->where(fn ($query) => $query->whereNull('lines.id')->orWhereNull('links.identity_key')->orWhereNull('allocations.journal_entry_id')->orWhereColumn('lines.journal_entry_id', '!=', 'allocations.journal_entry_id')->orWhereColumn('links.revision', '!=', 'allocations.revision'))
+                ->distinct()->count('allocations.id');
+        }
+
+        // Receipt UOM conversion keeps its auditable rounding delta in the
+        // movement metadata. Read it without JSON SQL functions so the report
+        // remains portable across supported database drivers.
+        $roundingDifference = StockMovement::query()
+            ->whereIn('warehouse_id', $warehouseIds)
+            ->where('business_date', '<=', $asOfDate)
+            ->where('status', '!=', 'REVERSED')
+            ->when($itemId, fn ($query) => $query->where('item_id', $itemId))
+            ->get(['metadata'])
+            ->sum(function ($movement): float {
+                $metadata = is_array($movement->metadata) ? $movement->metadata : [];
+
+                return (float) ($metadata['rounding_delta'] ?? 0.0);
+            });
 
         return [
             'as_of_date' => $asOfDate,
@@ -109,6 +151,11 @@ final class InventoryReconciliationService
                 (string) ($balance ?? '0'),
                 (string) ($gl ?? '0'),
                 (int) ($allocation->unlinked_count ?? 0),
+                (int) ($allocation->pending_count ?? 0),
+                (string) ($allocation->pending_value ?? '0'),
+                $lineUnlinked,
+                $lineMismatched,
+                (string) $roundingDifference,
             ),
         ];
     }

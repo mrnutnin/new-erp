@@ -19,10 +19,10 @@ use App\Modules\Finance\Models\PaymentTerm;
 use App\Modules\Finance\Services\OpenItemService;
 use App\Modules\Finance\Support\PaymentDueDate;
 use App\Modules\Platform\Services\AuditLogger;
-use App\Modules\Wms\Models\PurchaseDocument;
-use App\Modules\Wms\Support\PurchaseDocumentCalculator;
-use App\Modules\Wms\Support\PurchaseDocumentState;
-use App\Modules\Wms\Support\PurchaseThreeWayMatchGate;
+use App\Modules\Purchasing\Models\PurchaseDocument;
+use App\Modules\Purchasing\Support\PurchaseDocumentCalculator;
+use App\Modules\Purchasing\Support\PurchaseDocumentState;
+use App\Modules\Purchasing\Support\PurchaseThreeWayMatchGate;
 use Brick\Math\BigDecimal;
 use Brick\Math\RoundingMode;
 use DomainException;
@@ -90,6 +90,9 @@ final class PurchaseDocumentPostingService
                 || $document->rounding_amount !== '0.00') {
                 throw ValidationException::withMessages(['tax_treatment' => 'ไม่รองรับรูปแบบภาษีของเอกสารนี้']);
             }
+            if ($document->document_type === 'CREDIT_NOTE' && ! in_array($document->credit_note_mode, ['RETURN', 'NON_RETURN'], true)) {
+                throw ValidationException::withMessages(['credit_note_mode' => 'ต้องระบุรูปแบบ Credit Note เป็น RETURN หรือ NON_RETURN']);
+            }
 
             $warehouse = Warehouse::query()->whereKey($document->warehouse_id)->sharedLock()->firstOrFail();
             $apAccount = null;
@@ -115,7 +118,9 @@ final class PurchaseDocumentPostingService
 
             $this->assertTaxCodes($document);
             $this->assertWithholding($document);
-            ($this->matchGate ?? new PurchaseThreeWayMatchGate)->assertReady($document);
+            if ($document->document_type === 'INVOICE') {
+                ($this->matchGate ?? new PurchaseThreeWayMatchGate)->assertReady($document);
+            }
             $calculation = PurchaseDocumentCalculator::calculate($document->lines->map(fn ($line) => [
                 'description' => $line->description, 'account_id' => $line->account_id,
                 'quantity' => $line->quantity, 'unit_price' => $line->unit_price,
@@ -356,7 +361,8 @@ final class PurchaseDocumentPostingService
             ])->keyBy('id');
         foreach ($document->lines as $index => $line) {
             $account = $accounts->get($line->account_id);
-            if (! $account || ! $account->is_active || ! $account->is_postable || $account->control_account_type !== null
+            $isReturnInventoryLine = $document->document_type === 'CREDIT_NOTE' && $document->credit_note_mode === 'RETURN' && $account?->control_account_type === 'INVENTORY';
+            if (! $account || ! $account->is_active || ! $account->is_postable || ($account->control_account_type !== null && ! $isReturnInventoryLine)
                 || ! in_array($account->type_code, ['ASSET', 'EXPENSE'], true)) {
                 throw ValidationException::withMessages(["lines.{$index}.account_id" => 'บัญชีรายการต้องเป็นบัญชีย่อย Asset/Expense ที่เปิดใช้งานและไม่ใช่บัญชีคุม']);
             }
@@ -408,6 +414,8 @@ final class PurchaseDocumentPostingService
         $invoice = $document->document_type === 'INVOICE';
         $lines = $document->lines->map(fn ($line) => [
             'account_id' => $line->account_id,
+            'subledger_type' => $line->item_id ? 'ITEM' : null,
+            'subledger_id' => $line->item_id ? (string) $line->item_id : null,
             'description' => $line->description,
             'debit' => $invoice ? ($document->tax_treatment === 'VAT_IN' ? $line->tax_base : $line->gross_amount) : '0.00',
             'credit' => $invoice ? '0.00' : ($document->tax_treatment === 'VAT_IN' ? $line->tax_base : $line->gross_amount),

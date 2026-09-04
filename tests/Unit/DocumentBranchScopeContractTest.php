@@ -24,23 +24,19 @@ use App\Modules\Pos\Models\SalesRfq;
 use App\Modules\Pos\Requests\SavePhysicalSaleRequest;
 use App\Modules\Pos\Requests\SavePosReceiptRequest;
 use App\Modules\Wms\Controllers\InventoryAdjustmentController;
-use App\Modules\Wms\Controllers\PurchaseDocumentController;
-use App\Modules\Wms\Controllers\PurchaseOrderController;
-use App\Modules\Wms\Controllers\PurchaseReceiptController;
-use App\Modules\Wms\Controllers\PurchaseRequisitionController;
 use App\Modules\Wms\Controllers\StockController;
 use App\Modules\Wms\Controllers\StockCountController;
 use App\Modules\Wms\Controllers\StockValuationController;
 use App\Modules\Wms\Controllers\TransferController;
-use App\Modules\Wms\Models\GoodsReceipt;
+use App\Modules\Purchasing\Models\GoodsReceipt;
 use App\Modules\Wms\Models\InventoryAdjustmentDocument;
 use App\Modules\Wms\Models\IssueDocument;
 use App\Modules\Wms\Models\IssueReturn;
-use App\Modules\Wms\Models\PurchaseDocument;
-use App\Modules\Wms\Models\PurchaseOrder;
-use App\Modules\Wms\Models\PurchaseRequisition;
+use App\Modules\Purchasing\Models\PurchaseDocument;
+use App\Modules\Purchasing\Models\PurchaseOrder;
+use App\Modules\Purchasing\Models\PurchaseRequisition;
 use App\Modules\Wms\Models\StockCountDocument;
-use App\Modules\Wms\Requests\SavePurchaseOrderRequest;
+use App\Modules\Purchasing\Requests\SavePurchaseOrderRequest;
 use App\Modules\Wms\Services\InventoryReconciliationService;
 use App\Modules\Wms\Services\TransferMovementService;
 use PHPUnit\Framework\TestCase;
@@ -86,20 +82,26 @@ class DocumentBranchScopeContractTest extends TestCase
         self::assertStringContainsString("'warehouse_id' => \$transfer->destination_warehouse_id", $transferService);
     }
 
-    public function test_purchasing_controllers_have_a_branch_scope_without_changing_legacy_wms_scope(): void
+    public function test_purchasing_controllers_have_a_branch_scope_after_wms_cleanup(): void
     {
-        foreach ([PurchaseDocumentController::class, PurchaseOrderController::class, PurchaseReceiptController::class, PurchaseRequisitionController::class] as $class) {
-            $source = file_get_contents((new \ReflectionClass($class))->getFileName());
+        $purchasingDocument = file_get_contents((new \ReflectionClass(\App\Modules\Purchasing\Controllers\PurchaseDocumentController::class))->getFileName());
+        self::assertStringContainsString("moduleRoutePrefix() === 'purchasing' ? 'branch_id' : 'warehouse_id'", $purchasingDocument);
 
-            self::assertStringContainsString("moduleRoutePrefix() === 'purchasing' ? 'branch_id' : 'warehouse_id'", $source);
-        }
+        $purchasingOrder = file_get_contents((new \ReflectionClass(\App\Modules\Purchasing\Controllers\PurchaseOrderController::class))->getFileName());
+        self::assertStringContainsString("moduleRoutePrefix() === 'purchasing' ? 'branch_id' : 'warehouse_id'", $purchasingOrder);
+
+        $purchasingRequisition = file_get_contents((new \ReflectionClass(\App\Modules\Purchasing\Controllers\PurchaseRequisitionController::class))->getFileName());
+        self::assertStringContainsString("moduleRoutePrefix() === 'purchasing' ? 'branch_id' : 'warehouse_id'", $purchasingRequisition);
+
+        $purchasingReceipt = file_get_contents((new \ReflectionClass(\App\Modules\Purchasing\Controllers\PurchaseReceiptController::class))->getFileName());
+        self::assertStringContainsString("moduleRoutePrefix() === 'purchasing' ? 'branch_id' : 'warehouse_id'", $purchasingReceipt);
     }
 
     public function test_direct_purchasing_po_requires_an_authorized_branch_warehouse_while_pr_and_edits_keep_their_warehouse(): void
     {
         self::assertStringContainsString("'warehouse_id'", file_get_contents((new \ReflectionClass(SavePurchaseOrderRequest::class))->getFileName()));
 
-        $controller = file_get_contents((new \ReflectionClass(PurchaseOrderController::class))->getFileName());
+        $controller = file_get_contents((new \ReflectionClass(\App\Modules\Purchasing\Controllers\PurchaseOrderController::class))->getFileName());
         self::assertStringContainsString("elseif (\$this->moduleRoutePrefix() === 'purchasing')", $controller);
         self::assertStringContainsString('$warehouse = $this->purchasingWarehouse($request, $values[\'warehouse_id\'] ?? null);', $controller);
         self::assertStringContainsString("->where('warehouses.branch_id', \$request->attributes->get('selectedBranch')->id)", $controller);
@@ -107,11 +109,10 @@ class DocumentBranchScopeContractTest extends TestCase
 
     public function test_purchasing_goods_receipt_limits_sources_and_actions_to_authorized_branch_warehouses(): void
     {
-        $base = file_get_contents((new \ReflectionClass(PurchaseReceiptController::class))->getFileName());
         $purchasing = file_get_contents((new \ReflectionClass(\App\Modules\Purchasing\Controllers\PurchaseReceiptController::class))->getFileName());
 
-        self::assertStringContainsString("whereIn('warehouse_id', \$this->authorizedWarehouseIds(\$request))", $base);
-        self::assertStringContainsString('in_array((int) $receipt->warehouse_id, $this->authorizedWarehouseIds($request), true)', $base);
+        self::assertStringContainsString("whereIn('warehouse_id', \$this->authorizedWarehouseIds(\$request))", $purchasing);
+        self::assertStringContainsString('in_array((int) $receipt->warehouse_id, $this->authorizedWarehouseIds($request), true)', $purchasing);
         self::assertStringContainsString("where('branch_id', (int) \$request->attributes->get('selectedBranch')->id)", $purchasing);
     }
 
@@ -152,7 +153,7 @@ class DocumentBranchScopeContractTest extends TestCase
         self::assertStringContainsString('whereIn(\'entries.warehouse_id\', $this->warehouseIds($warehouse))', $reports);
         self::assertStringContainsString('int|array $warehouseId', $inventory);
         self::assertStringContainsString("'warehouse_ids' => \$warehouseIds", $inventory);
-        self::assertStringContainsString("whereIn('warehouse_id', \$this->authorizedWarehouseIds(\$request))", $journalEntries);
+        self::assertStringContainsString("whereIn('warehouse_id', \$this->authorizedWarehouseIds(\$request, \$request->input('branch_id')))", $journalEntries);
     }
 
     public function test_wms_warehouse_picker_is_limited_to_the_current_branch_and_user_permission(): void

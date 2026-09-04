@@ -41,10 +41,10 @@
 
 เพิ่ม permission แยกในรอบ implement ถัดไป:
 
-- `wms.purchase-requisitions.print`
-- `wms.purchase-orders.print`
-- `wms.purchase-receipts.print`
-- `wms.purchase-documents.print`
+- `purchasing.purchase-requisitions.print`
+- `purchasing.purchase-orders.print`
+- `purchasing.purchase-receipts.print`
+- `purchasing.purchase-documents.print`
 
 ทุก print/download route ต้องตรวจ `auth`, module/program, selected warehouse/document scope และ permission print แยกจาก view/update/approve/post
 

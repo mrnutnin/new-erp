@@ -3,17 +3,24 @@
 namespace App\Modules\Accounting\Controllers;
 
 use App\Http\Controllers\Controller;
+use App\Models\CompanySetting;
 use App\Modules\Accounting\Models\Account;
 use App\Modules\Accounting\Models\FiscalPeriod;
+use App\Modules\Accounting\Models\JournalBook;
 use App\Modules\Accounting\Services\AccountingReportService;
+use App\Modules\Platform\Services\DocumentPdfRenderer;
 use App\Modules\Settings\Services\GlobalSettings;
 use App\Modules\Wms\Services\InventoryReconciliationService;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
+use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 use Yajra\DataTables\Facades\DataTables;
 
@@ -21,7 +28,22 @@ class AccountingReportController extends Controller
 {
     public function trialBalanceIndex(AccountingReportService $reports): View
     {
-        return view('Accounting::reports.trial-balance', ['periods' => $reports->periods()]);
+        return view('Accounting::reports.trial-balance', ['periods' => $reports->periods()] + $this->reportFilterOptions(request()));
+    }
+
+    public function workingPaperIndex(AccountingReportService $reports): View
+    {
+        return view('Accounting::reports.working-paper', ['periods' => $reports->periods()] + $this->reportFilterOptions(request()));
+    }
+
+    public function workingPaperData(Request $request, AccountingReportService $reports): JsonResponse
+    {
+        return $this->trialBalanceData($request, $reports);
+    }
+
+    public function workingPaperExport(Request $request, AccountingReportService $reports): StreamedResponse
+    {
+        return $this->trialBalanceExport($request, $reports);
     }
 
     public function trialBalanceData(Request $request, AccountingReportService $reports): JsonResponse
@@ -57,11 +79,14 @@ class AccountingReportController extends Controller
     public function generalLedgerIndex(AccountingReportService $reports): View
     {
         $selectedAccountId = (int) request('account_id');
-        $assetScope = request()->boolean('asset_scope');
+        $user = request()->user();
 
         return view('Accounting::reports.general-ledger', [
             'periods' => $reports->periods(),
             'selectedAccount' => $selectedAccountId > 0 ? Account::query()->withTrashed()->find($selectedAccountId) : null,
+            'branches' => $user->branches()->where('branches.is_active', true)->orderBy('code')->get(),
+            'warehouses' => $user->warehouses()->where('warehouses.is_active', true)->with('branch')->orderBy('code')->get(),
+            'journalBooks' => JournalBook::query()->where('is_active', true)->orderBy('sort_order')->orderBy('code')->get(['id', 'code', 'name']),
         ]);
     }
 
@@ -91,9 +116,14 @@ class AccountingReportController extends Controller
     {
         $period = $this->period($request);
         $accountId = $request->integer('account_id') ?: null;
-        $warehouseIds = $this->authorizedWarehouseIds($request);
+        $warehouseIds = $this->authorizedWarehouseIds($request, $request->input('branch_scope'), $request->integer('warehouse_id') ?: null);
         $assetBranchId = $request->boolean('asset_scope') ? (int) $request->attributes->get('selectedBranch')->id : null;
-        $query = $reports->generalLedgerQuery($period, $warehouseIds, $accountId, $assetBranchId);
+        $bookId = $request->integer('journal_book_id') ?: null;
+        $dateFrom = $request->date('date_from')?->toDateString();
+        $dateTo = $request->date('date_to')?->toDateString();
+        $dateFrom = $dateFrom ? max($period->start_date->toDateString(), $dateFrom) : null;
+        $dateTo = $dateTo ? min($period->end_date->toDateString(), $dateTo) : null;
+        $query = $reports->generalLedgerQuery($period, $warehouseIds, $accountId, $assetBranchId, $bookId, $dateFrom, $dateTo);
 
         $dateFormat = (string) $settings->value('date_format');
 
@@ -102,7 +132,7 @@ class AccountingReportController extends Controller
             ->order(fn (Builder $query) => $this->applyLedgerOrder($query, $request))
             ->addColumn('entry_date_label', fn ($line) => Carbon::parse($line->entry_date)->format($dateFormat))
             ->addColumn('entry_url', fn ($line) => route('accounting.journal-entries.show', $line->journal_entry_id))
-            ->with('summary', $reports->generalLedgerSummary($period, $warehouseIds, $accountId, $assetBranchId))
+            ->with('summary', $reports->generalLedgerSummary($period, $warehouseIds, $accountId, $assetBranchId, $bookId, $dateFrom, $dateTo))
             ->toJson();
     }
 
@@ -110,10 +140,14 @@ class AccountingReportController extends Controller
     {
         $period = $this->period($request);
         $accountId = $request->integer('account_id') ?: null;
-        $query = $reports->generalLedgerQuery($period, $this->authorizedWarehouseIds($request), $accountId);
-        if ($request->boolean('asset_scope')) {
-            $query = $reports->generalLedgerQuery($period, $this->authorizedWarehouseIds($request), $accountId, (int) $request->attributes->get('selectedBranch')->id);
-        }
+        $warehouseIds = $this->authorizedWarehouseIds($request, $request->input('branch_scope'), $request->integer('warehouse_id') ?: null);
+        $assetBranchId = $request->boolean('asset_scope') ? (int) $request->attributes->get('selectedBranch')->id : null;
+        $bookId = $request->integer('journal_book_id') ?: null;
+        $dateFrom = $request->date('date_from')?->toDateString();
+        $dateTo = $request->date('date_to')?->toDateString();
+        $dateFrom = $dateFrom ? max($period->start_date->toDateString(), $dateFrom) : null;
+        $dateTo = $dateTo ? min($period->end_date->toDateString(), $dateTo) : null;
+        $query = $reports->generalLedgerQuery($period, $warehouseIds, $accountId, $assetBranchId, $bookId, $dateFrom, $dateTo);
         $this->applyLedgerSearch($query, $request);
         $this->applyLedgerOrder($query, $request);
 
@@ -136,7 +170,7 @@ class AccountingReportController extends Controller
 
     public function profitLossIndex(AccountingReportService $reports): View
     {
-        return view('Accounting::reports.profit-loss', ['periods' => $reports->periods()]);
+        return view('Accounting::reports.profit-loss', ['periods' => $reports->periods()] + $this->reportFilterOptions(request()));
     }
 
     public function profitLossData(Request $request, AccountingReportService $reports): JsonResponse
@@ -172,14 +206,14 @@ class AccountingReportController extends Controller
 
     public function comparativeIncomeIndex(AccountingReportService $reports): View
     {
-        return view('Accounting::reports.comparative-income', ['periods' => $reports->periods()]);
+        return view('Accounting::reports.comparative-income', ['periods' => $reports->periods()] + $this->reportFilterOptions(request()));
     }
 
     public function comparativeIncomeData(Request $request, AccountingReportService $reports): JsonResponse
     {
         $period = $this->period($request);
         $comparisonPeriod = $this->comparisonPeriod($request);
-        $warehouseIds = $this->authorizedWarehouseIds($request);
+        $warehouseIds = $this->authorizedWarehouseIds($request, $request->input('branch_scope'), $request->integer('warehouse_id') ?: null);
         $query = $reports->comparativeIncomeQuery($period, $comparisonPeriod, $warehouseIds);
 
         return DataTables::eloquent($query)
@@ -195,7 +229,7 @@ class AccountingReportController extends Controller
     {
         $period = $this->period($request);
         $comparisonPeriod = $this->comparisonPeriod($request);
-        $query = $reports->comparativeIncomeQuery($period, $comparisonPeriod, $this->authorizedWarehouseIds($request));
+        $query = $reports->comparativeIncomeQuery($period, $comparisonPeriod, $this->authorizedWarehouseIds($request, $request->input('branch_scope'), $request->integer('warehouse_id') ?: null));
         $this->applyComparativeIncomeSearch($query, $request);
         $this->applyComparativeIncomeOrder($query, $request);
 
@@ -211,7 +245,7 @@ class AccountingReportController extends Controller
 
     public function balanceSheetIndex(AccountingReportService $reports): View
     {
-        return view('Accounting::reports.balance-sheet', ['periods' => $reports->periods()]);
+        return view('Accounting::reports.balance-sheet', ['periods' => $reports->periods()] + $this->reportFilterOptions(request()));
     }
 
     public function balanceSheetData(Request $request, AccountingReportService $reports): JsonResponse
@@ -247,15 +281,16 @@ class AccountingReportController extends Controller
 
     public function taxReportIndex(AccountingReportService $reports): View
     {
-        return view('Accounting::reports.tax', ['periods' => $reports->periods()]);
+        return view('Accounting::reports.tax', ['periods' => $reports->periods(), 'taxKind' => request()->input('tax_kind')] + $this->reportFilterOptions(request()));
     }
 
     public function taxReportData(Request $request, AccountingReportService $reports, GlobalSettings $settings): JsonResponse
     {
         $period = $this->period($request);
         $dateBasis = $request->input('date_basis') === 'TAX_POINT' ? 'TAX_POINT' : 'SETTLEMENT';
+        $taxKind = in_array($request->input('tax_kind'), ['VAT_IN', 'VAT_OUT'], true) ? $request->input('tax_kind') : null;
         $warehouseIds = $this->authorizedWarehouseIds($request);
-        $query = $reports->taxReportQuery($period, $warehouseIds, $dateBasis);
+        $query = $reports->taxReportQuery($period, $warehouseIds, $dateBasis, $taxKind);
 
         $dateFormat = (string) $settings->value('date_format');
 
@@ -265,7 +300,7 @@ class AccountingReportController extends Controller
             ->addColumn('tax_point_date_label', fn ($row) => filled($row->tax_point_date) ? Carbon::parse($row->tax_point_date)->format($dateFormat) : '—')
             ->addColumn('tax_settlement_date_label', fn ($row) => filled($row->tax_settlement_date) ? Carbon::parse($row->tax_settlement_date)->format($dateFormat) : '—')
             ->addColumn('entry_url', fn ($row) => route('accounting.journal-entries.show', $row->journal_entry_id))
-            ->with('totals', $reports->taxReportTotals($period, $warehouseIds, $dateBasis))
+            ->with('totals', $reports->taxReportTotals($period, $warehouseIds, $dateBasis, $taxKind))
             ->toJson();
     }
 
@@ -273,7 +308,8 @@ class AccountingReportController extends Controller
     {
         $period = $this->period($request);
         $dateBasis = $request->input('date_basis') === 'TAX_POINT' ? 'TAX_POINT' : 'SETTLEMENT';
-        $query = $reports->taxReportQuery($period, $this->authorizedWarehouseIds($request), $dateBasis);
+        $taxKind = in_array($request->input('tax_kind'), ['VAT_IN', 'VAT_OUT'], true) ? $request->input('tax_kind') : null;
+        $query = $reports->taxReportQuery($period, $this->authorizedWarehouseIds($request), $dateBasis, $taxKind);
         $this->applyTaxSearch($query, $request);
         $this->applyTaxOrder($query, $request, $dateBasis);
         $dateFormat = (string) $settings->value('date_format');
@@ -299,12 +335,12 @@ class AccountingReportController extends Controller
 
     public function withholdingExpenseIndex(): View
     {
-        return view('Accounting::reports.withholding', ['direction' => 'PAYABLE', 'title' => 'รายงานภาษีหัก ณ ที่จ่าย ค่าใช้จ่าย']);
+        return view('Accounting::reports.withholding', ['direction' => 'PAYABLE', 'title' => 'รายงานภาษีหัก ณ ที่จ่าย ค่าใช้จ่าย'] + $this->reportFilterOptions(request()));
     }
 
     public function withholdingReceivedIndex(): View
     {
-        return view('Accounting::reports.withholding', ['direction' => 'RECEIVABLE', 'title' => 'รายงานภาษีถูกหัก ณ ที่จ่าย']);
+        return view('Accounting::reports.withholding', ['direction' => 'RECEIVABLE', 'title' => 'รายงานภาษีถูกหัก ณ ที่จ่าย'] + $this->reportFilterOptions(request()));
     }
 
     public function withholdingData(Request $request): JsonResponse
@@ -317,6 +353,8 @@ class AccountingReportController extends Controller
             ->join('tax_codes as tc', 'tc.id', '=', 'wr.tax_code_id')
             ->leftJoin('finance_settlements as s', 's.id', '=', 'wr.settlement_id')
             ->where('wr.direction', $direction)->whereIn('oi.warehouse_id', $warehouseIds)
+            ->when($direction === 'PAYABLE' && $request->input('form_type') === 'PND3', fn ($q) => $q->where('p.type', 'INDIVIDUAL'))
+            ->when($direction === 'PAYABLE' && $request->input('form_type') === 'PND53', fn ($q) => $q->where('p.type', 'COMPANY'))
             ->when($request->filled('date_from'), fn ($q) => $q->where('wr.settlement_date', '>=', $request->input('date_from')))
             ->when($request->filled('date_to'), fn ($q) => $q->where('wr.settlement_date', '<=', $request->input('date_to')))
             ->select(['wr.id', 'wr.settlement_date', 'wr.tax_base', 'wr.tax_amount', 'oi.document_number', 'p.code as party_code', 'p.name as party_name', 'tc.code as tax_code', 'tc.name as tax_name', 's.document_number as settlement_number']);
@@ -331,6 +369,40 @@ class AccountingReportController extends Controller
             ->toJson();
     }
 
+    public function withholdingExport(Request $request): StreamedResponse
+    {
+        $form = $request->input('form_type') === 'PND3' ? 'PND3' : 'PND53';
+        $partyType = $form === 'PND3' ? 'INDIVIDUAL' : 'COMPANY';
+        $warehouseIds = $this->authorizedWarehouseIds($request, $request->input('branch_scope'), $request->integer('warehouse_id') ?: null);
+        $query = \DB::table('finance_withholding_realizations as wr')
+            ->join('finance_open_items as oi', 'oi.id', '=', 'wr.open_item_id')->join('parties as p', 'p.id', '=', 'oi.party_id')->join('tax_codes as tc', 'tc.id', '=', 'wr.tax_code_id')
+            ->where('wr.direction', 'PAYABLE')->where('p.type', $partyType)->whereIn('oi.warehouse_id', $warehouseIds)
+            ->when(is_array($request->input('ids')), fn ($q) => $q->whereIn('wr.id', collect($request->input('ids'))->filter(fn ($id) => is_numeric($id))->map(fn ($id) => (int) $id)->all()))
+            ->when(is_array($request->input('exclude_ids')), fn ($q) => $q->whereNotIn('wr.id', collect($request->input('exclude_ids'))->filter(fn ($id) => is_numeric($id))->map(fn ($id) => (int) $id)->all()))
+            ->when($request->filled('date_from'), fn ($q) => $q->where('wr.settlement_date', '>=', $request->input('date_from')))
+            ->when($request->filled('date_to'), fn ($q) => $q->where('wr.settlement_date', '<=', $request->input('date_to')))
+            ->select(['wr.id', 'wr.settlement_date', 'wr.tax_base', 'wr.tax_amount', 'oi.document_number', 'p.code as party_code', 'p.name as party_name', 'p.tax_id', 'p.branch_code', 'tc.code as tax_code']);
+
+        return response()->streamDownload(function () use ($query, $form) {
+            echo "\xEF\xBB\xBF";
+            echo implode(',', ['แบบ', 'วันที่จ่าย', 'เลขประจำตัวผู้เสียภาษี', 'ชื่อผู้รับเงิน', 'สาขา', 'เลขที่เอกสาร', 'Tax Code', 'ฐานภาษี', 'ภาษีหัก ณ ที่จ่าย'])."\r\n";
+            foreach ($query->orderBy('wr.settlement_date')->lazy(500) as $row) {
+                $values = [$form, $row->settlement_date, $row->tax_id, $row->party_name, $row->branch_code, $row->document_number, $row->tax_code, $row->tax_base, $row->tax_amount];
+                echo implode(',', array_map(fn ($value) => '"'.str_replace('"', '""', (string) $value).'"', $values))."\r\n";
+            }
+        }, strtolower($form).'-'.now()->format('Ymd-His').'.csv', ['Content-Type' => 'text/csv; charset=UTF-8']);
+    }
+
+    public function withholdingCertificate(Request $request, int $realization, DocumentPdfRenderer $renderer): Response
+    {
+        $row = \DB::table('finance_withholding_realizations as wr')->join('finance_open_items as oi', 'oi.id', '=', 'wr.open_item_id')->join('parties as p', 'p.id', '=', 'oi.party_id')->join('tax_codes as tc', 'tc.id', '=', 'wr.tax_code_id')->where('wr.id', $realization)->where('wr.direction', 'PAYABLE')->whereIn('oi.warehouse_id', $this->authorizedWarehouseIds($request, 'all'))->select(['wr.settlement_date', 'wr.tax_base', 'wr.tax_amount', 'oi.document_number', 'p.name as party_name', 'p.type as party_type', 'p.tax_id', 'p.branch_code', 'tc.code as tax_code', 'tc.name as tax_name'])->firstOrFail();
+        $company = CompanySetting::query()->first();
+        $formType = $row->party_type === 'INDIVIDUAL' ? 'ภ.ง.ด.3' : 'ภ.ง.ด.53';
+        $pdf = $renderer->renderView('Accounting::reports.withholding-certificate', compact('row', 'company', 'formType'));
+
+        return response($pdf, 200, ['Content-Type' => 'application/pdf', 'Content-Disposition' => 'inline; filename="50-thawi-'.$realization.'.pdf"']);
+    }
+
     private function applyWithholdingSearch($query, Request $request): void
     {
         $search = trim((string) $request->input('search.value', ''));
@@ -341,14 +413,83 @@ class AccountingReportController extends Controller
 
     public function reconciliationIndex(AccountingReportService $reports): View
     {
-        return view('Accounting::reports.reconciliation', ['periods' => $reports->periods()]);
+        return view('Accounting::reports.reconciliation', ['periods' => $reports->periods()] + $this->reportFilterOptions(request()));
+    }
+
+    public function arApReconciliationIndex(AccountingReportService $reports): View
+    {
+        return view('Accounting::reports.ar-ap-reconciliation', ['periods' => $reports->periods()] + $this->reportFilterOptions(request()));
+    }
+
+    public function arApReconciliationData(Request $request, AccountingReportService $reports): JsonResponse
+    {
+        $period = $this->period($request);
+        $warehouseIds = $this->authorizedWarehouseIds($request, $request->input('branch_scope'), $request->integer('warehouse_id') ?: null);
+        $query = $reports->controlReconciliationQuery($period, $warehouseIds)
+            ->whereIn('accounts.control_account_type', ['AR', 'AP']);
+        $totals = DB::query()->fromSub($query->toBase(), 'rows')
+            ->selectRaw('COALESCE(SUM(gl_balance), 0) AS gl_balance')
+            ->selectRaw('COALESCE(SUM(subledger_balance), 0) AS subledger_balance')
+            ->selectRaw('COALESCE(SUM(difference), 0) AS difference')
+            ->first();
+
+        return DataTables::eloquent($query)
+            ->filter(fn (Builder $query) => $this->applyReconciliationSearch($query, $request))
+            ->order(fn (Builder $query) => $this->applyReconciliationOrder($query, $request))
+            ->addColumn('account_url', fn ($row) => route('accounting.reports.general-ledger.index', ['period_id' => $period->id, 'account_id' => $row->id]))
+            ->with('totals', ['gl_balance' => (float) ($totals->gl_balance ?? 0), 'subledger_balance' => (float) ($totals->subledger_balance ?? 0), 'difference' => (float) ($totals->difference ?? 0)])
+            ->toJson();
+    }
+
+    public function cashFlowIndex(AccountingReportService $reports): View
+    {
+        $period = FiscalPeriod::query()->with('fiscalYear')->find((int) request('period_id'))
+            ?: FiscalPeriod::query()->with('fiscalYear')->where('start_date', '<=', now()->toDateString())->where('end_date', '>=', now()->toDateString())->first()
+            ?: FiscalPeriod::query()->with('fiscalYear')->latest('start_date')->firstOrFail();
+        return view('Accounting::reports.cash-flow', ['periods' => $reports->periods(), 'selectedPeriodId' => $period->id] + $this->reportFilterOptions(request()));
+    }
+
+    public function cashFlowData(Request $request): JsonResponse
+    {
+        $period = $this->period($request);
+        $warehouseIds = $this->authorizedWarehouseIds($request, $request->input('branch_scope'), $request->integer('warehouse_id') ?: null);
+        $query = DB::table('journal_entry_lines as lines')
+            ->join('journal_entries as entries', 'entries.id', '=', 'lines.journal_entry_id')
+            ->join('accounts', 'accounts.id', '=', 'lines.account_id')
+            ->whereIn('entries.warehouse_id', $warehouseIds)->where('entries.status', 'POSTED')
+            ->whereBetween('entries.entry_date', [$period->start_date, $period->end_date])
+            ->whereIn('accounts.control_account_type', ['CASH', 'BANK'])
+            ->select(['accounts.id', 'accounts.code', 'accounts.name'])
+            ->selectRaw('COALESCE(SUM(lines.debit), 0) AS debit')
+            ->selectRaw('COALESCE(SUM(lines.credit), 0) AS credit')
+            ->selectRaw('COALESCE(SUM(lines.debit - lines.credit), 0) AS net')
+            ->groupBy('accounts.id', 'accounts.code', 'accounts.name');
+        $totals = DB::query()->fromSub($query, 'cash_flow')->selectRaw('COALESCE(SUM(debit),0) debit, COALESCE(SUM(credit),0) credit, COALESCE(SUM(net),0) net')->first();
+        return DataTables::query($query)->with('totals', ['debit' => (float) $totals->debit, 'credit' => (float) $totals->credit, 'net' => (float) $totals->net])->toJson();
+    }
+
+    public function postingExceptionsIndex(Request $request): View
+    {
+        return view('Accounting::reports.posting-exceptions', $this->reportFilterOptions($request));
+    }
+
+    public function postingExceptionsData(Request $request): JsonResponse
+    {
+        if (! Schema::hasTable('asset_depreciation_runs')) {
+            return response()->json(['draw' => $request->integer('draw'), 'recordsTotal' => 0, 'recordsFiltered' => 0, 'data' => []]);
+        }
+        $query = DB::table('asset_depreciation_runs as runs')->join('branches', 'branches.id', '=', 'runs.branch_id')->join('fiscal_periods', 'fiscal_periods.id', '=', 'runs.fiscal_period_id')->where('runs.status', 'FAILED')->when($request->input('branch_id') && is_numeric($request->input('branch_id')), fn ($q) => $q->where('runs.branch_id', (int) $request->input('branch_id')))->when($request->input('date_from'), fn ($q, $date) => $q->where('runs.run_through_date', '>=', $date))->when($request->input('date_to'), fn ($q, $date) => $q->where('runs.run_through_date', '<=', $date))->select(['runs.id', 'runs.document_number', 'runs.run_through_date', 'runs.error_message', 'branches.name as branch_name', 'fiscal_periods.name as period_name']);
+        return DataTables::query($query)->addColumn('show_url', fn ($row) => route('asset.depreciations.show', $row->id))->toJson();
     }
 
     public function reconciliationData(Request $request, AccountingReportService $reports, InventoryReconciliationService $inventory): JsonResponse
     {
         $period = $this->period($request);
-        $warehouseIds = $this->authorizedWarehouseIds($request);
+        $warehouseIds = $this->authorizedWarehouseIds($request, $request->input('branch_scope'), $request->integer('warehouse_id') ?: null);
         $query = $reports->controlReconciliationQuery($period, $warehouseIds);
+        if (in_array($request->input('reconciliation_type'), ['AR', 'AP', 'INVENTORY'], true)) {
+            $query->where('accounts.control_account_type', $request->input('reconciliation_type'));
+        }
         $inventoryTotals = $inventory->totals($period->end_date->format('Y-m-d'), $warehouseIds, $request->integer('item_id') ?: null);
 
         return DataTables::eloquent($query)
@@ -363,7 +504,7 @@ class AccountingReportController extends Controller
     public function reconciliationExport(Request $request, AccountingReportService $reports): StreamedResponse
     {
         $period = $this->period($request);
-        $query = $reports->controlReconciliationQuery($period, $this->authorizedWarehouseIds($request));
+        $query = $reports->controlReconciliationQuery($period, $this->authorizedWarehouseIds($request, $request->input('branch_scope'), $request->integer('warehouse_id') ?: null));
         $this->applyReconciliationSearch($query, $request);
         $this->applyReconciliationOrder($query, $request);
 
@@ -388,11 +529,29 @@ class AccountingReportController extends Controller
     }
 
     /** @return list<int> */
-    private function authorizedWarehouseIds(Request $request): array
+    private function authorizedWarehouseIds(Request $request, mixed $branchScope = null, ?int $warehouseId = null): array
     {
-        return $request->user()->warehouses()->where('is_active', true)
-            ->where('branch_id', (int) $request->attributes->get('selectedBranch')->id)
-            ->pluck('warehouses.id')->map(fn ($id): int => (int) $id)->all();
+        $query = $request->user()->warehouses()->where('warehouses.is_active', true);
+        if ($warehouseId !== null) {
+            $query->where('warehouses.id', $warehouseId);
+        }
+        if ($branchScope !== 'all') {
+            $branchId = is_numeric($branchScope) ? (int) $branchScope : (int) $request->attributes->get('selectedBranch')->id;
+            $query->where('warehouses.branch_id', $branchId);
+        }
+
+        return $query->pluck('warehouses.id')->map(fn ($id): int => (int) $id)->all();
+    }
+
+    /** @return array{branches: Collection, warehouses: Collection} */
+    private function reportFilterOptions(Request $request): array
+    {
+        $user = $request->user();
+
+        return [
+            'branches' => $user->branches()->where('branches.is_active', true)->orderBy('code')->get(),
+            'warehouses' => $user->warehouses()->where('warehouses.is_active', true)->with('branch')->orderBy('code')->get(),
+        ];
     }
 
     private function comparisonPeriod(Request $request): FiscalPeriod

@@ -14,8 +14,8 @@ final class LegacyRepairReportCommandTest extends TestCase
         $this->assertStringContainsString("'expected_state' => 'REVIEW_REQUIRED'", $source);
         $this->assertStringContainsString("'evidence' => [", $source);
         $this->assertStringContainsString('idempotency_plan', $source);
-        $this->assertStringNotContainsString('->update(', $source);
-        $this->assertStringNotContainsString('->delete(', $source);
+        $this->assertStringContainsString("if (! \$this->option('dry-run'))", $source);
+        $this->assertStringContainsString('CostAllocationReviewService::class', $source);
     }
 
     public function test_report_filters_pending_linked_allocations_and_never_auto_classifies_them(): void

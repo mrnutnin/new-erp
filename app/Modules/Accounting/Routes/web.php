@@ -4,6 +4,8 @@ use App\Modules\Accounting\Controllers\AccountController;
 use App\Modules\Accounting\Controllers\AccountImportController;
 use App\Modules\Accounting\Controllers\AccountingReportController;
 use App\Modules\Accounting\Controllers\AccountMappingController;
+use App\Modules\Accounting\Controllers\BankReconciliationController;
+use App\Modules\Accounting\Controllers\AccountingAuditLogController;
 use App\Modules\Accounting\Controllers\EntryController;
 use App\Modules\Accounting\Controllers\FiscalPeriodController;
 use App\Modules\Accounting\Controllers\FiscalYearController;
@@ -13,7 +15,7 @@ use App\Modules\Accounting\Controllers\TaxCodeController;
 use App\Modules\Accounting\Controllers\WorkflowController;
 use Illuminate\Support\Facades\Route;
 
-Route::middleware(['auth', 'warehouse', 'permission:accounting.journal-entries.view'])
+Route::middleware(['auth', 'program:accounting', 'warehouse', 'permission:accounting.journal-entries.view'])
     ->prefix('accounting')
     ->name('accounting.')
     ->group(function () {
@@ -25,6 +27,7 @@ Route::middleware(['auth', 'program:accounting', 'warehouse'])
     ->name('accounting.')
     ->group(function () {
         Route::get('/', EntryController::class)->name('index');
+        Route::get('/dashboard/summary', [EntryController::class, 'summary'])->name('dashboard.summary');
         Route::get('/workflow', [WorkflowController::class, 'index'])->name('workflow.index');
 
         Route::get('/accounts', [AccountController::class, 'index'])->middleware('permission:accounting.accounts.view')->name('accounts.index');
@@ -44,6 +47,7 @@ Route::middleware(['auth', 'program:accounting', 'warehouse'])
         Route::put('/account-import/{batch}/commit', [AccountImportController::class, 'commit'])->middleware('permission:accounting.accounts.import.commit')->name('account-import.commit');
         Route::get('/account-mappings', [AccountMappingController::class, 'index'])->middleware('permission:accounting.account-mappings.view')->name('account-mappings.index');
         Route::get('/account-mappings/data', [AccountMappingController::class, 'data'])->middleware('permission:accounting.account-mappings.view')->name('account-mappings.data');
+        Route::get('/account-mappings/readiness', [AccountMappingController::class, 'readiness'])->middleware('permission:accounting.account-mappings.view')->name('account-mappings.readiness');
         Route::get('/account-mappings/account-options', [AccountMappingController::class, 'accountOptions'])->middleware('permission:accounting.account-mappings.view')->name('account-mappings.account-options');
         Route::get('/account-mappings/create', [AccountMappingController::class, 'create'])->middleware('permission:accounting.account-mappings.create')->name('account-mappings.create');
         Route::post('/account-mappings', [AccountMappingController::class, 'store'])->middleware('permission:accounting.account-mappings.create')->name('account-mappings.store');
@@ -67,10 +71,14 @@ Route::middleware(['auth', 'program:accounting', 'warehouse'])
         Route::put('/fiscal-periods/{fiscalPeriod}/soft-close', [FiscalPeriodController::class, 'softClose'])->middleware('permission:accounting.periods.close')->name('fiscal-periods.soft-close');
         Route::put('/fiscal-periods/{fiscalPeriod}/reopen', [FiscalPeriodController::class, 'reopen'])->middleware('permission:accounting.periods.reopen')->name('fiscal-periods.reopen');
         Route::put('/fiscal-periods/{fiscalPeriod}/lock', [FiscalPeriodController::class, 'lock'])->middleware('permission:accounting.periods.lock')->name('fiscal-periods.lock');
+        Route::get('/fiscal-periods/{fiscalPeriod}/readiness', [FiscalPeriodController::class, 'readiness'])->middleware('permission:accounting.periods.view')->name('fiscal-periods.readiness');
 
         Route::get('/journal-books', [JournalBookController::class, 'index'])->middleware('permission:accounting.journal-books.view')->name('journal-books.index');
         Route::put('/journal-books', [JournalBookController::class, 'update'])->middleware('permission:accounting.journal-books.update')->name('journal-books.update');
 
+        Route::get('/reports/working-paper', [AccountingReportController::class, 'workingPaperIndex'])->middleware('permission:accounting.reports.view')->name('reports.working-paper.index');
+        Route::get('/reports/working-paper/data', [AccountingReportController::class, 'workingPaperData'])->middleware('permission:accounting.reports.view')->name('reports.working-paper.data');
+        Route::get('/reports/working-paper/export', [AccountingReportController::class, 'workingPaperExport'])->middleware('permission:accounting.reports.view')->name('reports.working-paper.export');
         Route::get('/reports/trial-balance', [AccountingReportController::class, 'trialBalanceIndex'])->middleware('permission:accounting.reports.view')->name('reports.trial-balance.index');
         Route::get('/reports/trial-balance/data', [AccountingReportController::class, 'trialBalanceData'])->middleware('permission:accounting.reports.view')->name('reports.trial-balance.data');
         Route::get('/reports/trial-balance/export', [AccountingReportController::class, 'trialBalanceExport'])->middleware('permission:accounting.reports.view')->name('reports.trial-balance.export');
@@ -81,6 +89,12 @@ Route::middleware(['auth', 'program:accounting', 'warehouse'])
         Route::get('/reports/profit-loss', [AccountingReportController::class, 'profitLossIndex'])->middleware('permission:accounting.reports.view')->name('reports.profit-loss.index');
         Route::get('/reports/profit-loss/data', [AccountingReportController::class, 'profitLossData'])->middleware('permission:accounting.reports.view')->name('reports.profit-loss.data');
         Route::get('/reports/profit-loss/export', [AccountingReportController::class, 'profitLossExport'])->middleware('permission:accounting.reports.view')->name('reports.profit-loss.export');
+        Route::get('/reports/cash-flow', [AccountingReportController::class, 'cashFlowIndex'])->middleware('permission:accounting.reports.view')->name('reports.cash-flow.index');
+        Route::get('/reports/cash-flow/data', [AccountingReportController::class, 'cashFlowData'])->middleware('permission:accounting.reports.view')->name('reports.cash-flow.data');
+        Route::get('/reports/posting-exceptions', [AccountingReportController::class, 'postingExceptionsIndex'])->middleware('permission:accounting.reports.view')->name('reports.posting-exceptions.index');
+        Route::get('/reports/posting-exceptions/data', [AccountingReportController::class, 'postingExceptionsData'])->middleware('permission:accounting.reports.view')->name('reports.posting-exceptions.data');
+        Route::get('/audit-log', [AccountingAuditLogController::class, 'index'])->middleware('permission:accounting.reports.view')->name('audit-log.index');
+        Route::get('/audit-log/data', [AccountingAuditLogController::class, 'data'])->middleware('permission:accounting.reports.view')->name('audit-log.data');
         Route::get('/reports/comparative-income', [AccountingReportController::class, 'comparativeIncomeIndex'])->middleware('permission:accounting.reports.comparative-income.view')->name('reports.comparative-income.index');
         Route::get('/reports/comparative-income/data', [AccountingReportController::class, 'comparativeIncomeData'])->middleware('permission:accounting.reports.comparative-income.view')->name('reports.comparative-income.data');
         Route::get('/reports/comparative-income/export', [AccountingReportController::class, 'comparativeIncomeExport'])->middleware('permission:accounting.reports.comparative-income.view')->name('reports.comparative-income.export');
@@ -92,13 +106,25 @@ Route::middleware(['auth', 'program:accounting', 'warehouse'])
         Route::get('/reports/tax/export', [AccountingReportController::class, 'taxReportExport'])->middleware('permission:accounting.reports.view')->name('reports.tax.export');
         Route::get('/reports/withholding-expense', [AccountingReportController::class, 'withholdingExpenseIndex'])->middleware('permission:accounting.reports.withholding-expense.view')->name('reports.withholding-expense.index');
         Route::get('/reports/withholding-expense/data', [AccountingReportController::class, 'withholdingData'])->middleware('permission:accounting.reports.withholding-expense.view')->name('reports.withholding-expense.data');
+        Route::get('/reports/withholding-expense/export', [AccountingReportController::class, 'withholdingExport'])->middleware('permission:accounting.reports.withholding-expense.view')->name('reports.withholding-expense.export');
+        Route::get('/reports/withholding-expense/{realization}/certificate', [AccountingReportController::class, 'withholdingCertificate'])->middleware('permission:accounting.reports.withholding-expense.view')->name('reports.withholding-expense.certificate');
         Route::get('/reports/withholding-received', [AccountingReportController::class, 'withholdingReceivedIndex'])->middleware('permission:accounting.reports.withholding-received.view')->name('reports.withholding-received.index');
         Route::get('/reports/withholding-received/data', [AccountingReportController::class, 'withholdingData'])->middleware('permission:accounting.reports.withholding-received.view')->name('reports.withholding-received.data');
         Route::get('/reports/reconciliation', [AccountingReportController::class, 'reconciliationIndex'])->middleware('permission:accounting.reports.view')->name('reports.reconciliation.index');
         Route::get('/reports/reconciliation/data', [AccountingReportController::class, 'reconciliationData'])->middleware('permission:accounting.reports.view')->name('reports.reconciliation.data');
         Route::get('/reports/reconciliation/export', [AccountingReportController::class, 'reconciliationExport'])->middleware('permission:accounting.reports.view')->name('reports.reconciliation.export');
+        Route::get('/reports/ar-ap-reconciliation', [AccountingReportController::class, 'arApReconciliationIndex'])->middleware('permission:accounting.reports.view')->name('reports.ar-ap-reconciliation.index');
+        Route::get('/reports/ar-ap-reconciliation/data', [AccountingReportController::class, 'arApReconciliationData'])->middleware('permission:accounting.reports.view')->name('reports.ar-ap-reconciliation.data');
+        Route::get('/bank-reconciliation', [BankReconciliationController::class, 'index'])->middleware('permission:accounting.reports.view')->name('bank-reconciliation.index');
+        Route::get('/bank-reconciliation/template', [BankReconciliationController::class, 'template'])->middleware('permission:accounting.reports.view')->name('bank-reconciliation.template');
+        Route::post('/bank-reconciliation', [BankReconciliationController::class, 'store'])->middleware('permission:accounting.reports.view')->name('bank-reconciliation.store');
+        Route::get('/bank-reconciliation/{bankStatement}', [BankReconciliationController::class, 'show'])->middleware('permission:accounting.reports.view')->name('bank-reconciliation.show');
+        Route::post('/bank-reconciliation-lines/{bankStatementLine}/match', [BankReconciliationController::class, 'match'])->middleware('permission:accounting.reports.view')->name('bank-reconciliation.match');
+        Route::post('/bank-reconciliation/{bankStatement}/reconcile', [BankReconciliationController::class, 'reconcile'])->middleware('permission:accounting.reports.view')->name('bank-reconciliation.reconcile');
 
         Route::get('/journal-entries', [JournalEntryController::class, 'index'])->middleware('permission:accounting.journal-entries.view')->name('journal-entries.index');
+        Route::get('/journal-approval-queue', [JournalEntryController::class, 'approvalQueue'])->middleware('permission:accounting.journal-entries.view')->name('journal-approval-queue.index');
+        Route::get('/journal-approval-queue/data', [JournalEntryController::class, 'approvalQueueData'])->middleware('permission:accounting.journal-entries.view')->name('journal-approval-queue.data');
         Route::get('/journal-entries/account-options', [JournalEntryController::class, 'accountOptions'])->middleware('permission:accounting.accounts.view')->name('journal-entries.account-options');
         Route::get('/journal-entries/data', [JournalEntryController::class, 'data'])->middleware('permission:accounting.journal-entries.view')->name('journal-entries.data');
         Route::get('/journal-entries/export', [JournalEntryController::class, 'export'])->middleware('permission:accounting.journal-entries.view')->name('journal-entries.export');

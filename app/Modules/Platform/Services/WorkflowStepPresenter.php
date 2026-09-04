@@ -8,7 +8,8 @@ final class WorkflowStepPresenter
     {
         $allowed = $user->hasPermission($step['permission']);
         $hasRoute = is_string($step['route'] ?? null) && \Route::has($step['route']);
-        $available = $allowed && $hasRoute;
+        $hasRuntimeReadiness = is_array($step['readiness'] ?? null);
+        $available = $allowed && ($hasRoute || $hasRuntimeReadiness);
         $runtimeNotReady = $available && (bool) ($step['runtime_not_ready'] ?? false);
         $configurationWarning = $available && (bool) ($step['configuration_warning'] ?? false);
         $pending = $available && (int) ($step['pending_count'] ?? 0) > 0;
@@ -39,7 +40,7 @@ final class WorkflowStepPresenter
             $step['status_badge_class'] = 'app-status-warning';
         }
 
-        $step['url'] = $available && ! $runtimeNotReady ? route($step['route']) : null;
+        $step['url'] = $available && ! $runtimeNotReady && $hasRoute ? route($step['route']) : null;
         $step['block_reason'] = $available && ! $pending && ! $runtimeNotReady && ! $configurationWarning
             ? null
             : ($step['block_reason'] ?? ($allowed

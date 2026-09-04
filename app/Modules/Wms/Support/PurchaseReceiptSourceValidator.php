@@ -4,7 +4,7 @@ namespace App\Modules\Wms\Support;
 
 use App\Modules\Accounting\Models\JournalEntry;
 use App\Modules\Wms\Models\CostAllocation;
-use App\Modules\Wms\Models\PurchaseDocument;
+use App\Modules\Purchasing\Models\PurchaseDocument;
 use App\Modules\Wms\Models\StockMovement;
 use Illuminate\Validation\ValidationException;
 

@@ -13,7 +13,7 @@ final class OperationalPostingAccountResolutionAuditTest extends TestCase
     {
         $root = dirname(__DIR__, 2).'/app/Modules';
         $exceptions = [
-            'Wms/Services/ProcurementSourceBuilder.php',
+            'Purchasing/Services/ProcurementSourceBuilder.php',
             'Wms/Services/RecostGlPostingService.php',
         ];
         $legacyCallers = [];

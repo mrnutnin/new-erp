@@ -66,7 +66,9 @@ class ContextController extends Controller
     public function branches(Request $request): View
     {
         $branches = Branch::query()->where('is_active', true)
-            ->whereIn('id', $request->user()->warehouses()->where('warehouses.is_active', true)->select('warehouses.branch_id'))
+            ->when($request->user()->branches()->exists(),
+                fn ($query) => $query->whereIn('id', $request->user()->branches()->select('branches.id')),
+                fn ($query) => $query->whereIn('id', $request->user()->warehouses()->where('warehouses.is_active', true)->select('warehouses.branch_id')))
             ->orderBy('name')
             ->get();
 
@@ -79,7 +81,9 @@ class ContextController extends Controller
     public function storeBranch(SelectBranchRequest $request, ContextSelection $selection, BranchContext $branchContext, AuditLogger $audit): JsonResponse|RedirectResponse
     {
         $branch = Branch::query()->whereKey($request->integer('branch_id'))->where('is_active', true)
-            ->whereIn('id', $request->user()->warehouses()->where('warehouses.is_active', true)->select('warehouses.branch_id'))
+            ->when($request->user()->branches()->exists(),
+                fn ($query) => $query->whereIn('id', $request->user()->branches()->select('branches.id')),
+                fn ($query) => $query->whereIn('id', $request->user()->warehouses()->where('warehouses.is_active', true)->select('warehouses.branch_id')))
             ->first();
 
         abort_if($branch === null, 403, 'คุณไม่มีสิทธิ์ใช้งานสาขานี้');
@@ -130,13 +134,13 @@ class ContextController extends Controller
 
     /**
      * Keep old database rows usable while program entry routes are migrated.
-     * `wms` is the internal program code for Purchasing; `inventory` is WMS.
+     * `purchasing` is Purchasing; `wms` is warehouse/inventory operations.
      */
     private function canonicalEntryRoute(string $programCode, string $entryRoute): string
     {
         return match ($programCode) {
-            'wms' => 'purchasing.index',
-            'inventory' => 'wms.index',
+            'purchasing' => 'purchasing.index',
+            'wms' => 'wms.index',
             default => $entryRoute,
         };
     }

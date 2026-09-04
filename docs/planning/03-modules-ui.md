@@ -40,9 +40,8 @@ UI ต้องใช้ Bootstrap 5 component และ utility class ที่
 Purchasing and WMS are separate bounded contexts. Purchasing owns Supplier,
 PR, PO, Goods Receipt and Purchase/AP documents; WMS owns item, stock,
 movement and costing. The canonical Purchasing URL is `/purchasing` and its
-route namespace is `purchasing.*`. `/wms` remains the inventory URL; legacy
-`/wms/purchase-*` routes are compatibility aliases during the incremental
-namespace extraction and must not receive new business rules.
+route namespace is `purchasing.*`. `/wms` remains the inventory URL; the former
+`/wms/purchase-*` compatibility surface has been retired after cutover.
 
 - supplier and supplier terms
 - purchase requisition (draft → submit → approve/reject)

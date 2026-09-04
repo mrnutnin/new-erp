@@ -87,6 +87,16 @@
                                     <div class="invalid-feedback d-block" data-error-for="program_ids"></div>
                                 </div>
                                 <div class="col-12 col-md-6">
+                                    <label class="form-label" for="branch_ids">สาขาที่มีสิทธิ์เข้าใช้งาน</label>
+                                    <select class="form-select js-select2" id="branch_ids" name="branch_ids[]" multiple>
+                                        @foreach ($branches as $branch)
+                                            <option value="{{ $branch->id }}" @selected(in_array($branch->id, old('branch_ids', $selectedBranches)))>{{ $branch->code }} — {{ $branch->name }}</option>
+                                        @endforeach
+                                    </select>
+                                    <div class="form-text">หากไม่เลือก ระบบจะใช้สาขาจากคลังที่กำหนดไว้</div>
+                                    <div class="invalid-feedback d-block" data-error-for="branch_ids"></div>
+                                </div>
+                                <div class="col-12 col-md-6">
                                     <label class="form-label" for="warehouse_ids">คลังที่เข้าใช้ได้</label>
                                     <select class="form-select js-select2" id="warehouse_ids" name="warehouse_ids[]" multiple>
                                         @foreach ($warehouses as $warehouse)

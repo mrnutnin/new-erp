@@ -36,6 +36,7 @@
 - [~] Fiscal Year / Fiscal Period
 - [x] Users, Roles, Permissions และ Warehouse assignment
 - [x] Document Sequence / Format
+- [ ] Document Template Builder / Preview (แผนพัฒนาอยู่ที่ `docs/planning/18-document-template-builder-plan.md`; ownership เป็น Platform, จุดเข้าจาก Global Settings และยังไม่เริ่ม implementation)
 - [~] Global settings: AVG/FIFO, VAT/WHT, negative stock, retention และ module capability
 - [ ] Password reset และ session policy
 - [ ] Import template / staged validate-preview-commit
@@ -52,12 +53,39 @@
 
 - [x] Dashboard
 - [x] Workflow Center: Setup / Daily operations
-- [x] Supplier
+- [x] Supplier (Controller และ views ย้าย ownership ไป Purchasing แล้ว; legacy WMS route/controller/view ถูก retire; canonical Purchasing program boundary และ contract tests ผ่าน)
 - [~] Purchase Receipt Draft (persistence/UOM-cost snapshot พร้อม; ยังไม่สร้าง Stock/GL)
-- [~] Purchase Requisition (Draft/Submit/Approve/Reject/Void; Manual UI sign-off ยังรอ)
-- [~] Purchase Order และ Partial Receipt (PR→PO linkage พร้อม; Partial Receipt foundation พร้อม; Purchase Document ↔ PO ↔ Receipt allocation schema พร้อม; ยังไม่เปิด posting)
-- [~] ใบตั้งหนี้ซื้อ / ใบลดหนี้ซื้อ (แยกเมนูและ route filter แล้ว; ใบตั้งหนี้เลือกโหมด `สินค้า/วัตถุดิบ` หรือ `ค่าใช้จ่ายทั่วไป` ก่อน, โหมดสินค้าให้เลือก Supplier→VAT→PO/GR แล้วเติมรายการ, โหมดค่าใช้จ่ายกรองเฉพาะ Item ประเภท SERVICE และไม่แสดง PO/GR; ใบตั้งหนี้มี allocation หลาย GR ต่อบรรทัดและใบลดหนี้อ้างอิงใบตั้งหนี้ที่ Post แล้ว; ยังรอ MySQL/manual QA หลาย GR และ VAT profile ของ Supplier)
-- [ ] Purchase Return / Landed Cost
+- [x] Purchase Requisition (Draft/Submit/Approve/Reject/Void; Controller, Model/Line, Request, `PurchaseRequisitionState` support และ views ย้าย ownership ไป Purchasing แล้ว; stale adapter และ legacy WMS route/controller/request/view/support ถูก cleanup; canonical permission/layout และ Manual UI/Owner sign-off ผ่าน)
+- [~] Purchase Order และ Partial Receipt (PR→PO linkage พร้อม; Purchase Order และ Goods Receipt Controller, model/line, request contract และ views ย้าย ownership ไป Purchasing แล้ว; legacy WMS Purchasing surface ถูก retire; canonical view รองรับ Purchasing permission/layout; DataTable/option routes ผ่าน wildcard collision audit; Manual UI/Owner sign-off ผ่าน; MySQL integration Purchase Document inventory posting ผ่านและ rollback-safe; Partial Receipt foundation พร้อม; ยังคงเรียก WMS service boundary สำหรับ stock/cost; Purchase Document ↔ PO ↔ Receipt allocation schema พร้อม; ยังไม่เปิด posting เป็นค่า default)
+- [~] ใบตั้งหนี้ซื้อ / ใบลดหนี้ซื้อ (แยกเมนูและ route filter แล้ว; Purchase Document/AP Controller, Purchasing-only PDF Controller/view/route/permission, state/calculator support, views, allocation/variance models และ AP Request contracts อยู่ Purchasing แล้ว; 3-way matching Contract/Policy/Service/Gate คงเป็น WMS integration support; legacy WMS Purchasing route/view/PDF surface ถูก retire และผ่าน route collision/frontend audit; Manual UI/Owner sign-off ผ่าน; Stock/Cost/GL posting ยังคงผ่าน WMS service boundary; flow สินค้า/ค่าใช้จ่าย, หลาย GR และ VAT profile มี QA รองรับ)
+
+> Manual UI/Owner sign-off (2026-09-03): ผู้ใช้ยืนยันว่า Purchasing UI ใช้งานได้แล้ว ครอบคลุม canonical sidebar, PR/PO/GR/AP/Landed Cost screens, DataTable, form และ route navigation; legacy WMS Purchasing surface ถูก retire เพราะยังไม่มีผู้ใช้งานจริง.
+
+> MySQL integration QA (2026-09-03): Purchase Document inventory posting และ Goods Receipt → Landed Cost ผ่าน 2 tests / 32 assertions; เพิ่ม multi-GR coverage แล้ว โดย 2 posted receipts จาก PO เดียวกันถูก allocate แยกต่อ receipt ผ่าน 2 tests / 22 assertions และ rollback-safe. VAT IN exclusive/inclusive, NONE VAT และ Landed Cost allocation calculator ผ่าน 11 tests / 23 assertions; real Supplier VAT profile ผ่าน read-only MySQL QA 1 test / 8 assertions.
+
+> Focused Purchasing regression QA (2026-09-03): Purchasing/PR/PO/GR/AP/Landed Cost/VAT/PDF boundary suite ผ่าน 87 tests / 674 assertions; แก้ test references ที่ยัง reflect WMS wrapper ให้ชี้ canonical Purchasing files แล้ว.
+
+> Cross-module cleanup (2026-09-03): Accounting journal drill-down และ Platform Workflow runtime/catalog เปลี่ยนมาใช้ canonical `purchasing.*` route/permission แล้ว; legacy WMS Purchasing routes/controllers/requests/views/domain support, purchase-model wrappers, orchestration services และ three-way matching support ถูกย้ายหรือลบแล้ว; ไม่ต้องเปิด compatibility window. WMS เหลือเฉพาะ inventory/cost integration boundary.
+
+> Final integration verification (2026-09-04): Local MySQL Landed Cost multi-GR/lifecycle, Supplier VAT profile และ Credit Purchase reversal ผ่าน 5 tests / 41 assertions; Inventory Purchase enabled smoke ผ่าน 1 test / 8 assertions. Persistent operational evidence test intentionally skipped ตาม execution flag.
+
+> Boundary hardening (2026-09-04): ย้าย three-way matching และ `LandedCostAllocationCalculator` ไป Purchasing Support; WMS คงเฉพาะ Stock Movement, Cost Allocation, RECOST และ GL integration. Unit boundary suite ผ่าน 38 tests / 453 assertions.
+
+> Purchase Return foundation (2026-09-04): เพิ่ม `SavePurchaseReturnRequest` และเชื่อม `PurchaseReturnEligibilityService` เพื่อตรวจ source, line ซ้ำ, Receipt เดียวกัน และจำนวนคืนคงเหลือ; ผ่าน 4 tests / 30 assertions. เพิ่ม `PurchaseReturnPostingContract`/`PurchaseReturnCreditNoteService` สำหรับกรณีคืนสินค้าจริงเพื่อสร้างและผูก Draft Credit Note จาก Posted Invoice แบบ NONE_VAT; เพิ่ม `credit_note_mode`, Request guard และตัวเลือกในฟอร์มเพื่อแยก non-return ซึ่งไม่สร้าง Stock/Cost movement พร้อม service-boundary guard. Migration local และ dedicated MySQL non-return guard/financial posting ผ่านแล้ว; เพิ่ม `PurchaseReturnPostingService` orchestration และ Return WMS boundary แล้ว; Partial calculation, AVG/FIFO cost resolver, WMS cost preflight, feature-gated partial movement writer, Journal linkage/immutable link writer, FIFO multi-layer aggregate linkage และ Partial MySQL E2E พร้อมแล้ว เหลือ Return state integration และ manual QA.
+- [x] Purchase Return + Credit Note (FIFO multi-layer aggregate Journal link แบบ atomic และ MySQL E2E ผ่านแล้ว; Partial Return state integration เปลี่ยน Return เป็น POSTED แบบ atomic แล้ว; policy ปัจจุบันบังคับยอด Credit Note = ต้นทุนรวม; Owner ทดสอบ UI/Workflow ผ่านแล้ว)
+
+> FIFO linkage regression verification (2026-09-04): Unit ผ่าน 8 tests / 21 assertions; Purchasing MySQL integration ผ่าน 9 tests / 60 assertions โดยมี persistent operational skip เดิม 1 รายการ.
+
+> FIFO multi-layer E2E verification (2026-09-04): Credit/Return regression class ผ่าน 7 tests / 34 assertions โดยมี persistent operational skip เดิม 1 รายการ; ยืนยัน 2 FIFO allocations ถูก link กับ Journal line เดียวแบบ atomic.
+
+> Partial Return state verification (2026-09-04): `postPartial()` ผ่าน MySQL 2 tests / 11 assertions; ยืนยัน Credit Note, Stock OUT, multi-layer allocation links และ Return `POSTED` อยู่ใน transaction เดียว.
+
+> Automated acceptance verification (2026-09-04): FIFO Partial Return retry/idempotency ผ่าน MySQL 1 test / 8 assertions; จำนวนเอกสาร, movement, allocation และ journal link คงเดิมหลัง retry จึงลด manual workflow verification เหลือเฉพาะ visual/UI sign-off.
+
+> Owner UI/Workflow sign-off (2026-09-04): ผู้ใช้ยืนยันการทดสอบผ่านแล้ว จึงปิด Manual QA ของ Purchase Return + Credit Note MVP.
+
+> Purchasing Dashboard (2026-09-04): เพิ่ม Dashboard แบบ section loading (`summary`, `work`, `trend`, `recent`) แยก request/cache ตามคลัง ใช้ Chart.js สำหรับแนวโน้ม PO และมี automated contract test; ไม่โหลด query หนักทั้งหมดใน initial request.
+- [~] Purchase Return / Landed Cost (มี migration, Models, lifecycle, allocation calculator, WMS RECOST/GL bridge, gated Post endpoint, UI/routes, UX pass รายการ/ตัวกรอง/ฟอร์ม/รายละเอียด, server-side DataTable, auto document number ผ่าน Global Setting sequence `LANDED_COST`, Create แสดง Receipt ที่รอ Post Stock พร้อมทางไปหน้าต้นทาง, contract tests 9 tests / 33 assertions และ MySQL live Post integration 1 test / 18 assertions; MySQL integration รวมกับ Purchase Document ผ่าน 2 tests / 32 assertions และ rollback-safe; ยังเหลือ Manual QA และ Workflow/report catalog)
 
 ### Core flow
 
@@ -300,7 +328,7 @@
 | ใบสั่งซื้อ (PO) | [~] | สร้างจาก PR หรือสร้างเอง, เลือก Supplier, partial receipt และ reference แล้ว; เหลือ QA ปลายทาง |
 | ใบรับสินค้า (GR) | [~] | รับบางส่วน, UOM/cost snapshot และเชื่อม PO แล้ว; Inventory→GL ใช้เฉพาะ local feature flag ที่เปิดอย่างมีเงื่อนไข |
 | ใบตั้งหนี้ซื้อ (Credit Purchase / AP Invoice) | [~] | แยกโหมดสินค้า/วัตถุดิบกับค่าใช้จ่าย, เลือกหลาย GR และเชื่อม AP/Inventory foundation แล้ว; local MySQL Purchase/GR → Stock Movement → Cost Allocation → Journal ผ่านรวม 3 tests / 25 assertions (มี 1 skip ตาม feature flag); เหลือ QA posting/ภาษี |
-| คืนสินค้า Supplier และ Debit/Credit Note | [~] | มี issue/return document, over-return guard และ Credit Purchase reversal adapter แล้ว; local MySQL + unit gate ผ่าน `8 tests / 25 assertions` (expected skip `1` ตาม feature flag). เหลือ manual UI/owner และ production operational sign-off |
+| คืนสินค้า Supplier และ Debit/Credit Note | [~] | เริ่ม Phase 1 แล้ว: มี Purchase Return header/line, source linkage, quantity/cost snapshot, credit-note link, decimal-safe over-return eligibility, Request, Draft/Submit/Approve/Void service, `credit_note_mode` และ Draft Credit Note linkage จาก Posted Invoice แบบ NONE_VAT สำหรับคืนสินค้าจริง; non-return ไม่กระทบ Stock/Cost แต่ยังเหลือ integration/QA |
 | รายงาน PR / PO / GR / ซื้อเชื่อ | [x] | ศูนย์รวมรายงานปฏิบัติการ `purchasing.reports.index` ใช้งานได้แล้ว ลิงก์ไป DataTable server-side/filter ของเอกสารต้นทาง และผ่าน Manual UI/Owner sign-off แล้ว |
 
 ### WMS — ความสามารถที่จำเป็นสำหรับบริษัทซื้อมา-ขายไป (`TRADING`)

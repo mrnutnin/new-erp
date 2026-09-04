@@ -24,11 +24,13 @@ final class RecostRuntimeMySqlIntegrationReadinessTest extends TestCase
 
         $settings = DB::table('company_settings')->where('id', 1)->first();
         $oldVersion = (int) $settings->settings_version;
+        $oldNegativeMethod = $settings->negative_stock_cost_method;
         $counts = $this->counts();
         DB::beginTransaction();
         try {
             DB::table('company_settings')->where('id', 1)->update([
                 'allow_negative_stock' => 1,
+                'negative_stock_cost_method' => 'CURRENT_AVERAGE',
                 'settings_version' => $oldVersion + 1,
                 'updated_at' => now(),
             ]);
@@ -42,7 +44,7 @@ final class RecostRuntimeMySqlIntegrationReadinessTest extends TestCase
             }
         } finally {
             DB::rollBack();
-            DB::table('company_settings')->where('id', 1)->update(['settings_version' => $oldVersion]);
+            DB::table('company_settings')->where('id', 1)->update(['allow_negative_stock' => $settings->allow_negative_stock, 'negative_stock_cost_method' => $oldNegativeMethod, 'settings_version' => $oldVersion]);
             Cache::forget('global-settings.version');
             Cache::forget('global-settings.v'.($oldVersion + 1));
         }

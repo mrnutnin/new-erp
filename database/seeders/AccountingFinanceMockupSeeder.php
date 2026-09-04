@@ -20,7 +20,7 @@ use App\Modules\Finance\Models\PaymentTerm;
 use App\Modules\Finance\Models\Settlement;
 use App\Modules\Finance\Services\OpenItemService;
 use App\Modules\Pos\Models\SalesDocument;
-use App\Modules\Wms\Models\PurchaseDocument;
+use App\Modules\Purchasing\Models\PurchaseDocument;
 use Illuminate\Database\Seeder;
 
 class AccountingFinanceMockupSeeder extends Seeder

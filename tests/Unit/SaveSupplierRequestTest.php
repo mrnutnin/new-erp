@@ -2,7 +2,7 @@
 
 namespace Tests\Unit;
 
-use App\Modules\Wms\Requests\SaveSupplierRequest;
+use App\Modules\Purchasing\Requests\SaveSupplierRequest;
 use Illuminate\Translation\ArrayLoader;
 use Illuminate\Translation\Translator;
 use Illuminate\Validation\Factory;

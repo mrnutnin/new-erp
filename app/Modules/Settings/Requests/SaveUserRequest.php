@@ -32,6 +32,8 @@ class SaveUserRequest extends FormRequest
             'password' => [$user ? 'nullable' : 'required', 'string', 'min:8', 'confirmed'],
             'is_active' => ['required', 'boolean'],
             'primary_branch_id' => ['nullable', Rule::exists('branches', 'id')->where('is_active', true)->whereNull('deleted_at')],
+            'branch_ids' => ['nullable', 'array'],
+            'branch_ids.*' => ['integer', Rule::exists('branches', 'id')->where('is_active', true)->whereNull('deleted_at')],
             'program_ids' => ['nullable', 'array'],
             'program_ids.*' => ['integer', 'exists:programs,id'],
             'warehouse_ids' => ['nullable', 'array'],

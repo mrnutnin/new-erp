@@ -3,7 +3,7 @@
 namespace App\Modules\Wms\Services;
 
 use App\Models\Warehouse;
-use App\Modules\Wms\Models\PurchaseOrderLine;
+use App\Modules\Purchasing\Models\PurchaseOrderLine;
 use App\Modules\Wms\Models\StockBalance;
 use App\Modules\Wms\Models\StockPolicy;
 use App\Modules\Wms\Models\UomConversion;

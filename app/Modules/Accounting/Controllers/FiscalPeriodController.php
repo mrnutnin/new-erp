@@ -12,9 +12,18 @@ use DomainException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
+use Illuminate\View\View;
 
 class FiscalPeriodController extends Controller
 {
+    public function readiness(FiscalPeriod $fiscalPeriod): View
+    {
+        $fiscalPeriod->load('fiscalYear');
+        $failures = PeriodCloseGate::failures($fiscalPeriod);
+
+        return view('Accounting::fiscal-periods.readiness', compact('fiscalPeriod', 'failures'));
+    }
+
     public function softClose(ChangeFiscalPeriodStatusRequest $request, FiscalPeriod $fiscalPeriod, AuditLogger $audit): JsonResponse
     {
         $this->changeStatus($request, $fiscalPeriod, $audit, 'softClose');

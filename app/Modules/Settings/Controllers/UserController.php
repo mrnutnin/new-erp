@@ -57,7 +57,7 @@ class UserController extends Controller
             echo '<?xml version="1.0" encoding="UTF-8"?>';
             echo '<?mso-application progid="Excel.Sheet"?>';
             echo '<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet" xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet"><Worksheet ss:Name="Users"><Table>';
-            echo $this->excelRow(['ชื่อ', 'รหัสพนักงาน', 'Username', 'Email', 'สาขาหลัก', 'โปรแกรม', 'คลัง', 'สถานะ']);
+            echo $this->excelRow(['ชื่อ', 'รหัสพนักงาน', 'Username', 'Email', 'สาขาหลัก', 'สาขาที่เข้าใช้ได้', 'โปรแกรม', 'คลัง', 'สถานะ']);
 
             foreach ($query->lazy(500) as $user) {
                 echo $this->excelRow([
@@ -66,6 +66,7 @@ class UserController extends Controller
                     $user->username,
                     $user->email,
                     $user->primaryBranch?->name,
+                    $user->branches_count,
                     $user->programs_count,
                     $user->warehouses_count,
                     $user->is_active ? 'ใช้งาน' : 'ปิดใช้งาน',
@@ -86,7 +87,7 @@ class UserController extends Controller
     public function store(SaveUserRequest $request, AuditLogger $audit): JsonResponse|RedirectResponse
     {
         $user = DB::transaction(function () use ($audit, $request) {
-            $data = $request->safe()->except(['program_ids', 'warehouse_ids', 'role_ids', 'password_confirmation']);
+            $data = $request->safe()->except(['branch_ids', 'program_ids', 'warehouse_ids', 'role_ids', 'password_confirmation']);
             $user = User::query()->create($data);
             $this->syncAssignments($user, $request);
             $audit->record('settings.user.created', $user, [], [
@@ -102,7 +103,7 @@ class UserController extends Controller
 
     public function edit(User $user): View
     {
-        $user->load(['programs:id', 'warehouses:id', 'roles:id']);
+        $user->load(['branches:id', 'programs:id', 'warehouses:id', 'roles:id']);
 
         return $this->formView($user);
     }
@@ -138,8 +139,9 @@ class UserController extends Controller
                 'program_ids' => $user->programs()->pluck('programs.id')->all(),
                 'warehouse_ids' => $user->warehouses()->pluck('warehouses.id')->all(),
                 'role_ids' => $user->roles()->pluck('roles.id')->all(),
+                'branch_ids' => $user->branches()->pluck('branches.id')->all(),
             ];
-            $data = $request->safe()->except(['program_ids', 'warehouse_ids', 'role_ids', 'password_confirmation']);
+            $data = $request->safe()->except(['branch_ids', 'program_ids', 'warehouse_ids', 'role_ids', 'password_confirmation']);
 
             if (blank($data['password'] ?? null)) {
                 unset($data['password']);
@@ -184,6 +186,7 @@ class UserController extends Controller
             'branches' => Branch::query()->where('is_active', true)->orderBy('name')->get(),
             'roles' => Role::query()->where('is_active', true)->orderBy('name')->get(),
             'selectedPrograms' => $user->exists ? $user->programs->pluck('id')->all() : [],
+            'selectedBranches' => $user->exists ? $user->branches->pluck('id')->all() : [],
             'selectedWarehouses' => $user->exists ? $user->warehouses->pluck('id')->all() : [],
             'selectedRoles' => $user->exists ? $user->roles->pluck('id')->all() : [],
         ]);
@@ -191,6 +194,7 @@ class UserController extends Controller
 
     private function syncAssignments(User $user, SaveUserRequest $request): void
     {
+        $user->branches()->sync($request->input('branch_ids', []));
         $user->programs()->sync($request->input('program_ids', []));
         $user->warehouses()->sync($request->input('warehouse_ids', []));
         $user->roles()->sync($request->input('role_ids', []));
@@ -216,7 +220,7 @@ class UserController extends Controller
         return User::query()
             ->select(['users.id', 'users.name', 'users.username', 'users.employee_code', 'users.email', 'users.is_active', 'users.primary_branch_id'])
             ->with(['primaryBranch:id,code,name'])
-            ->withCount(['programs', 'warehouses']);
+            ->withCount(['branches', 'programs', 'warehouses']);
     }
 
     private function applyTableSearch(Builder $query, Request $request): void
@@ -239,9 +243,10 @@ class UserController extends Controller
     {
         $columns = [
             0 => 'users.name',
-            1 => 'programs_count',
-            2 => 'warehouses_count',
-            3 => 'users.is_active',
+            2 => 'branches_count',
+            3 => 'programs_count',
+            4 => 'warehouses_count',
+            5 => 'users.is_active',
         ];
         $column = $columns[(int) $request->input('order.0.column', 0)] ?? 'users.name';
         $direction = $request->input('order.0.dir') === 'desc' ? 'desc' : 'asc';

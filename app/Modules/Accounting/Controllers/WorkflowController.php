@@ -20,7 +20,7 @@ class WorkflowController extends Controller
             }, $workflow['steps']);
 
             return $workflow;
-        }, $runtime->decorate('accounting', WorkflowCatalog::for('accounting', $capability), auth()->user(), (int) $request->attributes->get('selectedWarehouse')->id));
+        }, $runtime->decorate('accounting', WorkflowCatalog::for('accounting', $capability), auth()->user(), (int) optional($request->attributes->get('selectedWarehouse'))->id));
 
         return view('Accounting::workflow.index', ['program' => $request->attributes->get('selectedProgram'), 'warehouse' => $request->attributes->get('selectedWarehouse'), 'workflows' => $workflows]);
     }

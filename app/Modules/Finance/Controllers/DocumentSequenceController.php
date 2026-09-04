@@ -40,6 +40,7 @@ class DocumentSequenceController extends Controller
         'GOODS_RECEIPT' => 'ใบรับสินค้า',
         'WMS_TRANSFER' => 'ใบโอนสินค้า',
         'STOCK_COUNT' => 'ใบนับสินค้า',
+        'LANDED_COST' => 'ต้นทุนแฝงสินค้า',
     ];
 
     public function index(): View

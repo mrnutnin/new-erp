@@ -2,7 +2,7 @@
 
 namespace Tests\Unit;
 
-use App\Modules\Wms\Requests\ChangePurchaseDocumentStatusRequest;
+use App\Modules\Purchasing\Requests\ChangePurchaseDocumentStatusRequest;
 use PHPUnit\Framework\TestCase;
 
 final class PurchaseDocumentApprovalRequestTest extends TestCase

@@ -2,7 +2,7 @@
 
 namespace App\Modules\Wms\Support;
 
-use App\Modules\Wms\Models\PurchaseDocument;
+use App\Modules\Purchasing\Models\PurchaseDocument;
 use App\Modules\Wms\Models\UomConversion;
 use Brick\Math\BigDecimal;
 use Brick\Math\RoundingMode;

@@ -2,7 +2,7 @@
 
 namespace Tests\Unit;
 
-use App\Modules\Wms\Support\PurchaseDocumentCalculator;
+use App\Modules\Purchasing\Support\PurchaseDocumentCalculator;
 use InvalidArgumentException;
 use PHPUnit\Framework\TestCase;
 

@@ -2,7 +2,7 @@
 
 namespace Tests\Unit;
 
-use App\Modules\Wms\Support\PurchaseThreeWayMatchGate;
+use App\Modules\Purchasing\Support\PurchaseThreeWayMatchGate;
 use PHPUnit\Framework\TestCase;
 
 final class PurchaseThreeWayMatchServiceItemGateTest extends TestCase

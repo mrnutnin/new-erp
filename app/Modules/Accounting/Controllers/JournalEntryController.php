@@ -3,6 +3,8 @@
 namespace App\Modules\Accounting\Controllers;
 
 use App\Http\Controllers\Controller;
+use App\Models\CompanySetting;
+use App\Models\Branch;
 use App\Modules\Accounting\Models\Account;
 use App\Modules\Accounting\Models\JournalEntry;
 use App\Modules\Accounting\Models\TaxCode;
@@ -25,9 +27,45 @@ use Yajra\DataTables\Facades\DataTables;
 
 class JournalEntryController extends Controller
 {
-    public function index(): View
+    public function index(Request $request): View
     {
-        return view('Accounting::journal-entries.index');
+        $branchQuery = Branch::query()->where('is_active', true)->orderBy('code');
+        if ($request->user()->branches()->exists()) {
+            $branchQuery->whereIn('id', $request->user()->branches()->select('branches.id'));
+        } else {
+            $branchQuery->whereIn('id', $request->user()->warehouses()->where('warehouses.is_active', true)->select('warehouses.branch_id'));
+        }
+
+        return view('Accounting::journal-entries.index', ['branches' => $branchQuery->get(['id', 'code', 'name'])]);
+    }
+
+    public function approvalQueue(Request $request): View
+    {
+        $branchQuery = Branch::query()->where('is_active', true)->orderBy('code');
+        if ($request->user()->branches()->exists()) {
+            $branchQuery->whereIn('id', $request->user()->branches()->select('branches.id'));
+        } else {
+            $branchQuery->whereIn('id', $request->user()->warehouses()->where('warehouses.is_active', true)->select('warehouses.branch_id'));
+        }
+
+        return view('Accounting::journal-entries.approval-queue', ['branches' => $branchQuery->get(['id', 'code', 'name'])]);
+    }
+
+    public function approvalQueueData(Request $request): JsonResponse
+    {
+        $decimalPlaces = max(0, min(4, (int) (CompanySetting::query()->value('tax_decimal_places') ?? 2)));
+        $query = $this->entriesQuery($request)->where('status', 'VALIDATED');
+
+        return DataTables::eloquent($query)
+            ->filter(fn (Builder $builder) => $this->applySearch($builder, $request))
+            ->order(fn (Builder $builder) => $this->applyOrder($builder, $request))
+            ->addColumn('entry_date_label', fn (JournalEntry $entry) => $entry->entry_date->format('d/m/Y'))
+            ->addColumn('book_label', fn (JournalEntry $entry) => $entry->book->code.' · '.$entry->book->name)
+            ->addColumn('branch_label', fn (JournalEntry $entry) => $entry->branch->name)
+            ->addColumn('debit_total', fn (JournalEntry $entry) => number_format((float) $entry->debit_total, $decimalPlaces, '.', ','))
+            ->addColumn('credit_total', fn (JournalEntry $entry) => number_format((float) $entry->credit_total, $decimalPlaces, '.', ','))
+            ->addColumn('show_url', fn (JournalEntry $entry) => route('accounting.journal-entries.show', $entry))
+            ->toJson();
     }
 
     public function accountOptions(Request $request): JsonResponse
@@ -45,6 +83,7 @@ class JournalEntryController extends Controller
     public function data(Request $request): JsonResponse
     {
         $canUpdate = $request->user()->hasPermission('accounting.journal-entries.update');
+        $decimalPlaces = max(0, min(4, (int) (CompanySetting::query()->value('tax_decimal_places') ?? 2)));
 
         return DataTables::eloquent($this->entriesQuery($request))
             ->filter(fn (Builder $query) => $this->applySearch($query, $request))
@@ -52,7 +91,7 @@ class JournalEntryController extends Controller
             ->addColumn('entry_date_label', fn (JournalEntry $entry) => $entry->entry_date->format('d/m/Y'))
             ->addColumn('book_label', fn (JournalEntry $entry) => $entry->book->code.' · '.$entry->book->name)
             ->addColumn('branch_label', fn (JournalEntry $entry) => $entry->branch->name)
-            ->addColumn('debit_total', fn (JournalEntry $entry) => number_format((float) $entry->debit_total, 2))
+            ->addColumn('debit_total', fn (JournalEntry $entry) => number_format((float) $entry->debit_total, $decimalPlaces, '.', ','))
             ->addColumn('show_url', fn (JournalEntry $entry) => route('accounting.journal-entries.show', $entry))
             ->addColumn('edit_url', fn (JournalEntry $entry) => $canUpdate && $entry->status === 'DRAFT' ? route('accounting.journal-entries.edit', $entry) : null)
             ->toJson();
@@ -201,7 +240,7 @@ class JournalEntryController extends Controller
     private function entriesQuery(Request $request): Builder
     {
         return JournalEntry::query()->with(['book:id,code,name', 'branch:id,name'])
-            ->whereIn('warehouse_id', $this->authorizedWarehouseIds($request))
+            ->whereIn('warehouse_id', $this->authorizedWarehouseIds($request, $request->input('branch_id')))
             ->withSum('lines as debit_total', 'debit')->withSum('lines as credit_total', 'credit');
     }
 
@@ -225,7 +264,7 @@ class JournalEntryController extends Controller
                 'asset.depreciation' => ['label' => 'รายการค่าเสื่อมราคา', 'url' => route('asset.depreciations.show', $sourceId), 'permission' => 'asset.depreciation.view'],
                 'asset.impairment' => ['label' => 'เอกสารด้อยค่าสินทรัพย์', 'url' => route('asset.impairments.show', $sourceId), 'permission' => 'asset.impairments.view'],
                 'asset.disposal', 'asset.write_off' => ['label' => 'เอกสารจำหน่ายสินทรัพย์', 'url' => route('asset.disposals.show', $sourceId), 'permission' => 'asset.disposals.view'],
-                'supplier_invoice.expense', 'supplier_invoice.inventory' => ['label' => 'เอกสารซื้อ', 'url' => route('wms.purchase-documents.show', $sourceId), 'permission' => 'wms.purchase-documents.view'],
+                'supplier_invoice.expense', 'supplier_invoice.inventory' => ['label' => 'เอกสารซื้อ', 'url' => route('purchasing.purchase-documents.show', $sourceId), 'permission' => 'purchasing.purchase-documents.view'],
                 'customer_payment', 'supplier_payment', 'customer_advance' => ['label' => 'เอกสารรับ/จ่ายชำระ', 'url' => route('finance.settlements.show', $sourceId), 'permission' => 'finance.settlements.view'],
                 default => $this->posSourceDocumentLink($entry, (int) $sourceId),
             };
@@ -269,14 +308,22 @@ class JournalEntryController extends Controller
 
     private function ensureWarehouseScope(Request $request, JournalEntry $entry): void
     {
-        abort_unless(in_array((int) $entry->warehouse_id, $this->authorizedWarehouseIds($request), true), 404);
+        // Journal Entries may be opened from the all-branches view; authorization
+        // still comes from the user's assigned warehouses.
+        abort_unless(in_array((int) $entry->warehouse_id, $this->authorizedWarehouseIds($request, 'all'), true), 404);
     }
 
     /** @return list<int> */
-    private function authorizedWarehouseIds(Request $request): array
+    private function authorizedWarehouseIds(Request $request, mixed $branchScope = null): array
     {
-        return $request->user()->warehouses()->where('is_active', true)
-            ->where('branch_id', (int) $request->attributes->get('selectedBranch')->id)
+        $query = $request->user()->warehouses()->where('is_active', true);
+        if ($branchScope !== 'all') {
+            $query->where('branch_id', $branchScope !== null && ctype_digit((string) $branchScope)
+                ? (int) $branchScope
+                : (int) $request->attributes->get('selectedBranch')->id);
+        }
+
+        return $query
             ->pluck('warehouses.id')->map(fn ($id): int => (int) $id)->all();
     }
 
@@ -298,6 +345,18 @@ class JournalEntryController extends Controller
 
     private function applySearch(Builder $query, Request $request): void
     {
+        if ($bookType = $request->string('book_type')->toString()) {
+            $query->whereHas('book', fn (Builder $bookQuery) => $bookQuery->where('type', $bookType));
+        }
+        if ($dateFrom = $request->date('date_from')) {
+            $query->whereDate('entry_date', '>=', $dateFrom);
+        }
+        if ($dateTo = $request->date('date_to')) {
+            $query->whereDate('entry_date', '<=', $dateTo);
+        }
+        if (($status = $request->string('status')->toString()) !== '') {
+            $query->where('status', $status);
+        }
         $search = trim((string) $request->input('search.value', ''));
         if ($search !== '') {
             $query->where(fn (Builder $query) => $query->where('entry_number', 'like', "%{$search}%")

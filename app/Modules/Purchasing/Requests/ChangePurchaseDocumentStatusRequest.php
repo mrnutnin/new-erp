@@ -2,8 +2,11 @@
 
 namespace App\Modules\Purchasing\Requests;
 
-/**
- * Purchasing-owned request seam. Validation remains shared until the
- * controller action contract is widened without breaking the WMS surface.
- */
-class ChangePurchaseDocumentStatusRequest extends \App\Modules\Wms\Requests\ChangePurchaseDocumentStatusRequest {}
+use Illuminate\Foundation\Http\FormRequest;
+
+class ChangePurchaseDocumentStatusRequest extends FormRequest
+{
+    public function authorize(): bool { return true; }
+    protected function prepareForValidation(): void { $this->merge(['reason' => trim((string) $this->input('reason'))]); }
+    public function rules(): array { $isApprove = $this->routeIs('purchasing.purchase-documents.approve'); return ['reason' => [$isApprove ? 'nullable' : 'required', 'string', $isApprove ? 'max:500' : 'min:10', 'max:500']]; }
+}

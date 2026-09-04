@@ -164,8 +164,8 @@
                     debit += Number($(this).find('[name$="[debit]"]').val()) || 0;
                     credit += Number($(this).find('[name$="[credit]"]').val()) || 0;
                 });
-                $('#debit-total').text(debit.toFixed(2));
-                $('#credit-total').text(credit.toFixed(2));
+                $('#debit-total').text(window.erpAccountingFormat(debit));
+                $('#credit-total').text(window.erpAccountingFormat(credit));
             }
 
             $('#add-line').on('click', function () {

@@ -2,7 +2,7 @@
 
 namespace App\Modules\Wms\Support;
 
-use App\Modules\Wms\Models\GoodsReceipt;
+use App\Modules\Purchasing\Models\GoodsReceipt;
 use Brick\Math\BigDecimal;
 use Brick\Math\RoundingMode;
 use Illuminate\Validation\ValidationException;

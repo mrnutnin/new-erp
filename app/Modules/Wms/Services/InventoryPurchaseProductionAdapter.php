@@ -11,10 +11,10 @@ use App\Modules\Accounting\Services\AccountMappingService;
 use App\Modules\Accounting\Services\JournalPostingService;
 use App\Modules\Wms\Models\CostAllocation;
 use App\Modules\Wms\Models\CostAllocationJournalLine;
-use App\Modules\Wms\Models\PurchaseDocument;
+use App\Modules\Purchasing\Models\PurchaseDocument;
 use App\Modules\Wms\Models\StockMovement;
 use App\Modules\Wms\Support\PurchaseLineMovementAdapter;
-use App\Modules\Wms\Support\PurchaseThreeWayMatchGate;
+use App\Modules\Purchasing\Support\PurchaseThreeWayMatchGate;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 

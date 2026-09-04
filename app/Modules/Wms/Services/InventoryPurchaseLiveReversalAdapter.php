@@ -8,7 +8,7 @@ use App\Modules\Accounting\Models\JournalEntryLine;
 use App\Modules\Accounting\Services\JournalPostingService;
 use App\Modules\Wms\Models\CostAllocation;
 use App\Modules\Wms\Models\CostAllocationJournalLine;
-use App\Modules\Wms\Models\PurchaseDocument;
+use App\Modules\Purchasing\Models\PurchaseDocument;
 use App\Modules\Wms\Models\StockMovement;
 use App\Modules\Wms\Support\InventoryPurchaseReversalContract;
 use Illuminate\Support\Facades\DB;

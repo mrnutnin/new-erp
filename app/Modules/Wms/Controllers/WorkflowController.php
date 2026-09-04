@@ -14,20 +14,22 @@ class WorkflowController extends Controller
 {
     public function index(Request $request, ModuleCapability $capability, WorkflowRuntimeResolver $runtime): View
     {
-        $programCode = (string) $request->attributes->get('selectedProgram')?->code;
-
         return view('Wms::workflow.index', [
             'program' => $request->attributes->get('selectedProgram'),
             'warehouse' => $request->attributes->get('selectedWarehouse'),
-            'workflows' => $this->prepare($capability, $runtime, (int) $request->attributes->get('selectedWarehouse')->id, $programCode),
+            'workflows' => $this->prepare($capability, $runtime, $request->attributes->get('selectedWarehouse')?->id),
         ]);
     }
 
-    private function prepare(ModuleCapability $capability, WorkflowRuntimeResolver $runtime, int $warehouseId, string $programCode): array
+    private function prepare(ModuleCapability $capability, WorkflowRuntimeResolver $runtime, ?int $warehouseId): array
     {
         $workflows = $runtime->decorate('wms', WorkflowCatalog::for('wms', $capability), auth()->user(), $warehouseId);
-        $workflowCode = $programCode === 'inventory' ? 'inventory-operations' : 'procure-to-pay';
-        $workflows = array_values(array_filter($workflows, fn (array $workflow): bool => ($workflow['code'] ?? null) === $workflowCode));
+        // WorkflowCatalog splits mixed-mode workflows into `-setup` and `-daily`
+        // variants, so match the base WMS workflow code instead of an exact code.
+        $workflows = array_values(array_filter(
+            $workflows,
+            fn (array $workflow): bool => str_starts_with((string) ($workflow['code'] ?? ''), 'inventory-operations')
+        ));
 
         return array_map(function (array $workflow): array {
             $workflow['steps'] = array_map(function (array $step): array {

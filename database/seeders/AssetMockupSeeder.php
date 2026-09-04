@@ -16,7 +16,7 @@ use App\Modules\Asset\Models\AssetLocation;
 use App\Modules\Finance\Models\PaymentTerm;
 use App\Modules\Wms\Models\Item;
 use App\Modules\Wms\Models\ItemCategory;
-use App\Modules\Wms\Models\PurchaseDocument;
+use App\Modules\Purchasing\Models\PurchaseDocument;
 use App\Modules\Wms\Models\Uom;
 use App\Modules\Wms\Services\PurchaseDocumentPostingService;
 use Illuminate\Database\Seeder;

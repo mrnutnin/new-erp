@@ -3,7 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\User;
-use App\Modules\Wms\Models\PurchaseDocument;
+use App\Modules\Purchasing\Models\PurchaseDocument;
 use App\Modules\Wms\Services\InventoryPurchaseProductionAdapter;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;

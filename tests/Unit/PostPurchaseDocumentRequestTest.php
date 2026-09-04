@@ -2,7 +2,7 @@
 
 namespace Tests\Unit;
 
-use App\Modules\Wms\Requests\PostPurchaseDocumentRequest;
+use App\Modules\Purchasing\Requests\PostPurchaseDocumentRequest;
 use Carbon\CarbonImmutable;
 use PHPUnit\Framework\TestCase;
 

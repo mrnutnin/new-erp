@@ -27,6 +27,18 @@
             </div>
         </div>
 
+        <div class="card border-0 shadow-sm mb-4" id="account-filters">
+            <div class="card-body p-3 p-lg-4">
+                <div class="d-flex justify-content-between align-items-center mb-3"><h2 class="h6 mb-0">ตัวกรองผังบัญชี</h2><button type="button" class="btn btn-outline-secondary btn-sm" id="account-filter-reset"><i class="bx bx-reset me-1" aria-hidden="true"></i>ล้างตัวกรอง</button></div>
+                <div class="row g-3">
+                    <div class="col-12 col-md-3"><label class="form-label" for="account-type-filter">หมวดบัญชี</label><select class="form-select" id="account-type-filter"><option value="">ทุกหมวดบัญชี</option>@foreach($accountTypes as $type)<option value="{{ $type->id }}">{{ $type->code }} · {{ $type->name }}</option>@endforeach</select></div>
+                    <div class="col-12 col-md-3"><label class="form-label" for="account-class-filter">ลักษณะบัญชี</label><select class="form-select" id="account-class-filter"><option value="">ทุกลักษณะ</option><option value="control">บัญชีคุม</option><option value="postable">บัญชีย่อย (ลงรายการได้)</option><option value="group">บัญชีรวม</option></select></div>
+                    <div class="col-12 col-md-3"><label class="form-label" for="account-status-filter">สถานะ</label><select class="form-select" id="account-status-filter"><option value="active">ใช้งาน</option><option value="inactive">ปิดใช้งาน</option><option value="">ทุกสถานะ</option></select></div>
+                    <div class="col-12 col-md-3"><label class="form-label" for="account-profile-filter">มาตรฐานรายงาน</label><select class="form-select" id="account-profile-filter"><option value="">ทุกมาตรฐาน</option><option value="PAE">PAE</option><option value="NPAE">NPAE</option></select></div>
+                </div>
+            </div>
+        </div>
+
         <div class="row g-4">
             <div class="col-12">
                 <div class="card border-0 shadow-sm">
@@ -103,9 +115,9 @@
             }
 
             $table.DataTable($.extend(true, {}, window.erpDataTableDefaults, {
-                ajax: $table.data('url'),
+                ajax: { url: $table.data('url'), data: function (data) { data.account_type_id = $('#account-type-filter').val(); data.account_class = $('#account-class-filter').val(); data.status = $('#account-status-filter').val(); data.reporting_profile = $('#account-profile-filter').val(); } },
                 order: [[0, 'asc']],
-                buttons: [window.erpExcelButton($table)],
+                buttons: [window.erpExcelButton($table, function () { return { account_type_id: $('#account-type-filter').val(), account_class: $('#account-class-filter').val(), status: $('#account-status-filter').val(), reporting_profile: $('#account-profile-filter').val() }; })],
                 columns: columns
             }));
 
@@ -114,6 +126,9 @@
                 reload: '#accounts-table',
                 confirm: 'ยืนยันการลบบัญชีนี้หรือไม่?'
             });
+
+            $('#account-type-filter,#account-class-filter,#account-status-filter,#account-profile-filter').on('change', function () { $table.DataTable().ajax.reload(); });
+            $('#account-filter-reset').on('click', function () { $('#account-type-filter,#account-class-filter,#account-profile-filter').val(''); $('#account-status-filter').val('active'); $table.DataTable().ajax.reload(); });
         });
     </script>
 @endpush

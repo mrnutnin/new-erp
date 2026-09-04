@@ -131,6 +131,16 @@ class FiscalYearController extends Controller
         if ($search !== '') {
             $query->where(fn (Builder $query) => $query->where('code', 'like', "%{$search}%")->orWhere('name', 'like', "%{$search}%"));
         }
+
+        $status = $request->input('period_status');
+        if (in_array($status, ['OPEN', 'SOFT_CLOSE', 'LOCKED'], true)) {
+            $query->whereHas('periods', fn (Builder $periods) => $periods->where('status', $status));
+        } elseif ($status === 'CLOSED') {
+            $query->whereHas('periods')->whereDoesntHave('periods', fn (Builder $periods) => $periods->whereIn('status', ['OPEN', 'SOFT_CLOSE']));
+        }
+
+        $query->when($request->filled('start_date'), fn (Builder $q) => $q->whereDate('start_date', '>=', $request->input('start_date')))
+            ->when($request->filled('end_date'), fn (Builder $q) => $q->whereDate('end_date', '<=', $request->input('end_date')));
     }
 
     private function applyOrder(Builder $query, Request $request): void

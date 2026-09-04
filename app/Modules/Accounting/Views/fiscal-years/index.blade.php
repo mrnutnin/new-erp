@@ -17,6 +17,17 @@
             @endif
         </div>
 
+        <div class="card border-0 shadow-sm mb-4" id="fiscal-year-filters">
+            <div class="card-body p-3 p-lg-4">
+                <div class="d-flex justify-content-between align-items-center mb-3"><h2 class="h6 mb-0">ตัวกรองปีและงวดบัญชี</h2><button type="button" class="btn btn-outline-secondary btn-sm" id="fiscal-year-filter-reset"><i class="bx bx-reset me-1" aria-hidden="true"></i>ล้างตัวกรอง</button></div>
+                <div class="row g-3">
+                    <div class="col-12 col-md-4"><label class="form-label" for="period-status-filter">สถานะงวด</label><select class="form-select" id="period-status-filter"><option value="">ทุกสถานะ</option><option value="OPEN">มีงวดเปิด</option><option value="SOFT_CLOSE">มีงวด Soft close</option><option value="LOCKED">มีงวด Lock</option><option value="CLOSED">ปิดงวดแล้วทั้งหมด</option></select></div>
+                    <div class="col-12 col-md-4"><label class="form-label" for="fiscal-year-from">เริ่มตั้งแต่วันที่</label><input class="form-control" type="date" id="fiscal-year-from"></div>
+                    <div class="col-12 col-md-4"><label class="form-label" for="fiscal-year-to">ถึงวันที่</label><input class="form-control" type="date" id="fiscal-year-to"></div>
+                </div>
+            </div>
+        </div>
+
         <div class="row g-4">
             <div class="col-12">
                 <div class="alert alert-info" role="status">
@@ -56,9 +67,9 @@
             var text = $.fn.dataTable.render.text();
 
             $table.DataTable($.extend(true, {}, window.erpDataTableDefaults, {
-                ajax: $table.data('url'),
+                ajax: { url: $table.data('url'), data: function (data) { data.period_status = $('#period-status-filter').val(); data.start_date = $('#fiscal-year-from').val(); data.end_date = $('#fiscal-year-to').val(); } },
                 order: [[0, 'desc']],
-                buttons: [window.erpExcelButton($table)],
+                buttons: [window.erpExcelButton($table, function () { return { period_status: $('#period-status-filter').val(), start_date: $('#fiscal-year-from').val(), end_date: $('#fiscal-year-to').val() }; })],
                 columns: [
                     { data: 'start_label', name: 'start_date', render: text.display },
                     { data: 'code', name: 'code', render: text.display },
@@ -75,6 +86,8 @@
                     }
                 ]
             }));
+            $('#period-status-filter,#fiscal-year-from,#fiscal-year-to').on('change', function () { $table.DataTable().ajax.reload(); });
+            $('#fiscal-year-filter-reset').on('click', function () { $('#period-status-filter,#fiscal-year-from,#fiscal-year-to').val(''); $table.DataTable().ajax.reload(); });
         });
     </script>
 @endpush

@@ -3,7 +3,7 @@
 namespace App\Modules\Wms\Support;
 
 use App\Modules\Accounting\Models\Account;
-use App\Modules\Wms\Models\PurchaseDocument;
+use App\Modules\Purchasing\Models\PurchaseDocument;
 use Illuminate\Validation\ValidationException;
 
 /**

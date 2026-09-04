@@ -7,7 +7,7 @@ use App\Modules\Accounting\Models\JournalEntry;
 use App\Modules\Accounting\Models\JournalEntryLine;
 use App\Modules\Wms\Models\CostAllocation;
 use App\Modules\Wms\Models\CostAllocationJournalLine;
-use App\Modules\Wms\Models\PurchaseDocument;
+use App\Modules\Purchasing\Models\PurchaseDocument;
 use App\Modules\Wms\Models\StockMovement;
 use App\Modules\Wms\Support\CreditPurchaseInventoryReversalContract;
 use Illuminate\Support\Facades\DB;
@@ -40,7 +40,7 @@ final class CreditPurchaseInventoryReversalAdapter
 
                 return $credit->fresh();
             }
-            if ($credit->status !== 'POSTED' || $credit->document_type !== 'CREDIT_NOTE' || ! $credit->original_document_id || ! $credit->journal_entry_id) {
+            if ($credit->status !== 'POSTED' || $credit->document_type !== 'CREDIT_NOTE' || $credit->credit_note_mode !== 'RETURN' || ! $credit->original_document_id || ! $credit->journal_entry_id) {
                 throw ValidationException::withMessages(['source' => 'ต้องใช้ Credit Purchase ที่ Post แล้วและอ้าง Invoice ต้นทาง']);
             }
             $original = PurchaseDocument::query()->with('lines.receiptAllocations')->lockForUpdate()->findOrFail($credit->original_document_id);

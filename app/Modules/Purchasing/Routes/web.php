@@ -7,20 +7,21 @@ use App\Modules\Purchasing\Controllers\PurchaseOrderController;
 use App\Modules\Purchasing\Controllers\PurchaseReceiptController;
 use App\Modules\Purchasing\Controllers\PurchaseRequisitionController;
 use App\Modules\Purchasing\Controllers\OperationalReportController;
+use App\Modules\Purchasing\Controllers\LandedCostController;
 use App\Modules\Purchasing\Controllers\SupplierController;
 use App\Modules\Purchasing\Controllers\WorkflowController;
 use Illuminate\Support\Facades\Route;
 
 /*
- * Canonical Purchasing surface. The handlers remain shared with the legacy
- * WMS surface during this extraction wave; this avoids duplicate business
- * rules while giving the module its own URL and route namespace.
+ * Canonical Purchasing surface. Purchasing owns the purchasing URL and
+ * permission boundary; inventory/cost services remain a WMS integration seam.
  */
-Route::middleware(['auth', 'program:wms', 'warehouse'])
+Route::middleware(['auth', 'program:purchasing', 'warehouse'])
     ->prefix('purchasing')
     ->name('purchasing.')
     ->group(function (): void {
         Route::get('/', EntryController::class)->middleware('permission:purchasing.dashboard.view')->name('index');
+        Route::get('/dashboard/data/{section}', [EntryController::class, 'data'])->middleware('permission:purchasing.dashboard.view')->name('dashboard.data');
         Route::get('/workflow', [WorkflowController::class, 'index'])->name('workflow.index');
         Route::get('/reports', [OperationalReportController::class, 'index'])->middleware('permission:purchasing.reports.view')->name('reports.index');
 
@@ -74,6 +75,16 @@ Route::middleware(['auth', 'program:wms', 'warehouse'])
         Route::put('/purchase-receipts/{purchaseReceipt}', [PurchaseReceiptController::class, 'update'])->middleware('permission:purchasing.purchase-receipts.update')->name('purchase-receipts.update');
         Route::post('/purchase-receipts/{purchaseReceipt}/approve', [PurchaseReceiptController::class, 'approve'])->middleware('permission:purchasing.purchase-receipts.approve')->name('purchase-receipts.approve');
         Route::post('/purchase-receipts/{purchaseReceipt}/void', [PurchaseReceiptController::class, 'void'])->middleware('permission:purchasing.purchase-receipts.void')->name('purchase-receipts.void');
+
+        Route::get('/landed-costs', [LandedCostController::class, 'index'])->middleware('permission:purchasing.landed-costs.view')->name('landed-costs.index');
+        Route::get('/landed-costs/data', [LandedCostController::class, 'data'])->middleware('permission:purchasing.landed-costs.view')->name('landed-costs.data');
+        Route::get('/landed-costs/create', [LandedCostController::class, 'create'])->middleware('permission:purchasing.landed-costs.create')->name('landed-costs.create');
+        Route::post('/landed-costs', [LandedCostController::class, 'store'])->middleware('permission:purchasing.landed-costs.create')->name('landed-costs.store');
+        Route::get('/landed-costs/{landedCost}', [LandedCostController::class, 'show'])->middleware('permission:purchasing.landed-costs.view')->name('landed-costs.show');
+        Route::post('/landed-costs/{landedCost}/submit', [LandedCostController::class, 'submit'])->middleware('permission:purchasing.landed-costs.submit')->name('landed-costs.submit');
+        Route::post('/landed-costs/{landedCost}/approve', [LandedCostController::class, 'approve'])->middleware('permission:purchasing.landed-costs.approve')->name('landed-costs.approve');
+        Route::post('/landed-costs/{landedCost}/post', [LandedCostController::class, 'post'])->middleware('permission:purchasing.landed-costs.post')->name('landed-costs.post');
+        Route::post('/landed-costs/{landedCost}/void', [LandedCostController::class, 'void'])->middleware('permission:purchasing.landed-costs.void')->name('landed-costs.void');
 
         Route::get('/purchase-documents', [PurchaseDocumentController::class, 'index'])->middleware('permission:purchasing.purchase-documents.view')->name('purchase-documents.index');
         Route::get('/purchase-documents/data', [PurchaseDocumentController::class, 'data'])->middleware('permission:purchasing.purchase-documents.view')->name('purchase-documents.data');

@@ -3,18 +3,38 @@
 namespace App\Modules\Platform\Controllers;
 
 use App\Http\Controllers\Controller;
+use App\Models\AuditLog;
 use App\Modules\Platform\Requests\UpdateProfileRequest;
 use App\Modules\Platform\Services\AuditLogger;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\View\View;
+use Yajra\DataTables\Facades\DataTables;
 
 class ProfileController extends Controller
 {
-    public function edit(): View
+    public function edit(Request $request): View
     {
-        return view('Platform::profile.edit');
+        $user = $request->user()->load([
+            'programs:id,code,name',
+            'branches:id,code,name',
+            'warehouses:id,branch_id,code,name',
+        ]);
+
+        return view('Platform::profile.edit', compact('user'));
+    }
+
+    public function auditData(Request $request): JsonResponse
+    {
+        return DataTables::eloquent(
+            AuditLog::query()->where('user_id', $request->user()->id)
+        )
+            ->addColumn('created_at_label', fn (AuditLog $log) => $log->created_at?->format('d/m/Y H:i') ?? '—')
+            ->addColumn('subject_label', fn (AuditLog $log) => class_basename((string) $log->subject_type).($log->subject_id ? ' #'.$log->subject_id : ''))
+            ->addColumn('reason_label', fn (AuditLog $log) => $log->reason ?? '—')
+            ->toJson();
     }
 
     public function update(UpdateProfileRequest $request, AuditLogger $audit): JsonResponse|RedirectResponse

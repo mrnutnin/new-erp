@@ -1,9 +1,9 @@
 @extends('Wms::layout')
 
-@section('title', 'Purchasing Dashboard | New ERP')
+@php($isInventory = ($program?->code ?? null) === 'wms')
+@section('title', ($isInventory ? 'WMS Dashboard' : 'Purchasing Dashboard').' | New ERP')
 
 @section('content')
-    @php($isInventory = ($program?->code ?? null) === 'inventory')
     <div class="container-fluid px-3 px-lg-4 py-4">
         <p class="eyebrow mb-2">{{ $isInventory ? 'WMS / INVENTORY' : 'PURCHASING' }}</p>
         <h1 class="h3 mb-2">{{ $isInventory ? 'WMS Dashboard' : 'Purchasing Dashboard' }}</h1>
@@ -22,13 +22,6 @@
                             {{ $minMaxAlerts->count() }} รายการ
                         </span>
                     </div>
-                    @if (auth()->user()->hasPermission('wms.purchase-requisitions.create'))
-                        <div class="d-flex justify-content-end mb-3">
-                            <a id="min-max-create-pr" class="btn btn-dark btn-sm disabled" aria-disabled="true" href="#">
-                                <i class="bx bx-file me-1" aria-hidden="true"></i>สร้าง PR จากรายการที่เลือก
-                            </a>
-                        </div>
-                    @endif
                     @if ($minMaxAlerts->isEmpty())
                         <div class="alert alert-success border-0 mb-0">ยังไม่มีสินค้าที่ต่ำกว่าจุด Min</div>
                     @else
@@ -58,25 +51,3 @@
         @endif
     </div>
 @endsection
-@push('scripts')
-@if (auth()->user()->hasPermission('wms.purchase-requisitions.create'))
-<script>
-$(function () {
-    const create = $('#min-max-create-pr');
-    const all = $('#min-max-select-all');
-    const rows = $('.js-min-max-item');
-    const base = @json(route('wms.purchase-requisitions.create'));
-    function sync() {
-        const ids = rows.filter(':checked').map(function () { return this.value; }).get();
-        const url = new URL(base, window.location.origin);
-        url.searchParams.set('source', 'min-max');
-        ids.forEach(function (id) { url.searchParams.append('item_ids[]', id); });
-        create.attr('href', ids.length ? url.toString() : '#').toggleClass('disabled', !ids.length).attr('aria-disabled', ids.length ? 'false' : 'true');
-        all.prop('checked', ids.length > 0 && ids.length === rows.length);
-    }
-    all.on('change', function () { rows.prop('checked', this.checked); sync(); });
-    rows.on('change', sync);
-});
-</script>
-@endif
-@endpush
