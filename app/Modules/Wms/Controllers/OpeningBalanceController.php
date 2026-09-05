@@ -41,6 +41,25 @@ final class OpeningBalanceController extends Controller
         return view('Wms::opening-balances.import-show', compact('batch'));
     }
 
+    public function importErrors(Request $request, MigrationImportBatch $batch, SpreadsheetService $spreadsheets): BinaryFileResponse
+    {
+        abort_unless($batch->type === OpeningBalanceTemplate::TYPE && (int) $batch->created_by === (int) $request->user()->id, 404);
+        $rows = collect($batch->staged_rows)->filter(fn (array $row) => $row['errors'] !== [])->map(fn (array $row) => [
+            $row['row_number'],
+            $row['normalized']['row_key'],
+            $row['normalized']['branch_code'],
+            $row['normalized']['warehouse_code'],
+            $row['normalized']['item_code'],
+            implode(' | ', $row['errors']),
+        ])->values()->all();
+
+        return $spreadsheets->download("wms-opening-balance-{$batch->id}-errors.xlsx", [[
+            'title' => 'Errors',
+            'headings' => ['row_number', 'row_key', 'branch_code', 'warehouse_code', 'item_code', 'errors'],
+            'rows' => $rows,
+        ]]);
+    }
+
     public function importCommit(Request $request, MigrationImportBatch $batch, OpeningBalanceImportService $imports, OpeningBalanceService $openingBalances): JsonResponse
     {
         $created = $imports->commit($batch, $request->user(), $openingBalances);
@@ -52,7 +71,12 @@ final class OpeningBalanceController extends Controller
         $warehouse = $request->attributes->get('selectedWarehouse');
         $labels = ['DRAFT' => 'ร่าง', 'POSTED' => 'ลงบัญชีแล้ว', 'VOIDED' => 'ยกเลิก'];
 
-        return DataTables::eloquent(OpeningBalanceBatch::query()->with('lines')->where('warehouse_id', $warehouse->id)->latest('id'))
+        $query = OpeningBalanceBatch::query()->with('lines')->where('warehouse_id', $warehouse->id);
+        if ($request->filled('status') && in_array($request->string('status')->toString(), ['DRAFT', 'POSTED', 'VOIDED'], true)) $query->where('status', $request->string('status')->toString());
+        if ($request->filled('date_from')) $query->whereDate('cutover_date', '>=', $request->date('date_from'));
+        if ($request->filled('date_to')) $query->whereDate('cutover_date', '<=', $request->date('date_to'));
+
+        return DataTables::eloquent($query->latest('id'))
             ->addColumn('line_count', fn ($row) => $row->lines->count())
             ->editColumn('cutover_date', fn ($row) => $row->cutover_date?->format('d/m/Y'))
             ->editColumn('total_value', fn ($row) => WmsDecimal::format($row->total_value))

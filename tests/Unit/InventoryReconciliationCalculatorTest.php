@@ -40,4 +40,13 @@ class InventoryReconciliationCalculatorTest extends TestCase
         $this->assertSame('0.01000000', $result['allocation_vs_gl_difference']);
         $this->assertSame('ต้องตรวจสอบ', $result['status']);
     }
+
+    public function test_gl_comparison_uses_per_allocation_accounting_precision(): void
+    {
+        $result = InventoryReconciliationCalculator::totals('0.025', '0.025', '0.03', 0, 0, '0', 0, 0, '0', '0.03');
+
+        $this->assertSame('0.02500000', $result['allocation_value']);
+        $this->assertSame('0.03000000', $result['allocation_gl_value']);
+        $this->assertSame('0.00000000', $result['allocation_vs_gl_difference']);
+    }
 }

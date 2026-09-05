@@ -3,7 +3,6 @@
 namespace App\Modules\Wms\Services;
 
 use App\Models\User;
-use App\Models\Warehouse;
 use App\Modules\Settings\Services\GlobalSettings;
 use App\Modules\Wms\Models\CostAllocation;
 use App\Modules\Wms\Models\Item;
@@ -42,7 +41,6 @@ final class TransferMovementService
         }
 
         return DB::transaction(function () use ($header, $lines, $actorId): Transfer {
-            $this->assertSameBranch($header);
             $existing = Transfer::query()->where('idempotency_key', $header['idempotency_key'])->lockForUpdate()->first();
             if ($existing) {
                 $this->assertSameDraft($existing, $header, $lines);
@@ -375,20 +373,6 @@ final class TransferMovementService
         $expected = $side === 'source' ? $transfer->source_warehouse_id : $transfer->destination_warehouse_id;
         if ($expected !== $warehouseId) {
             throw ValidationException::withMessages(['warehouse' => 'Warehouse context ไม่ตรงกับฝั่งของ Transfer']);
-        }
-    }
-
-    private function assertSameBranch(array $header): void
-    {
-        $branches = Warehouse::query()
-            ->whereIn('id', [$header['source_warehouse_id'], $header['destination_warehouse_id']])
-            ->lockForUpdate()
-            ->pluck('branch_id', 'id');
-        $sourceBranchId = $branches[$header['source_warehouse_id']] ?? null;
-        $destinationBranchId = $branches[$header['destination_warehouse_id']] ?? null;
-
-        if (! $sourceBranchId || (int) $sourceBranchId !== (int) $destinationBranchId) {
-            throw ValidationException::withMessages(['destination_warehouse_id' => 'คลังต้นทางและปลายทางต้องอยู่ในสาขาเดียวกัน']);
         }
     }
 

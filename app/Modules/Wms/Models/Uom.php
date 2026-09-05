@@ -3,9 +3,11 @@
 namespace App\Modules\Wms\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Uom extends Model
 {
+    use SoftDeletes;
     protected $table = 'wms_uoms';
 
     protected $fillable = ['code', 'name', 'decimal_places', 'is_active', 'created_by'];

@@ -12,6 +12,7 @@ final class PostingEvent
         'ACCOUNTS_PAYABLE' => ['label' => 'บัญชีเจ้าหนี้การค้า', 'control' => 'AP'],
         'CUSTOMER_ADVANCE' => ['label' => 'บัญชีเงินรับล่วงหน้าลูกค้า', 'types' => ['LIABILITY']],
         'SUPPLIER_ADVANCE' => ['label' => 'บัญชีเงินจ่ายล่วงหน้าผู้ขาย', 'types' => ['ASSET']],
+        'EMPLOYEE_ADVANCE' => ['label' => 'บัญชีเงินทดรองจ่ายพนักงาน', 'types' => ['ASSET']],
         'PURCHASE_EXPENSE' => ['label' => 'บัญชีค่าใช้จ่ายซื้อ', 'types' => ['EXPENSE', 'ASSET']],
         'DEFERRED_INPUT_VAT' => ['label' => 'บัญชีภาษีซื้อพักรอรับรู้', 'control' => 'INPUT_VAT'],
         'DEFERRED_OUTPUT_VAT' => ['label' => 'บัญชีภาษีขายพักรอรับรู้', 'control' => 'OUTPUT_VAT'],
@@ -28,6 +29,8 @@ final class PostingEvent
         'RECOST_LOSS' => ['label' => 'บัญชีขาดทุนจากปรับต้นทุนสินค้า', 'types' => ['EXPENSE']],
         'ROUNDING_GAIN' => ['label' => 'บัญชีกำไรจากการปัดเศษต้นทุน', 'types' => ['REVENUE']],
         'ROUNDING_LOSS' => ['label' => 'บัญชีขาดทุนจากการปัดเศษต้นทุน', 'types' => ['EXPENSE']],
+        'PETTY_CASH_VARIANCE_GAIN' => ['label' => 'บัญชีเงินเกินจากเงินสดย่อย', 'types' => ['REVENUE']],
+        'PETTY_CASH_VARIANCE_LOSS' => ['label' => 'บัญชีเงินขาดจากเงินสดย่อย', 'types' => ['EXPENSE']],
         // Fixed assets are posted to their FIXED_ASSET control account when a
         // subledger asset is present.  A company may also use a normal ASSET
         // account for an asset-cost mapping, so both are intentionally valid.
@@ -55,7 +58,12 @@ final class PostingEvent
         'customer_payment' => ['module' => 'Finance', 'document' => 'รับชำระเงิน', 'book' => 'RECEIPT', 'status' => 'LIVE', 'roles' => ['OUTPUT_VAT', 'WHT_RECEIVABLE', 'CUSTOMER_ADVANCE'], 'reversal' => 'ORIGINAL_JOURNAL'],
         'customer_advance' => ['module' => 'Finance', 'document' => 'รับเงินมัดจำ', 'book' => 'RECEIPT', 'status' => 'LIVE', 'roles' => ['CUSTOMER_ADVANCE', 'WHT_RECEIVABLE'], 'reversal' => 'ORIGINAL_JOURNAL'],
         'supplier_payment' => ['module' => 'Finance', 'document' => 'จ่ายชำระเงิน', 'book' => 'PAYMENT', 'status' => 'LIVE', 'roles' => ['INPUT_VAT', 'WHT_PAYABLE', 'SUPPLIER_ADVANCE'], 'reversal' => 'ORIGINAL_JOURNAL'],
+        'employee_advance' => ['module' => 'Finance', 'document' => 'จ่ายเงินทดรองพนักงาน', 'book' => 'PAYMENT', 'status' => 'LIVE', 'roles' => ['EMPLOYEE_ADVANCE'], 'reversal' => 'ORIGINAL_JOURNAL'],
+        'employee_advance_clearing' => ['module' => 'Finance', 'document' => 'เคลียร์เงินทดรองพนักงาน', 'book' => 'GENERAL', 'status' => 'LIVE', 'roles' => ['EMPLOYEE_ADVANCE'], 'reversal' => 'ORIGINAL_JOURNAL'],
         'expense_payment' => ['module' => 'Finance', 'document' => 'จ่ายค่าใช้จ่าย', 'book' => 'PAYMENT', 'status' => 'DEFERRED', 'roles' => [], 'reversal' => 'ORIGINAL_JOURNAL'],
+        'petty_cash_top_up' => ['module' => 'Finance', 'document' => 'เติมเงินสดย่อย', 'book' => 'PAYMENT', 'status' => 'LIVE', 'roles' => [], 'reversal' => 'ORIGINAL_JOURNAL'],
+        'internal_transfer' => ['module' => 'Finance', 'document' => 'โอนเงินระหว่างบัญชี', 'book' => 'GENERAL', 'status' => 'LIVE', 'roles' => [], 'reversal' => 'ORIGINAL_JOURNAL'],
+        'petty_cash_clearing' => ['module' => 'Finance', 'document' => 'เคลียร์เงินสดย่อย', 'book' => 'GENERAL', 'status' => 'LIVE', 'roles' => ['PETTY_CASH_VARIANCE_GAIN', 'PETTY_CASH_VARIANCE_LOSS'], 'reversal' => 'ORIGINAL_JOURNAL'],
         'sales_commission_payout' => ['module' => 'Finance', 'document' => 'จ่ายคอมมิชชั่น', 'book' => 'PAYMENT', 'status' => 'LIVE', 'roles' => ['COMMISSION_EXPENSE'], 'reversal' => 'ORIGINAL_JOURNAL'],
         'inventory_adjustment' => ['module' => 'WMS', 'document' => 'ปรับปรุงสินค้าคงเหลือ', 'book' => 'GENERAL', 'status' => 'LIVE', 'roles' => ['INVENTORY', 'ADJUSTMENT_GAIN', 'ADJUSTMENT_LOSS'], 'reversal' => 'ORIGINAL_JOURNAL'],
         'inventory.recost' => ['module' => 'WMS', 'document' => 'ปรับต้นทุนสินค้า', 'book' => 'GENERAL', 'status' => 'DEFERRED', 'roles' => ['INVENTORY'], 'reversal' => 'DELTA_OR_REVERSAL'],

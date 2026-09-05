@@ -10,9 +10,11 @@ use App\Modules\Accounting\Support\JournalBalance;
 use App\Modules\Accounting\Support\PostingIdentity;
 use App\Modules\Finance\Models\AdvanceDeposit;
 use App\Modules\Finance\Models\AdvanceDepositApplication;
+use App\Modules\Finance\Models\Allocation;
 use App\Modules\Finance\Models\OpenItem;
 use App\Modules\Finance\Support\AdvanceDepositContract;
 use App\Modules\Finance\Support\AdvanceDepositPostingContract;
+use App\Modules\Finance\Support\OpenItemBalance;
 use App\Modules\Pos\Models\PhysicalSale;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
@@ -80,12 +82,20 @@ final class AdvanceDepositApplicationService
                 );
                 AdvanceDepositContract::assertApplicationAmount($lockedAdvance->original_amount, $lockedAdvance->applied_amount, $payload['amount']);
                 $directForeignKey = $lockedItem->balance_side === 'DEBIT' ? 'debit_open_item_id' : 'credit_open_item_id';
-                $directAllocated = DB::table('finance_allocations')->where($directForeignKey, $lockedItem->id)->whereNull('reversal_date')->sum('amount');
-                $advanceApplied = DB::table('finance_advance_deposit_applications')->where('open_item_id', $lockedItem->id)->whereNull('reversed_at')->sum('amount');
-                $available = JournalBalance::subtract($lockedItem->original_amount, JournalBalance::add((string) $directAllocated, (string) $advanceApplied));
-                if (JournalBalance::decimal($payload['amount']) > $available) {
-                    throw new \InvalidArgumentException('จำนวนเงินที่ตัดเกินยอดคงเหลือของ Open Item');
-                }
+                $directAllocations = Allocation::query()->where($directForeignKey, $lockedItem->id)->get(['allocation_date', 'amount', 'reversal_date']);
+                $advanceApplications = AdvanceDepositApplication::query()->where('open_item_id', $lockedItem->id)->get(['application_date', 'amount', 'reversal_date']);
+                OpenItemBalance::assertAllocationFitsTimeline($lockedItem->original_amount, $payload['application_date'], $payload['amount'], [
+                    ...$directAllocations->map(fn (Allocation $allocation) => [
+                        'allocation_date' => $allocation->allocation_date->format('Y-m-d'),
+                        'amount' => $allocation->amount,
+                        'reversal_date' => $allocation->reversal_date?->format('Y-m-d'),
+                    ])->all(),
+                    ...$advanceApplications->map(fn (AdvanceDepositApplication $application) => [
+                        'allocation_date' => $application->application_date->format('Y-m-d'),
+                        'amount' => $application->amount,
+                        'reversal_date' => $application->reversal_date?->format('Y-m-d'),
+                    ])->all(),
+                ]);
             } catch (\InvalidArgumentException $exception) {
                 throw ValidationException::withMessages(['amount' => $exception->getMessage()]);
             }

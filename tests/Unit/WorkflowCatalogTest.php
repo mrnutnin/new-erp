@@ -105,7 +105,7 @@ class WorkflowCatalogTest extends TestCase
         $this->assertSame('pos.sales-reports.campaign-roi.index', $catalog->firstWhere('code', 'sales-performance')['steps'][3]['route']);
     }
 
-    public function test_finance_daily_flow_routes_advance_and_blocks_unimplemented_cash_paths_safely(): void
+    public function test_finance_daily_flow_routes_live_cash_and_advance_paths_safely(): void
     {
         $steps = collect(WorkflowCatalog::for('finance'))
             ->firstWhere('code', 'record-to-cash')['steps'];
@@ -115,14 +115,23 @@ class WorkflowCatalogTest extends TestCase
         $this->assertSame('finance.advance-deposits.view', $advance['permission']);
         $this->assertNotSame('', trim((string) $advance['recovery_hint']));
 
-        foreach (['Petty Cash', 'เงินทดรองพนักงาน'] as $label) {
+        $expectedRoutes = [
+            'Petty Cash' => ['finance.petty-cash.index', 'finance.petty-cash.view'],
+            'เติมเงินสดย่อย' => ['finance.petty-cash-top-ups.index', 'finance.petty-cash-top-ups.view'],
+            'เคลียร์เงินสดย่อย' => ['finance.petty-cash-clearings.index', 'finance.petty-cash-clearings.view'],
+            'เงินทดรองพนักงาน' => ['finance.employee-advances.index', 'finance.employee-advances.view'],
+            'เคลียร์เงินทดรองพนักงาน' => ['finance.employee-advance-clearings.index', 'finance.employee-advance-clearings.view'],
+            'โอนเงินภายใน' => ['finance.internal-transfers.index', 'finance.internal-transfers.view'],
+        ];
+
+        foreach ($expectedRoutes as $label => [$route, $permission]) {
             $step = collect($steps)->firstWhere('label', $label);
 
             $this->assertNotNull($step, $label);
-            $this->assertNull($step['route'], $label);
-            $this->assertNotSame('', trim((string) $step['block_reason']), $label);
+            $this->assertSame($route, $step['route'], $label);
+            $this->assertSame($permission, $step['permission'], $label);
+            $this->assertArrayNotHasKey('block_reason', $step, $label);
             $this->assertNotSame('', trim((string) $step['recovery_hint']), $label);
-            $this->assertStringContainsString('รอ', $step['recovery_hint'], $label);
         }
     }
 
@@ -167,11 +176,13 @@ class WorkflowCatalogTest extends TestCase
         $steps = collect(WorkflowCatalog::for('wms'))
             ->flatMap(fn (array $workflow) => $workflow['steps']);
 
-        $stockFlow = $steps->firstWhere('label', 'Receipt / Issue / Transfer');
-        $this->assertSame('daily', $stockFlow['mode']);
-        $this->assertSame('wms.stock.index', $stockFlow['route']);
-        $this->assertStringContainsString('reversal', $stockFlow['recovery_hint']);
-        $this->assertStringContainsString('ห้ามลบ', $stockFlow['recovery_hint']);
+        $stockFlows = collect(['Issue / เบิกสินค้า', 'Transfer / โอนระหว่างคลัง', 'Inventory Adjustment / ปรับปรุง'])
+            ->map(fn (string $label) => $steps->firstWhere('label', $label));
+        $this->assertCount(3, $stockFlows->filter());
+        $this->assertSame('wms.issues.index', $stockFlows[0]['route']);
+        $this->assertSame('wms.transfers.index', $stockFlows[1]['route']);
+        $this->assertStringContainsString('reversal', $stockFlows[0]['recovery_hint']);
+        $this->assertStringContainsString('ห้ามแก้ยอดเดิม', $stockFlows[2]['recovery_hint']);
     }
 
     public function test_wms_purchase_flow_exposes_receipt_and_credit_purchase_with_safe_boundary_guidance(): void

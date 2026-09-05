@@ -15,6 +15,12 @@ final class InventoryPostingPreflightService implements InventoryPostingPrefligh
     public function summary(int $warehouseId): array
     {
         $postedMovements = DB::table('wms_stock_movements')->where('warehouse_id', $warehouseId)->where('status', 'POSTED');
+        // WMS release preflight owns the local Inventory -> GL MVP sources.
+        // POS has its own sales_cogs posting/reconciliation contract; mixing
+        // its allocations here creates false WMS blockers.
+        if (Schema::hasColumn('wms_stock_movements', 'source_type')) {
+            $postedMovements->whereIn('source_type', InventoryGlScope::LOCAL_MVP_SOURCES);
+        }
         $movementIds = (clone $postedMovements)->select('id');
         $allocations = DB::table('wms_cost_allocations')->whereIn('stock_movement_id', $movementIds)->where('status', '!=', 'REVERSED');
         $lineProofAvailable = Schema::hasTable('wms_cost_allocation_journal_lines');

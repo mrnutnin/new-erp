@@ -41,6 +41,11 @@ class DocumentSequenceController extends Controller
         'WMS_TRANSFER' => 'ใบโอนสินค้า',
         'STOCK_COUNT' => 'ใบนับสินค้า',
         'LANDED_COST' => 'ต้นทุนแฝงสินค้า',
+        'PETTY_CASH' => 'ใบสำคัญเงินสดย่อย',
+        'PETTY_CASH_TOP_UP' => 'ใบเติมเงินสดย่อย',
+        'PETTY_CASH_CLEARING' => 'ใบเคลียร์เงินสดย่อย',
+        'EMPLOYEE_ADVANCE' => 'ใบเงินทดรองจ่ายพนักงาน',
+        'EMPLOYEE_ADVANCE_CLEARING' => 'ใบเคลียร์เงินทดรองพนักงาน',
     ];
 
     public function index(): View

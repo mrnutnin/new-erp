@@ -28,10 +28,11 @@
 - [x] ดาวน์โหลด Excel Template สำหรับ Opening Balance (มีตัวอย่างและ Data Dictionary)
 - [x] อัปโหลดไฟล์แบบ Stage → Validate → Preview
 - [x] Approve → Commit จาก Import Batch หลังผ่าน validation
-- [ ] รองรับการเลือกสาขา/คลังในไฟล์และตรวจสิทธิ์ให้ตรงกับผู้ใช้งาน
-- [ ] ตรวจ SKU ซ้ำ, หน่วยฐาน, จำนวน, ต้นทุนรวม, ทศนิยม และยอดควบคุมก่อน Commit
-- [ ] รองรับไฟล์ขนาดใหญ่ด้วย chunk/queue พร้อมรายงานข้อผิดพลาดรายแถวและดาวน์โหลด Error Workbook
-- [ ] ทำให้ import idempotent ด้วย batch และ stable row key ป้องกันการนำเข้าซ้ำ
+- [x] รองรับการเลือกสาขา/คลังในไฟล์และตรวจสิทธิ์ให้ตรงกับผู้ใช้งาน
+- [x] ตรวจ SKU ซ้ำในคลังเดียวกัน, หน่วยฐาน, จำนวน, ต้นทุนรวม และทศนิยมก่อน Commit
+- [x] รายงานข้อผิดพลาดรายแถวและดาวน์โหลด Error Workbook
+- [x] รองรับไฟล์ขนาดใหญ่ด้วย chunk reader และ validate ระหว่างอ่าน (queue เป็นทางเลือกเมื่อเปิดใช้งาน worker จริง)
+- [x] ทำให้ import idempotent ด้วย batch และ stable row key ป้องกันการนำเข้าซ้ำ
 - [x] รองรับ AVG/FIFO ตาม Global Settings
 - [x] ป้องกันรายการยอดยกมาซ้ำในคลัง/วันที่เดียวกัน
 - [x] ตรวจยอดกับ Stock Ledger และ Cost Layer ก่อน Post
@@ -51,7 +52,7 @@
 
 - [x] Receipt, Issue และ Transfer (ผ่าน Unit/MySQL Integration Test)
 - [x] คำนวณ AVG/FIFO ตาม policy
-- [ ] ตรวจ negative stock policy และตั้งค่า fallback ให้ครบ
+- [x] ตรวจ negative stock policy และตั้งค่า fallback ให้ครบ (block เมื่อไม่อนุญาต; ใช้ CURRENT_AVERAGE/LAST_KNOWN/STANDARD เมื่ออนุญาต)
 - [x] ตรวจ Pending Cost และ Unlinked Allocation
 - [x] รองรับ RECOST (ยังต้องตั้งค่า negative fallback ก่อนทดสอบกรณีสต็อกติดลบ)
 
@@ -74,6 +75,8 @@
 - [x] แยก Mapping Gap, Pending RECOST, Rounding และ Unlinked ใน Preflight/Reconciliation
 - [x] Gate B: Movement → Allocation → Journal Line
 - [x] Gate C: Reconciliation Difference ต้องเป็นศูนย์
+- [x] Corrective contract: legacy duplicate allocation ใช้ immutable correction record อ้าง duplicate/canonical/Journal line และเก็บ Audit Log โดยไม่แก้หรือลบ POSTED row
+- [x] Gate C production check: warehouse 1 ผ่าน allocation-vs-GL, balance-vs-allocation, linkage, pending, rounding และ legacy review blockers เป็นศูนย์ (05/09/2026)
 
 เกณฑ์ผ่าน: เปิด Inventory Posting ได้เมื่อผลต่างเป็นศูนย์
 
@@ -95,11 +98,26 @@
 - [x] Count/Adjustment (gain/loss, idempotency และ reversal)
 - [x] Reversal และ Period Close (credit purchase, adjustment และ recost)
 
+### 9. Operational UI/UX Standard
+
+- [x] ใบเบิกสินค้า: แยก Filter section จาก DataTable และกรองสถานะ/วันที่แบบ server-side
+- [x] ใบรับคืนจากการเบิก: แยก Filter section จาก DataTable และกรองสถานะ/วันที่แบบ server-side
+- [x] ตรวจและปรับ Filter section ให้ครบสำหรับ Stock Count, Adjustment, Transfer และ Opening Balance
+- [x] ตรวจและปรับ badge ให้ใช้ semantic pastel status classes ในหน้าปฏิบัติงานหลัก
+- [x] จัด action order กลางของ DataTable ให้เป็น pattern เดียวกันทุกหน้าปฏิบัติงาน
+- [x] ใช้ SweetAlert และ shared page length กับหน้าปฏิบัติงาน WMS
+- [x] WMS Dashboard: แยก summary/work/trend เป็น sections แบบ lazy AJAX และ cache ตามคลัง
+- [x] WMS Dashboard: ตาราง Low Stock และ Stock Movement ใช้ server-side DataTable และ pageLength 5
+- [x] WMS Workflow: แยกขั้นตอน Receipt, Issue, Transfer, Count และ Adjustment พร้อม pending count/blocker ตามคลัง
+- [x] WMS Workflow: decision gate ใช้ runtime readiness จริง, มีปุ่มตรวจสอบตามสิทธิ์ และไม่แสดง blocker ว่าง
+- [x] WMS Workflow: Gate A/B/C ผูกกับ Inventory Preflight/Reconciliation จริง และมีลิงก์ตรวจ blocker ตามคลัง
+- [x] WMS Preflight: จำกัด Gate A/B ให้ตรวจเฉพาะ local Inventory→GL MVP source และไม่ปน POS sales_cogs contract
+
 ## สถานะเริ่มต้น
 
 - นโยบาย AVG/FIFO: พร้อมทำ
 - Item / Category / UOM: พร้อมทำ
 - Inventory / COGS Mapping: พร้อมทำ (ผ่าน mapping contract และ MySQL integration)
-- Opening Balance: พร้อมทำ (ผ่าน idempotent MySQL rollback E2E; import ขนาดใหญ่ยังเป็น follow-up)
+- Opening Balance: พร้อมทำ (ผ่าน idempotent MySQL rollback E2E และ chunked import)
 - Purchase Event Wiring: พร้อมทำ (ผ่าน Purchase/Receipt integration; เปิดใช้จริงยังขึ้นกับ feature flag)
-- Reconciliation Gates: พร้อมตรวจสอบตามข้อมูลจริง; ยังคง block เมื่อมี pending/unlinked/rounding difference
+- Reconciliation Gates: พร้อมตรวจสอบตามข้อมูลจริง; ยังคง block เมื่อมี pending/unlinked/rounding difference และแสดงสาเหตุ/หน้าตรวจสอบใน workflow

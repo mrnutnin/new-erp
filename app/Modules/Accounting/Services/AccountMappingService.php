@@ -17,6 +17,7 @@ final class AccountMappingService
         'PURCHASE_AP' => 'บัญชีเจ้าหนี้การค้า',
         'CUSTOMER_ADVANCE' => 'บัญชีเงินรับล่วงหน้าลูกค้า',
         'SUPPLIER_ADVANCE' => 'บัญชีเงินจ่ายล่วงหน้าผู้ขาย',
+        'EMPLOYEE_ADVANCE' => 'บัญชีเงินทดรองจ่ายพนักงาน',
         'PURCHASE_EXPENSE_DEFAULT' => 'บัญชีค่าใช้จ่ายซื้อเริ่มต้น',
         'DEFERRED_INPUT_VAT' => 'ภาษีซื้อพักรอรับรู้',
         'DEFERRED_OUTPUT_VAT' => 'ภาษีขายพักรอรับรู้',

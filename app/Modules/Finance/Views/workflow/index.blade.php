@@ -4,7 +4,7 @@
 <div class="container-fluid px-3 px-lg-4 py-4">
     <p class="eyebrow mb-2">FINANCE · WORKFLOW CENTER</p>
     <div class="d-flex flex-wrap justify-content-between align-items-end gap-3 mb-4">
-        <div><h1 class="h3 mb-2">คู่มือการทำงาน</h1><p class="text-secondary mb-0">ลำดับงานลูกหนี้ เจ้าหนี้ และรับ–จ่ายเงิน</p></div>
+        <div><h1 class="h3 mb-2">คู่มือการทำงาน</h1><p class="text-secondary mb-0">ลำดับงานตั้งค่าการเงิน รับ–จ่าย เงินสดย่อย เงินทดรอง และโอนเงินภายใน</p></div>
         @if($warehouse)
             <span class="badge text-bg-info"><i class="bx bx-building-house me-1" aria-hidden="true"></i>{{ $warehouse->name }}</span>
         @endif

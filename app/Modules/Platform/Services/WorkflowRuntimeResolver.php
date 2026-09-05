@@ -11,13 +11,26 @@ use App\Modules\Accounting\Models\FiscalPeriod;
 use App\Modules\Accounting\Models\JournalEntry;
 use App\Modules\Accounting\Services\AccountMappingService;
 use App\Modules\Finance\Models\BankAccount;
+use App\Modules\Finance\Models\EmployeeAdvance;
+use App\Modules\Finance\Models\EmployeeAdvanceClearing;
+use App\Modules\Finance\Models\InternalTransfer;
 use App\Modules\Finance\Models\PaymentVoucher;
+use App\Modules\Finance\Models\PettyCashClearing;
+use App\Modules\Finance\Models\PettyCashTopUp;
+use App\Modules\Finance\Models\PettyCashVoucher;
 use App\Modules\Finance\Models\Settlement;
 use App\Modules\Pos\Models\SalesDocument;
 use App\Modules\Settings\Services\GlobalSettings;
 use App\Modules\Settings\Support\SettingRegistry;
 use App\Modules\Wms\Models\CostRecalculationRequest;
+use App\Modules\Wms\Models\InventoryAdjustmentDocument;
 use App\Modules\Wms\Models\Item;
+use App\Modules\Wms\Models\IssueDocument;
+use App\Modules\Wms\Models\IssueReturn;
+use App\Modules\Wms\Models\OpeningBalanceBatch;
+use App\Modules\Wms\Models\StockCountDocument;
+use App\Modules\Wms\Models\Transfer;
+use App\Modules\Wms\Services\InventoryPostingPreflightService;
 use App\Modules\Purchasing\Models\PurchaseDocument;
 use App\Modules\Purchasing\Models\PurchaseRequisition;
 
@@ -48,7 +61,34 @@ final class WorkflowRuntimeResolver
         $eventReadiness = collect($snapshot->readiness)->filter(fn (array $item): bool => ! empty($item['event_code']))->keyBy('event_code');
         $pending = collect($snapshot->pending)->keyBy('route');
 
-        return array_map(function (array $workflow) use ($readiness, $eventReadiness, $pending): array {
+        return array_map(function (array $workflow) use ($readiness, $eventReadiness, $pending, $user): array {
+            if (! empty($workflow['decision_cards'])) {
+                $workflow['decision_cards'] = array_map(function (array $decision) use ($readiness, $eventReadiness, $pending, $user): array {
+                    $route = $decision['route'] ?? null;
+                    $eventCode = $decision['event_code'] ?? null;
+                    if (($eventCode && $eventReadiness->has($eventCode)) || ($route && $readiness->has($route))) {
+                        $runtime = $eventCode ? $eventReadiness->get($eventCode) : $readiness->get($route);
+                        $decision['readiness'] = $runtime;
+                        $decision['runtime_not_ready'] = ($runtime['status'] ?? null) === 'NOT_READY';
+                        $decision['configuration_warning'] = (bool) ($runtime['configuration_warning'] ?? false);
+                        if (is_array($runtime) && array_key_exists('block_reason', $runtime)) {
+                            $decision['block_reason'] = $runtime['block_reason'];
+                        }
+                        $decision['next_action'] = $runtime['next_action'] ?? $decision['next_action'] ?? null;
+                        $decision['recovery_url'] = $runtime['recovery_url'] ?? null;
+                        $decision['recovery_label'] = $runtime['recovery_label'] ?? null;
+                        $decision['recovery_permission'] = $runtime['recovery_permission'] ?? null;
+                    }
+
+                    if ($route && $pending->has($route)) {
+                        $decision['pending_count'] = (int) ($pending->get($route)['count'] ?? 0);
+                        $decision['pending_label'] = $pending->get($route)['label'] ?? null;
+                    }
+
+                    return WorkflowStepPresenter::present($decision, $user);
+                }, $workflow['decision_cards']);
+            }
+
             $workflow['steps'] = array_map(function (array $step) use ($readiness, $eventReadiness, $pending): array {
                 $route = $step['route'] ?? null;
                 $eventCode = $step['event_code'] ?? null;
@@ -57,7 +97,9 @@ final class WorkflowRuntimeResolver
                     $step['readiness'] = $runtime;
                     $step['runtime_not_ready'] = ($runtime['status'] ?? null) === 'NOT_READY';
                     $step['configuration_warning'] = (bool) ($runtime['configuration_warning'] ?? false);
-                    $step['block_reason'] = $runtime['block_reason'] ?? $step['block_reason'] ?? null;
+                    if (is_array($runtime) && array_key_exists('block_reason', $runtime)) {
+                        $step['block_reason'] = $runtime['block_reason'];
+                    }
                     $step['next_action'] = $runtime['next_action'] ?? $step['next_action'] ?? null;
                     $step['recovery_url'] = $runtime['recovery_url'] ?? null;
                     $step['recovery_label'] = $runtime['recovery_label'] ?? null;
@@ -128,18 +170,49 @@ final class WorkflowRuntimeResolver
             'route' => null,
         ];
         $inventoryMissing = $this->settings->missingFor('inventory');
+        $inventorySettingsRoute = \Route::has('settings.company.edit') ? route('settings.company.edit') : null;
         $readiness[] = [
             'code' => 'inventory.cost_policy',
             'event_code' => 'inventory.cost_policy',
             'status' => $inventoryMissing === [] ? 'READY' : 'NOT_READY',
             'configuration_warning' => $inventoryMissing !== [],
             'missing_count' => count($inventoryMissing),
-            'block_reason' => $inventoryMissing === [] ? null : 'ตั้งค่านโยบายต้นทุนและ SLA ของ Inventory ให้ครบ',
+            'block_reason' => $inventoryMissing === [] ? null : 'ค่าที่ยังขาด: '.implode(', ', $inventoryMissing),
             'next_action' => $inventoryMissing === [] ? 'เริ่มงานคลังได้' : 'เปิด Global Settings เพื่อตั้งค่า Inventory',
-            'route' => null,
+            'recovery_url' => $inventorySettingsRoute,
+            'recovery_label' => 'เปิด Global Settings',
+            'recovery_permission' => 'settings.company.view',
+            'route' => $inventorySettingsRoute ? 'settings.company.edit' : null,
         ];
+        $this->appendInventoryGateReadiness($readiness, $warehouseId);
+        if ($warehouseId !== null && $user->hasPermission('wms.stock-valuation.view')) {
+            try {
+                $summary = app(InventoryPostingPreflightService::class)->summary($warehouseId);
+                $blockers = array_values(array_filter([
+                    ((int) ($summary['pending'] ?? 0)) > 0 ? 'pending_cost_allocations' : null,
+                    ((int) ($summary['unlinked'] ?? 0)) > 0 ? 'unlinked_allocations' : null,
+                    ((int) ($summary['lineUnlinked'] ?? 0)) > 0 ? 'unlinked_journal_line_proof' : null,
+                    ((int) ($summary['lineMismatched'] ?? 0)) > 0 ? 'mismatched_journal_line_proof' : null,
+                    ((int) ($summary['lineProofMissing'] ?? 0)) > 0 ? 'journal_line_proof_unavailable' : null,
+                    ((int) ($summary['missingSource'] ?? 0)) > 0 ? 'missing_source_identity' : null,
+                ]));
+                $readiness[] = $this->inventoryGateReadiness('inventory.preflight', $blockers, $route = \Route::has('wms.stock-valuation.index') ? route('wms.stock-valuation.index') : null);
+            } catch (\Throwable) {
+                $readiness[] = $this->inventoryGateReadiness('inventory.preflight', ['preflight_unavailable'], null);
+            }
+        }
         if ($user->hasPermission('wms.items.view')) {
             $readiness[] = $this->readiness('wms.items', Item::query()->where('is_active', true)->count(), 'สร้างข้อมูลสินค้าให้พร้อมก่อนทำรายการ', 'wms.items.index', 'wms.items.view', true);
+        }
+        if ($warehouseId !== null && $user->hasPermission('wms.opening-balances.view')) {
+            $readiness[] = $this->readiness(
+                'wms.opening-balances',
+                OpeningBalanceBatch::query()->where('warehouse_id', $warehouseId)->where('status', 'POSTED')->count(),
+                'สร้างหรือนำเข้า Opening Balance แล้ว Post ให้เรียบร้อยก่อนเริ่มรับ–จ่าย',
+                'wms.opening-balances.index',
+                'wms.opening-balances.view',
+                true,
+            );
         }
         if ($warehouseId !== null && $user->hasPermission('purchasing.purchase-documents.view')) {
             $pending[] = $this->pending('purchasing.purchase-drafts', PurchaseDocument::query()->where('warehouse_id', $warehouseId)->whereIn('status', ['DRAFT', 'APPROVED'])->count(), 'ใบซื้อรอดำเนินการ', 'purchasing.purchase-documents.index', 'purchasing.purchase-documents.view');
@@ -150,8 +223,86 @@ final class WorkflowRuntimeResolver
         if ($warehouseId !== null && $user->hasPermission('wms.stock-valuation.view')) {
             $pending[] = $this->pending('wms.recost', CostRecalculationRequest::query()->where('warehouse_id', $warehouseId)->whereIn('status', ['PENDING', 'PROCESSING', 'FAILED', 'STALE'])->count(), 'รายการ Recost ที่ต้องดำเนินการ/ตรวจสอบ', 'wms.stock-valuation.index', 'wms.stock-valuation.view');
         }
+        if ($warehouseId !== null && $user->hasPermission('wms.opening-balances.view')) {
+            $pending[] = $this->pending('wms.opening-balances', OpeningBalanceBatch::query()->where('warehouse_id', $warehouseId)->where('status', 'DRAFT')->count(), 'Opening Balance ที่รอ Post', 'wms.opening-balances.index', 'wms.opening-balances.view');
+        }
+        if ($warehouseId !== null && $user->hasPermission('wms.issues.view')) {
+            $pending[] = $this->pending('wms.issues', IssueDocument::query()->where('warehouse_id', $warehouseId)->whereIn('status', ['DRAFT', 'APPROVED'])->count(), 'ใบเบิกที่ยังดำเนินการไม่เสร็จ', 'wms.issues.index', 'wms.issues.view');
+        }
+        if ($warehouseId !== null && $user->hasPermission('wms.issue-returns.view')) {
+            $pending[] = $this->pending('wms.issue-returns', IssueReturn::query()->where('warehouse_id', $warehouseId)->whereIn('status', ['DRAFT', 'APPROVED'])->count(), 'ใบรับคืนที่ยังดำเนินการไม่เสร็จ', 'wms.issue-returns.index', 'wms.issue-returns.view');
+        }
+        if ($warehouseId !== null && $user->hasPermission('wms.stock-counts.view')) {
+            $pending[] = $this->pending('wms.stock-counts', StockCountDocument::query()->where('warehouse_id', $warehouseId)->whereIn('status', ['DRAFT', 'COUNTED', 'APPROVED'])->count(), 'Stock Count ที่ยังดำเนินการไม่เสร็จ', 'wms.stock-counts.index', 'wms.stock-counts.view');
+        }
+        if ($warehouseId !== null && $user->hasPermission('wms.inventory-adjustments.view')) {
+            $pending[] = $this->pending('wms.inventory-adjustments', InventoryAdjustmentDocument::query()->where('warehouse_id', $warehouseId)->whereIn('status', ['DRAFT', 'APPROVED'])->count(), 'Inventory Adjustment ที่ยังดำเนินการไม่เสร็จ', 'wms.inventory-adjustments.index', 'wms.inventory-adjustments.view');
+        }
+        if ($warehouseId !== null && $user->hasPermission('wms.transfers.view')) {
+            $pending[] = $this->pending('wms.transfers', Transfer::query()->where(fn ($query) => $query->where('source_warehouse_id', $warehouseId)->orWhere('destination_warehouse_id', $warehouseId))->whereIn('status', ['DRAFT', 'DISPATCHED', 'PARTIALLY_ACCEPTED', 'REJECTED'])->count(), 'Transfer ที่ยังดำเนินการไม่เสร็จ', 'wms.transfers.index', 'wms.transfers.view');
+        }
 
         return new WorkflowRuntimeSnapshot('wms', $readiness, $pending);
+    }
+
+    /** @param array<int, array<string, mixed>> $readiness */
+    private function appendInventoryGateReadiness(array &$readiness, ?int $warehouseId): void
+    {
+        $codes = ['inventory_purchase_event_wiring', 'atomic_journal_movement_allocation_linkage', 'reconciliation_zero_gate', 'inventory_reconciliation_resolve'];
+        $route = \Route::has('wms.stock-valuation.index') ? route('wms.stock-valuation.index') : null;
+
+        if ($warehouseId === null) {
+            foreach ($codes as $code) {
+                $readiness[] = $this->inventoryGateReadiness($code, ['warehouse_scope_required'], $route);
+            }
+
+            return;
+        }
+
+        try {
+            $summary = app(InventoryPostingPreflightService::class)->summary($warehouseId);
+            $gates = [
+                'inventory_purchase_event_wiring' => array_values(array_filter([
+                    ((int) ($summary['missingSource'] ?? 0)) > 0 ? 'missing_source_identity' : null,
+                    ((int) ($summary['missingInventory'] ?? 0)) > 0 ? 'missing_inventory_mapping' : null,
+                ])),
+                'atomic_journal_movement_allocation_linkage' => array_values(array_filter([
+                    ((int) ($summary['unlinked'] ?? 0)) > 0 ? 'unlinked_allocations' : null,
+                    ((int) ($summary['lineUnlinked'] ?? 0)) > 0 ? 'unlinked_journal_line_proof' : null,
+                    ((int) ($summary['lineMismatched'] ?? 0)) > 0 ? 'mismatched_journal_line_proof' : null,
+                    ((int) ($summary['lineProofMissing'] ?? 0)) > 0 ? 'journal_line_proof_unavailable' : null,
+                ])),
+                'reconciliation_zero_gate' => ($summary['reconciliation_ready'] ?? false) === true
+                    ? [] : ($summary['reconciliation_blockers'] ?? ['reconciliation_not_ready']),
+                'inventory_reconciliation_resolve' => ($summary['reconciliation_ready'] ?? false) === true
+                    ? [] : ($summary['reconciliation_blockers'] ?? ['reconciliation_not_ready']),
+            ];
+            foreach ($gates as $code => $blockers) {
+                $recoveryRoute = $code === 'inventory_reconciliation_resolve' && \Route::has('accounting.reports.reconciliation.index')
+                    ? route('accounting.reports.reconciliation.index') : $route;
+                $readiness[] = $this->inventoryGateReadiness($code, $blockers, $recoveryRoute);
+            }
+        } catch (\Throwable) {
+            foreach ($codes as $code) {
+                $readiness[] = $this->inventoryGateReadiness($code, ['preflight_unavailable'], $route);
+            }
+        }
+    }
+
+    /** @param array<int, string> $blockers */
+    private function inventoryGateReadiness(string $code, array $blockers, ?string $route): array
+    {
+        $ready = $blockers === [];
+
+        return [
+            'code' => $code, 'event_code' => $code,
+            'status' => $ready ? 'READY' : 'NOT_READY', 'configuration_warning' => false,
+            'missing_count' => count($blockers),
+            'block_reason' => $ready ? null : 'ตรวจพบ blocker: '.implode(', ', $blockers),
+            'next_action' => $ready ? 'ผ่าน gate แล้ว สามารถตรวจขั้นตอนถัดไป' : 'เปิด Stock Valuation เพื่อตรวจและแก้ blocker',
+            'recovery_url' => $route, 'recovery_label' => 'เปิดหน้าตรวจสอบ',
+            'recovery_permission' => 'wms.stock-valuation.view', 'route' => null,
+        ];
     }
 
     private function financeSnapshot(User $user, ?int $warehouseId): WorkflowRuntimeSnapshot
@@ -170,6 +321,24 @@ final class WorkflowRuntimeResolver
         }
         if ($warehouseId !== null && $user->hasPermission('finance.settlements.view')) {
             $pending[] = $this->pending('finance.settlements', Settlement::query()->whereHas('bankAccount', fn ($query) => $query->where('warehouse_id', $warehouseId))->whereIn('status', ['DRAFT', 'APPROVED'])->count(), 'รายการรับจ่ายที่ยังไม่ Post', 'finance.settlements.index', 'finance.settlements.view');
+        }
+        if ($warehouseId !== null && $user->hasPermission('finance.petty-cash.view')) {
+            $pending[] = $this->pending('finance.petty-cash', PettyCashVoucher::query()->where('warehouse_id', $warehouseId)->whereIn('status', ['DRAFT', 'SUBMITTED', 'APPROVED'])->count(), 'ใบสำคัญเงินสดย่อยที่ยังดำเนินการไม่เสร็จ', 'finance.petty-cash.index', 'finance.petty-cash.view');
+        }
+        if ($warehouseId !== null && $user->hasPermission('finance.petty-cash-top-ups.view')) {
+            $pending[] = $this->pending('finance.petty-cash-top-ups', PettyCashTopUp::query()->where('warehouse_id', $warehouseId)->whereIn('status', ['DRAFT', 'SUBMITTED', 'APPROVED'])->count(), 'รายการเติมเงินสดย่อยที่ยังไม่ Post', 'finance.petty-cash-top-ups.index', 'finance.petty-cash-top-ups.view');
+        }
+        if ($warehouseId !== null && $user->hasPermission('finance.petty-cash-clearings.view')) {
+            $pending[] = $this->pending('finance.petty-cash-clearings', PettyCashClearing::query()->where('warehouse_id', $warehouseId)->whereIn('status', ['DRAFT', 'SUBMITTED', 'APPROVED'])->count(), 'รายการเคลียร์เงินสดย่อยที่ยังไม่ Post', 'finance.petty-cash-clearings.index', 'finance.petty-cash-clearings.view');
+        }
+        if ($warehouseId !== null && $user->hasPermission('finance.employee-advances.view')) {
+            $pending[] = $this->pending('finance.employee-advances', EmployeeAdvance::query()->where('warehouse_id', $warehouseId)->whereIn('status', ['DRAFT', 'SUBMITTED', 'APPROVED'])->count(), 'ใบเงินทดรองที่ยังดำเนินการไม่เสร็จ', 'finance.employee-advances.index', 'finance.employee-advances.view');
+        }
+        if ($warehouseId !== null && $user->hasPermission('finance.employee-advance-clearings.view')) {
+            $pending[] = $this->pending('finance.employee-advance-clearings', EmployeeAdvanceClearing::query()->where('warehouse_id', $warehouseId)->whereIn('status', ['DRAFT', 'SUBMITTED', 'APPROVED'])->count(), 'รายการเคลียร์เงินทดรองที่ยังไม่ Post', 'finance.employee-advance-clearings.index', 'finance.employee-advance-clearings.view');
+        }
+        if ($warehouseId !== null && $user->hasPermission('finance.internal-transfers.view')) {
+            $pending[] = $this->pending('finance.internal-transfers', InternalTransfer::query()->where('warehouse_id', $warehouseId)->whereIn('status', ['DRAFT', 'SUBMITTED', 'APPROVED'])->count(), 'รายการโอนเงินภายในที่ยังไม่ Post', 'finance.internal-transfers.index', 'finance.internal-transfers.view');
         }
 
         return new WorkflowRuntimeSnapshot('finance', $readiness, $pending);

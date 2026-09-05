@@ -44,6 +44,13 @@
     </div>
 @endif
 
+@if (auth()->user()->hasPermission('settings.document-templates.view'))
+    <p class="eyebrow px-3 mb-2">เอกสารและแบบฟอร์ม</p>
+    <div class="list-group mb-4">
+        <a class="list-group-item list-group-item-action {{ request()->routeIs('settings.document-templates.*') ? 'active' : '' }}" href="{{ route('settings.document-templates.index') }}"><i class="bx bx-layout me-2" aria-hidden="true"></i>Template เอกสาร</a>
+    </div>
+@endif
+
 @if (auth()->user()->hasPermission('settings.users.view') || auth()->user()->hasPermission('settings.roles.view'))
     <p class="eyebrow px-3 mb-2">ผู้ใช้และสิทธิ์</p>
     <div class="list-group mb-4">

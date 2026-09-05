@@ -13,9 +13,11 @@ use App\Modules\Wms\Models\IssueReturn;
 use App\Modules\Wms\Models\IssueReturnLine;
 use App\Modules\Wms\Models\IssueType;
 use App\Modules\Wms\Models\Item;
+use App\Modules\Wms\Models\StockBalance;
 use App\Modules\Wms\Requests\SaveIssueDocumentRequest;
 use App\Modules\Wms\Requests\SaveIssueReturnRequest;
 use App\Modules\Wms\Services\IssueReturnService;
+use App\Modules\Wms\Services\StockBalanceService;
 use App\Modules\Wms\Support\WmsDecimal;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -33,7 +35,11 @@ final class IssueReturnController extends Controller
     {
         $warehouseId = (int) $request->attributes->get('selectedWarehouse')->id;
         $labels = ['DRAFT' => 'ร่าง', 'APPROVED' => 'อนุมัติแล้ว', 'POSTED' => 'ลง Stock แล้ว', 'VOID' => 'ยกเลิก'];
-        $query = IssueDocument::query()->with(['lines.item:id,code,name'])->where('warehouse_id', $warehouseId)->latest('id');
+        $query = IssueDocument::query()->with(['lines.item:id,code,name'])->where('warehouse_id', $warehouseId);
+        if ($request->filled('status') && in_array($request->string('status')->toString(), ['DRAFT', 'APPROVED', 'POSTED', 'VOID'], true)) $query->where('status', $request->string('status')->toString());
+        if ($request->filled('date_from')) $query->whereDate('document_date', '>=', $request->date('date_from'));
+        if ($request->filled('date_to')) $query->whereDate('document_date', '<=', $request->date('date_to'));
+        $query->latest('id');
 
         return DataTables::eloquent($query)
             ->addColumn('business_date', fn ($row) => $row->document_date?->format((string) ($settings->value('date_format') ?: 'd/m/Y')) ?: '-')
@@ -67,9 +73,14 @@ final class IssueReturnController extends Controller
     {
         $this->scopeIssue($request, $document);
         $document->load(['warehouse:id,code,name', 'lines.item:id,code,name', 'lines.uom:id,code,name', 'lines.movement', 'lines.allocation', 'creator:id,name']);
+        $stockBalances = StockBalance::query()
+            ->where('warehouse_id', $document->warehouse_id)
+            ->whereIn('item_id', $document->lines->pluck('item_id'))
+            ->get(['item_id', 'uom_id', 'available'])
+            ->keyBy(fn (StockBalance $balance): string => $balance->item_id.':'.$balance->uom_id);
         $history = AuditLog::query()->with('user:id,name')->where('subject_type', $document->getMorphClass())->where('subject_id', $document->id)->latest('created_at')->latest('id')->get();
 
-        return view('Wms::issues.show', ['document' => $document, 'history' => $history, 'dateFormat' => (string) ($settings->value('date_format') ?: 'd/m/Y')]);
+        return view('Wms::issues.show', ['document' => $document, 'history' => $history, 'stockBalances' => $stockBalances, 'dateFormat' => (string) ($settings->value('date_format') ?: 'd/m/Y')]);
     }
 
     public function issueApprove(Request $request, IssueDocument $document, IssueReturnService $service, AuditLogger $audit): JsonResponse
@@ -109,7 +120,11 @@ final class IssueReturnController extends Controller
     {
         $warehouseId = (int) $request->attributes->get('selectedWarehouse')->id;
         $labels = ['DRAFT' => 'ร่าง', 'APPROVED' => 'อนุมัติแล้ว', 'POSTED' => 'ลง Stock แล้ว', 'VOID' => 'ยกเลิก'];
-        $query = IssueReturn::query()->with(['issue:id,document_number', 'lines'])->where('warehouse_id', $warehouseId)->latest('id');
+        $query = IssueReturn::query()->with(['issue:id,document_number', 'lines'])->where('warehouse_id', $warehouseId);
+        if ($request->filled('status') && in_array($request->string('status')->toString(), ['DRAFT', 'APPROVED', 'POSTED', 'VOID'], true)) $query->where('status', $request->string('status')->toString());
+        if ($request->filled('date_from')) $query->whereDate('document_date', '>=', $request->date('date_from'));
+        if ($request->filled('date_to')) $query->whereDate('document_date', '<=', $request->date('date_to'));
+        $query->latest('id');
 
         return DataTables::eloquent($query)
             ->addColumn('business_date', fn ($row) => $row->document_date?->format((string) ($settings->value('date_format') ?: 'd/m/Y')) ?: '-')
@@ -183,12 +198,17 @@ final class IssueReturnController extends Controller
         return response()->json(['status' => true, 'msg' => 'ลบร่างใบรับคืนแล้ว', 'redirect' => route('wms.issue-returns.index')]);
     }
 
-    public function itemOptions(Request $request): JsonResponse
+    public function itemOptions(Request $request, StockBalanceService $balances): JsonResponse
     {
+        $warehouseId = (int) $request->attributes->get('selectedWarehouse')->id;
         $q = trim((string) $request->input('q'));
         $rows = Item::query()->with('baseUom:id,code,name')->where('is_active', true)->when($q, fn ($x) => $x->where(fn ($y) => $y->where('code', 'like', "%{$q}%")->orWhere('name', 'like', "%{$q}%")))->orderBy('code')->limit(31)->get(['id', 'code', 'name', 'base_uom_id']);
 
-        return response()->json(['results' => $rows->take(30)->map(fn ($x) => ['id' => $x->id, 'text' => $x->code.' · '.$x->name, 'uom_id' => $x->base_uom_id, 'uom_label' => $x->baseUom?->code.' · '.$x->baseUom?->name])->values(), 'pagination' => ['more' => $rows->count() > 30]]);
+        return response()->json(['results' => $rows->take(30)->map(function ($x) use ($balances, $warehouseId) {
+            $balance = $balances->forItem($warehouseId, (int) $x->id, (int) $x->base_uom_id);
+
+            return ['id' => $x->id, 'text' => $x->code.' · '.$x->name, 'uom_id' => $x->base_uom_id, 'uom_label' => $x->baseUom?->code.' · '.$x->baseUom?->name, 'available_quantity' => $balance['available'], 'available_label' => 'คงเหลือพร้อมใช้ '.WmsDecimal::format($balance['available'])];
+        })->values(), 'pagination' => ['more' => $rows->count() > 30]]);
     }
 
     public function issueOptions(Request $request): JsonResponse

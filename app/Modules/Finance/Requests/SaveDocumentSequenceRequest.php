@@ -30,7 +30,7 @@ class SaveDocumentSequenceRequest extends FormRequest
         $sequence = $this->route('documentSequence');
 
         return [
-            'document_type' => ['required', 'in:RECEIPT,PAYMENT,SALES_INVOICE,SALES_CREDIT_NOTE,PURCHASE_INVOICE,PURCHASE_CREDIT_NOTE,PURCHASE_ORDER,INVENTORY_ADJUSTMENT,INVENTORY_ISSUE,INVENTORY_RETURN,SALES_RFQ,SALES_INTAKE,SALES_QUOTATION,SALES_ORDER,PHYSICAL_SALE_HS,PHYSICAL_SALE_IV,SALES_RETURN,CUSTOMER,SUPPLIER,ADVANCE_DEPOSIT_AI,PURCHASE_REQUISITION,GOODS_RECEIPT,WMS_TRANSFER,STOCK_COUNT', Rule::unique('finance_document_sequences')->withoutTrashed()->whereNull('warehouse_id')->ignore($sequence)],
+            'document_type' => ['required', 'in:RECEIPT,PAYMENT,SALES_INVOICE,SALES_CREDIT_NOTE,PURCHASE_INVOICE,PURCHASE_CREDIT_NOTE,PURCHASE_ORDER,INVENTORY_ADJUSTMENT,INVENTORY_ISSUE,INVENTORY_RETURN,SALES_RFQ,SALES_INTAKE,SALES_QUOTATION,SALES_ORDER,PHYSICAL_SALE_HS,PHYSICAL_SALE_IV,SALES_RETURN,CUSTOMER,SUPPLIER,ADVANCE_DEPOSIT_AI,PURCHASE_REQUISITION,GOODS_RECEIPT,WMS_TRANSFER,STOCK_COUNT,PETTY_CASH,PETTY_CASH_TOP_UP,PETTY_CASH_CLEARING,EMPLOYEE_ADVANCE,EMPLOYEE_ADVANCE_CLEARING', Rule::unique('finance_document_sequences')->withoutTrashed()->whereNull('warehouse_id')->ignore($sequence)],
             'name' => ['required', 'string', 'max:255'],
             'prefix' => ['required', 'string', 'max:20'],
             'number_format' => ['required', 'string', 'max:80'],

@@ -28,15 +28,23 @@ use Yajra\DataTables\Facades\DataTables;
 
 class PaymentVoucherController extends Controller
 {
-    public function index(): View
+    public function index(Request $request): View
     {
-        return view('Finance::payment-vouchers.index');
+        $voucherType = request()->routeIs('finance.pre-payment-vouchers.*') ? 'PRE_PAYMENT' : 'PAYMENT';
+
+        return view('Finance::payment-vouchers.index', [
+            'voucherType' => $voucherType,
+            'bankAccounts' => BankAccount::query()->where('is_active', true)->whereIn('warehouse_id', $this->authorizedWarehouseIds($request))->orderBy('code')->get(['id', 'code', 'name']),
+        ]);
     }
 
     public function data(Request $request, GlobalSettings $settings): JsonResponse
     {
+        $voucherType = $request->routeIs('finance.pre-payment-vouchers.*') ? 'PRE_PAYMENT' : 'PAYMENT';
         $dateFormat = (string) $settings->value('date_format');
-        $dataTable = DataTables::eloquent($this->query($request))
+        $query = $this->query($request)->where('finance_payment_vouchers.voucher_type', $voucherType);
+        $this->applyFilters($query, $request);
+        $dataTable = DataTables::eloquent($query)
             ->filter(fn (Builder $query) => $this->search($query, $request))
             ->order(fn (Builder $query) => $this->order($query, $request))
             ->addColumn('date_label', fn (PaymentVoucher $voucher) => $voucher->document_date->format($dateFormat))
@@ -83,8 +91,10 @@ class PaymentVoucherController extends Controller
             abort_unless($commissionRequest->status === 'APPROVED' && ! $commissionRequest->payment_voucher_id, 422);
         }
 
+        $voucherType = $commissionRequest ? 'PAYMENT' : ($request->routeIs('finance.pre-payment-vouchers.*') ? 'PRE_PAYMENT' : 'PAYMENT');
+
         return view('Finance::payment-vouchers.form', [
-            'voucher' => new PaymentVoucher(['voucher_type' => 'PAYMENT', 'document_date' => today(), 'party_id' => $commissionRequest?->supplier_party_id, 'amount' => $commissionRequest?->amount ?? 0, 'description' => $commissionRequest ? "ค่าคอมมิชชั่น {$commissionRequest->document_number}" : null]),
+            'voucher' => new PaymentVoucher(['voucher_type' => $voucherType, 'document_date' => today(), 'party_id' => $commissionRequest?->supplier_party_id, 'amount' => $commissionRequest?->amount ?? 0, 'description' => $commissionRequest ? "ค่าคอมมิชชั่น {$commissionRequest->document_number}" : null]),
             'commissionRequest' => $commissionRequest,
             'bankAccounts' => BankAccount::query()->where('is_active', true)->whereIn('warehouse_id', $this->authorizedWarehouseIds($request))->orderBy('code')->get(['id', 'code', 'name']),
         ]);
@@ -278,6 +288,16 @@ class PaymentVoucherController extends Controller
         if ($search !== '') {
             $query->where(fn (Builder $query) => $query->where('finance_payment_vouchers.document_number', 'like', "%{$search}%")->orWhere('finance_payment_vouchers.voucher_type', 'like', "%{$search}%")->orWhere('finance_payment_vouchers.status', 'like', "%{$search}%")->orWhere('parties.code', 'like', "%{$search}%")->orWhere('parties.name', 'like', "%{$search}%"));
         }
+    }
+
+    private function applyFilters(Builder $query, Request $request): void
+    {
+        $query->when($request->filled('status') && in_array($request->input('status'), ['DRAFT', 'SUBMITTED', 'APPROVED', 'VOID'], true), fn (Builder $query) => $query->where('finance_payment_vouchers.status', $request->input('status')))
+            ->when($request->filled('bank_account_id'), fn (Builder $query) => $query->where('finance_payment_vouchers.bank_account_id', (int) $request->input('bank_account_id')))
+            ->when($request->filled('date_from'), fn (Builder $query) => $query->whereDate('finance_payment_vouchers.document_date', '>=', $request->input('date_from')))
+            ->when($request->filled('date_to'), fn (Builder $query) => $query->whereDate('finance_payment_vouchers.document_date', '<=', $request->input('date_to')))
+            ->when($request->filled('amount_min') && is_numeric($request->input('amount_min')), fn (Builder $query) => $query->where('finance_payment_vouchers.amount', '>=', (float) $request->input('amount_min')))
+            ->when($request->filled('amount_max') && is_numeric($request->input('amount_max')), fn (Builder $query) => $query->where('finance_payment_vouchers.amount', '<=', (float) $request->input('amount_max')));
     }
 
     private function order(Builder $query, Request $request): void

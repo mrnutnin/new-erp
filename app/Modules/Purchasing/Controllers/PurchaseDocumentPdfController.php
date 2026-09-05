@@ -4,6 +4,8 @@ namespace App\Modules\Purchasing\Controllers;
 
 use App\Http\Controllers\Controller;
 use App\Modules\Platform\Services\DocumentPdfRenderer;
+use App\Modules\Platform\Services\DocumentTemplateRenderService;
+use App\Models\CompanySetting;
 use App\Modules\Settings\Services\GlobalSettings;
 use App\Modules\Purchasing\Models\GoodsReceipt;
 use App\Modules\Purchasing\Models\PurchaseDocument;
@@ -32,7 +34,9 @@ class PurchaseDocumentPdfController extends Controller
     {
         $document = $this->scope($request, $purchaseOrder)->load(['lines.item', 'lines.uom']);
 
-        return $this->pdf($renderer, 'ใบสั่งซื้อ', $document->document_number, $document->document_date, $document->status, $document->supplier_name, $document->description, $document->lines->map(fn ($line) => [$line->item?->code.' · '.$line->item?->name, $line->description, $line->uom?->code, $line->quantity, $line->line_total])->all(), $settings);
+        $logoPath = $settings->value('logo_path');
+        $templateHtml = app(DocumentTemplateRenderService::class)->renderDefault(CompanySetting::query()->findOrFail(1), 'PURCHASE_ORDER', ['company' => ['logo' => $logoPath && Storage::disk('public')->exists($logoPath) ? Storage::disk('public')->path($logoPath) : null, 'name' => $settings->value('company_name') ?: config('app.name'), 'address' => $settings->value('company_address') ?: '', 'tax_id' => $settings->value('tax_id') ?: ''], 'party' => ['name' => $document->supplier_name, 'address' => ''], 'document' => ['title' => 'ใบสั่งซื้อ', 'number' => $document->document_number, 'date' => $document->document_date->format((string) $settings->value('date_format')), 'status' => $document->status], 'lines' => $document->lines->map(fn ($line) => ['item' => $line->item?->code.' · '.$line->item?->name, 'description' => $line->description, 'uom' => $line->uom?->code, 'quantity' => (string) $line->quantity, 'amount' => (string) $line->line_total])->all(), 'totals' => ['subtotal' => (string) $document->subtotal, 'vat' => '0.00', 'grand_total' => (string) $document->total_amount], 'signatures' => []]);
+        return $templateHtml ? response($renderer->render($templateHtml), 200, ['Content-Type' => 'application/pdf', 'Content-Disposition' => 'inline; filename="'.rawurlencode($document->document_number).'.pdf"']) : $this->pdf($renderer, 'ใบสั่งซื้อ', $document->document_number, $document->document_date, $document->status, $document->supplier_name, $document->description, $document->lines->map(fn ($line) => [$line->item?->code.' · '.$line->item?->name, $line->description, $line->uom?->code, $line->quantity, $line->line_total])->all(), $settings);
     }
 
     public function receipt(Request $request, GoodsReceipt $purchaseReceipt, DocumentPdfRenderer $renderer, GlobalSettings $settings): Response

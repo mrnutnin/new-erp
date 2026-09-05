@@ -36,7 +36,7 @@
 - [~] Fiscal Year / Fiscal Period
 - [x] Users, Roles, Permissions และ Warehouse assignment
 - [x] Document Sequence / Format
-- [ ] Document Template Builder / Preview (แผนพัฒนาอยู่ที่ `docs/planning/18-document-template-builder-plan.md`; ownership เป็น Platform, จุดเข้าจาก Global Settings และยังไม่เริ่ม implementation)
+- [~] Document Template Builder / Preview (แผนพัฒนาอยู่ที่ `docs/planning/18-document-template-builder-plan.md`; สร้าง Platform Template/Version schema, publish contract, Template Service, field registry, normalized payload contract, แยกหน้า List/Create/Edit, responsive Section cards, Layout Properties, signature fields, A4 table pagination, generic field renderer, ordered company-header sections, Auto HTML Preview หน้า Edit, Ajax Save โดยไม่ reload, PDF Preview จริง, HTML/PDF parity tests, Edit Draft, New Version, Archive และ company logo แล้ว; Purchase Order PDF เชื่อมแล้ว; ยังเหลือ PDF document types อื่น)
 - [~] Global settings: AVG/FIFO, VAT/WHT, negative stock, retention และ module capability
 - [ ] Password reset และ session policy
 - [ ] Import template / staged validate-preview-commit
@@ -85,6 +85,8 @@
 > Owner UI/Workflow sign-off (2026-09-04): ผู้ใช้ยืนยันการทดสอบผ่านแล้ว จึงปิด Manual QA ของ Purchase Return + Credit Note MVP.
 
 > Purchasing Dashboard (2026-09-04): เพิ่ม Dashboard แบบ section loading (`summary`, `work`, `trend`, `recent`) แยก request/cache ตามคลัง ใช้ Chart.js สำหรับแนวโน้ม PO และมี automated contract test; ไม่โหลด query หนักทั้งหมดใน initial request.
+
+> Document Template UX (2026-09-04): Builder รองรับเพิ่ม/ลบ/เลือก field และลากจัดลำดับ section ด้วย native drag-and-drop พร้อม Preview; ไม่เพิ่ม dependency ใหม่.
 - [~] Purchase Return / Landed Cost (มี migration, Models, lifecycle, allocation calculator, WMS RECOST/GL bridge, gated Post endpoint, UI/routes, UX pass รายการ/ตัวกรอง/ฟอร์ม/รายละเอียด, server-side DataTable, auto document number ผ่าน Global Setting sequence `LANDED_COST`, Create แสดง Receipt ที่รอ Post Stock พร้อมทางไปหน้าต้นทาง, contract tests 9 tests / 33 assertions และ MySQL live Post integration 1 test / 18 assertions; MySQL integration รวมกับ Purchase Document ผ่าน 2 tests / 32 assertions และ rollback-safe; ยังเหลือ Manual QA และ Workflow/report catalog)
 
 ### Core flow
@@ -203,25 +205,40 @@
 
 - [x] Dashboard
 - [x] Workflow Center: Setup / Daily operations
+- [x] Sidebar Finance จัด Main menu / Sub menu แบบพับได้ตามมาตรฐาน Accounting (เงินรับ–จ่าย, เงินสดย่อย, ลูกหนี้และเจ้าหนี้, รายงาน, ข้อมูลหลัก)
 - [x] Bank/Cash Accounts
 - [x] Payment Terms / Other Income / Other Expense
 - [x] Receipt / Payment Draft → Approve → Post
-- [~] Customer Receipt และ Supplier Payment allocation
+- [~] Customer Receipt และ Supplier Payment allocation (รองรับ allocation หลักแล้ว; partial, overpayment, unapplied และ reversal hardening ยังเหลือ)
 - [x] AR/AP Open Items และ Aging
-- [~] Pre-Payment Voucher / Payment Voucher
-- [~] Advance / Deposit foundation
-- [x] Advance / Deposit typed Account Mapping contract (`CUSTOMER_ADVANCE` = LIABILITY, `SUPPLIER_ADVANCE` = ASSET); posting/application/UI remain gated until reversal/reconciliation contract is complete
-- [ ] Petty Cash
-- [ ] Employee Advance
-- [ ] Bank Reconciliation
-- [~] Finance Reports
+- [~] Pre-Payment Voucher / Payment Voucher (สร้าง/อนุมัติ/ส่ง Settlement แล้ว; allocation และ GL/Open Item integration ยังต้อง harden)
+- [~] Advance / Deposit foundation (มี subledger, typed mapping, application และ reversal foundation; ต้องปิด integration/reconciliation ให้ครบ)
+- [x] Advance / Deposit typed Account Mapping contract (`CUSTOMER_ADVANCE` = LIABILITY, `SUPPLIER_ADVANCE` = ASSET)
+- [x] Petty Cash fund/voucher/top-up/clearing workflow และ backend API: Draft → Submit → Approve → Post → Reverse/Void, Journal/idempotency/audit, route/RBAC, Yajra/AJAX, attachments, document sequence และ branch/warehouse scope
+- [x] Petty Cash รองรับหลายวงเงินต่อบัญชีเงินสดเดียวกัน, ลบ Draft ได้ตาม guard และ deactivation เมื่อไม่ถูกอ้างอิง
+- [x] Petty Cash Clearing รองรับ expected/actual/variance, เงินเกิน/เงินขาด mapping และ Post/Reversal ผ่าน Posting Contract
+- [x] Employee Advance และ Employee Advance Clearing: schema, sequence, Draft → Submit → Approve → Reject → Post → Reverse/Void, VAT/WHT snapshot, refund/additional advance, attachments, audit, soft delete Draft และ GL link
+- [ ] Employee Advance รองรับ partial/multiple clearing และ policy self-approval แบบครบทุกกรณี
+- [x] Bank Reconciliation workflow อยู่ใน Accounting ตาม boundary กลาง; Finance ใช้ Bank/Cash Account เป็น source และมีรายงาน Finance-to-GL แยกต่างหาก
+- [x] Internal Transfer ระหว่างบัญชีเงินสด/ธนาคาร: Draft → Submit → Approve → Post → Reverse/Void, branch scope, document sequence, audit, GL/GL reversal, RBAC และ DataTable/AJAX UI
+- [~] Finance Reports: Petty Cash, Employee Advance, Payment Activity, Finance-to-GL Reconciliation, Cash Position และ Expected Collection/Payment พร้อม branch/warehouse/date scope; ยังเหลือ integration และ owner manual QA
+
+> Finance Dashboard P0 (2026-09-04): โหลด Summary, Cash Trend, AR/AP Aging, Work Queue และ Recent Activity แยก section; ทุก query จำกัดตามสาขาและคลังที่ผู้ใช้มีสิทธิ์, AR/AP หัก allocation/advance application, Trend รับเฉพาะ Settlement `POSTED`, และ Recent Activity ใช้ Yajra DataTable + Excel export. ผ่าน contract tests 2 tests / 20 assertions; รอ Owner UI sign-off.
 
 ### Core flow
 
 - [x] Settlement → Journal → Open Item → Allocation แบบ atomic/idempotent
 - [x] VAT realization ตาม allocation และ WHT snapshot/realization
-- [~] Advance/unapplied cash และ reversal
-- [ ] Petty Cash/Employee Advance posting และ reconciliation
+- [~] Advance/unapplied cash และ reversal (มี foundation; ต้อง harden partial/unapplied และตรวจ integration)
+- [~] Petty Cash/Employee Advance posting พร้อมแล้ว; reconciliation, partial clearing และ browser/MySQL release evidence ยังเหลือ
+
+### สถานะการตรวจสอบล่าสุด (2026-09-05)
+
+- [x] Finance unit tests ที่เกี่ยวข้องผ่าน `68 tests / 356 assertions`
+- [x] ตรวจ PHP syntax ของ `app/Modules/Finance` ผ่าน
+- [x] ตรวจ route Finance พบ 190 routes ครอบคลุมหน้าหลัก, workflow, reports, attachment และ document sequence
+- [x] Finance migrations ล่าสุดติดตั้งครบ รวม soft delete ของ Employee Advance/เอกสารเคลียร์
+- [ ] Owner manual QA และ release sign-off ทุก branch/status/permission
 
 ## 6. Accounting
 
@@ -393,3 +410,11 @@ Min/Max เป็นนโยบายแจ้งเตือนและช่
 > Verification record (2026-08-25): `tests/Feature/StockMinMaxMySqlIntegrationReadinessTest.php` ผ่าน 3 tests / 13 assertions บน local MySQL `new_erp` ด้วย `ERP_RUN_MYSQL_INTEGRATION=1` ครอบคลุม reserved/open approved PO, Purchase UOM → Stock UOM conversion, warehouse scope และ rollback. ให้รันทดสอบซ้ำเฉพาะเมื่อ Min/Max policy, reserved/open-PO calculation, UOM conversion หรือ PR recommendation contract เปลี่ยน.
 
 > Owner confirmation (2026-08-25): ผู้ใช้ตรวจสอบ Min/Max Dashboard alert และ PR prefill ด้วยตนเองแล้ว ถือว่า Manual UI/Owner sign-off ผ่าน ไม่ต้องทดสอบซ้ำจนกว่า Min/Max policy, reserved/open-PO calculation, UOM conversion หรือ PR recommendation contract จะเปลี่ยน.
+
+> Verification record (2026-09-04): แก้ PDF Preview ของ Document Template ที่ mPDF สร้างหน้าว่างจำนวนมาก โดยแยก browser CSS ออกจาก PDF parser และคง layout สำคัญด้วย inline style; ทดสอบ Version 2 จาก local data แล้วเหลือ 1 หน้า (จากเดิม 678 หน้า). `DocumentPdfRendererTest` และ `DocumentTemplateBuilderUiContractTest` ผ่าน 4 tests / 40 assertions.
+
+> Verification record (2026-09-04): ปรับ HTML/PDF parity เพิ่มเติม โดยจัด document metadata ใน Header ขวา, บังคับ signature footer ไว้ล่างสุด และใช้ fixed table columns กับ mPDF-safe typography/spacing. Blade cache และชุด renderer/UI tests ผ่านแล้ว.
+
+> Verification record (2026-09-04): เพิ่มฟอนต์ `Noto Sans Thai` จาก Google Fonts สำหรับ PDF profile A4 ใน `resources/fonts` และตรวจ render ภาษาไทยจริงแล้ว; `DocumentPdfRendererTest` ผ่าน 3 tests / 5 assertions.
+
+> Finance Petty Cash (2026-09-04): เพิ่ม Petty Cash subledger แบบแยกจาก Settlement ได้แก่ Fund/Voucher/Line ที่ warehouse-scoped, cash-account gate, expense snapshots, workflow service, atomic post/reverse, backend routes/RBAC, Yajra endpoint และ fund setup/deactivation guard. เพิ่ม Top-up จาก BANK ที่ active/postable ไป CASH ของ Fund พร้อม snapshot, sequence, audit, idempotency, Journal reverse, route/RBAC, Yajra DataTable + Excel และ AJAX UI; clearing/reconciliation ยังไม่เริ่ม.

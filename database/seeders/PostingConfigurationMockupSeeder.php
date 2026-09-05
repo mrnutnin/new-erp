@@ -25,6 +25,8 @@ class PostingConfigurationMockupSeeder extends Seeder
             'customer_payment' => ['OUTPUT_VAT' => '21800', 'WHT_RECEIVABLE' => '11900', 'CUSTOMER_ADVANCE' => '21500'],
             'customer_advance' => ['CUSTOMER_ADVANCE' => '21500', 'WHT_RECEIVABLE' => '11900'],
             'supplier_payment' => ['INPUT_VAT' => '11800', 'WHT_PAYABLE' => '21400', 'SUPPLIER_ADVANCE' => '12500'],
+            'employee_advance' => ['EMPLOYEE_ADVANCE' => '12600'],
+            'employee_advance_clearing' => ['EMPLOYEE_ADVANCE' => '12600'],
             'sales_commission_payout' => ['COMMISSION_EXPENSE' => '53000'],
             'inventory_adjustment' => ['INVENTORY' => '13000', 'ADJUSTMENT_GAIN' => '42100', 'ADJUSTMENT_LOSS' => '52100'],
             'asset.depreciation' => ['DEPRECIATION_EXPENSE' => '54000', 'ACCUMULATED_DEPRECIATION' => '15110'],

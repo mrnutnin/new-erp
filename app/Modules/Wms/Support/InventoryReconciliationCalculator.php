@@ -7,17 +7,23 @@ use Brick\Math\RoundingMode;
 
 final class InventoryReconciliationCalculator
 {
-    public static function totals(string $allocationValue, string $balanceValue, string $glValue, int $unlinkedAllocations = 0, int $pendingAllocations = 0, string $pendingValue = '0', int $lineUnlinked = 0, int $lineMismatched = 0, string $roundingDifference = '0'): array
+    public static function totals(string $allocationValue, string $balanceValue, string $glValue, int $unlinkedAllocations = 0, int $pendingAllocations = 0, string $pendingValue = '0', int $lineUnlinked = 0, int $lineMismatched = 0, string $roundingDifference = '0', ?string $allocationGlValue = null): array
     {
         $allocation = self::decimal($allocationValue);
+        $allocationGl = self::decimal($allocationGlValue ?? $allocationValue);
         $balance = self::decimal($balanceValue);
         $gl = self::decimal($glValue);
 
-        $allocationVsGl = BigDecimal::of($allocation)->minus($gl);
+        // Inventory allocations retain eight-decimal valuation, while the GL
+        // contract posts each journal line at accounting precision. Compare
+        // GL on the same per-allocation rounded basis, not by rounding only
+        // the aggregate (which produces a different result for 0.025 values).
+        $allocationVsGl = BigDecimal::of($allocationGl)->minus($gl);
         $balanceVsAllocation = BigDecimal::of($balance)->minus($allocation);
 
         return [
             'allocation_value' => $allocation,
+            'allocation_gl_value' => $allocationGl,
             'balance_value' => $balance,
             'gl_inventory_value' => $gl,
             'allocation_vs_gl_difference' => self::out($allocationVsGl),

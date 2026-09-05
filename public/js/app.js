@@ -1,6 +1,24 @@
 (function ($) {
     'use strict';
 
+    // Shared by accounting and operational modules that display monetary values.
+    // Accounting layout may override the decimal-place setting per company.
+    window.erpAccountingDecimalPlaces = window.erpAccountingDecimalPlaces ?? 2;
+    window.erpAccountingFormat = window.erpAccountingFormat || function (value) {
+        if (value === null || value === undefined || value === '') {
+            return '0.' + '0'.repeat(window.erpAccountingDecimalPlaces);
+        }
+
+        var number = Number(String(value).replace(/,/g, ''));
+
+        return Number.isFinite(number)
+            ? number.toLocaleString('en-US', {
+                minimumFractionDigits: window.erpAccountingDecimalPlaces,
+                maximumFractionDigits: window.erpAccountingDecimalPlaces
+            })
+            : value;
+    };
+
     function resetErrors($form) {
         $form.find('.is-invalid').removeClass('is-invalid');
         $form.find('[data-error-for]').text('');

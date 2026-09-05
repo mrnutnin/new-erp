@@ -95,3 +95,59 @@ Artisan::command('asset:maintenance-alerts', function (): void {
 })->purpose('บันทึกการตรวจแผนบำรุงรักษาที่ใกล้ครบกำหนดหรือเกินกำหนด โดยไม่สร้างใบแจ้งซ่อม');
 
 Schedule::command('asset:maintenance-alerts')->dailyAt('08:00')->withoutOverlapping()->onOneServer();
+
+Artisan::command('wms:repair-pos-reversal-links {warehouse_id} {--apply} {--actor=1}', function (int $warehouse_id): void {
+    $rows = DB::table('wms_cost_allocations as allocations')
+        ->join('wms_stock_movements as movements', 'movements.id', '=', 'allocations.stock_movement_id')
+        ->where('allocations.warehouse_id', $warehouse_id)->where('allocations.status', '!=', 'REVERSED')
+        ->whereNull('allocations.journal_entry_id')->where('movements.source_type', 'POS')
+        ->whereNotNull('movements.metadata')->orderBy('allocations.id')
+        ->get(['allocations.id', 'allocations.item_id', 'movements.metadata']);
+    $actor = User::query()->find((int) $this->option('actor'));
+    $request = Illuminate\Http\Request::create('/wms/repair-pos-reversal-links', 'POST');
+    $results = [];
+    foreach ($rows as $row) {
+        $metadata = json_decode((string) $row->metadata, true);
+        $originalMovementId = (int) ($metadata['reversal_of_movement_id'] ?? 0);
+        $originalLink = $originalMovementId > 0 ? DB::table('wms_cost_allocation_journal_lines as links')
+            ->join('wms_cost_allocations as originals', 'originals.id', '=', 'links.allocation_id')
+            ->where('originals.stock_movement_id', $originalMovementId)->where('originals.item_id', $row->item_id)
+            ->orderBy('links.id')->first(['links.journal_entry_line_id']) : null;
+        $originalLine = $originalLink ? DB::table('journal_entry_lines')->where('id', $originalLink->journal_entry_line_id)->first(['journal_entry_id', 'line_number']) : null;
+        $reversalJournal = $originalLine ? DB::table('journal_entries')->where('reversal_of_id', $originalLine->journal_entry_id)->where('status', 'POSTED')->first(['id', 'entry_number']) : null;
+        $candidate = $reversalJournal ? DB::table('journal_entry_lines')->where('journal_entry_id', $reversalJournal->id)->where('line_number', $originalLine->line_number)->where('subledger_type', 'ITEM')->where('subledger_id', (string) $row->item_id)->get(['id']) : collect();
+        $result = ['allocation_id' => (int) $row->id, 'reversal_journal' => $reversalJournal?->entry_number, 'status' => 'SKIPPED'];
+        if ($candidate->count() === 1) {
+            $result['journal_entry_line_id'] = (int) $candidate->first()->id;
+            if ($this->option('apply')) {
+                if (! $actor) { $this->error('ไม่พบ actor ที่ระบุด้วย --actor'); return; }
+                DB::transaction(function () use ($row, $candidate, $actor, $request): void {
+                    $allocation = CostAllocation::query()->lockForUpdate()->findOrFail($row->id);
+                    $before = $allocation->only(['journal_entry_id', 'status']);
+                    app(InventoryCostAllocationService::class)->linkJournalLineWithinTransaction($allocation, \App\Modules\Accounting\Models\JournalEntryLine::query()->whereKey($candidate->first()->id)->firstOrFail());
+                    $updated = $allocation->fresh();
+                    app(\App\Modules\Platform\Services\AuditLogger::class)->record('wms.cost_allocation.legacy_reversal_link_repaired', $updated, $before, $updated->only(['journal_entry_id', 'status']), $actor, $request);
+                });
+                $result['status'] = 'REPAIRED';
+            } else { $result['status'] = 'READY_TO_REPAIR'; }
+        }
+        $results[] = $result;
+    }
+    $this->line(json_encode($results, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_PRETTY_PRINT));
+})->purpose('ตรวจและซ่อม POS reversal allocation linkage ด้วยหลักฐาน Journal แบบ idempotent');
+
+Artisan::command('wms:correct-legacy-duplicate-allocations {warehouse_id} {--apply} {--actor=1}', function (int $warehouse_id): void {
+    $service = app(\App\Modules\Wms\Services\CostAllocationCorrectionService::class);
+    $actor = User::query()->find((int) $this->option('actor'));
+    $request = Illuminate\Http\Request::create('/wms/correct-legacy-duplicate-allocations', 'POST');
+    $candidates = $service->candidates($warehouse_id);
+    if (! $this->option('apply')) {
+        $this->line(json_encode(collect($candidates)->map(fn (array $candidate): array => ['allocation_id' => $candidate['duplicate']->id, 'canonical_allocation_id' => $candidate['canonical']->id, 'journal_entry_line_id' => $candidate['journal_entry_line_id']])->all(), JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT));
+        return;
+    }
+    if (! $actor) {
+        $this->error('ไม่พบ actor ที่ระบุด้วย --actor');
+        return;
+    }
+    $this->line(json_encode($service->apply($warehouse_id, $actor, $request), JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT));
+})->purpose('สร้าง immutable correction record สำหรับ legacy duplicate allocation โดยไม่แก้หรือลบ POSTED allocation');

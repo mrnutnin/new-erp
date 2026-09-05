@@ -36,6 +36,10 @@ final class InventoryReconciliationService
             ->selectRaw('SUM(inventory_value) AS balance_value')
             ->groupBy('item_id');
 
+        if (Schema::hasTable('wms_cost_allocation_corrections')) {
+            $allocations->whereNotExists(fn ($query) => $query->selectRaw('1')->from('wms_cost_allocation_corrections as corrections')->whereColumn('corrections.allocation_id', 'wms_cost_allocations.id'));
+        }
+
         return DB::query()->fromSub($allocations, 'valuation')
             ->join('wms_items', 'wms_items.id', '=', 'valuation.item_id')
             ->leftJoinSub($gl, 'gl', fn ($join) => $join->whereRaw('CAST(gl.item_id AS UNSIGNED) = valuation.item_id'))
@@ -64,7 +68,9 @@ final class InventoryReconciliationService
             ->where('business_date', '<=', $asOfDate)
             ->where('status', '!=', 'REVERSED')
             ->when($itemId, fn ($query) => $query->where('item_id', $itemId))
+            ->when(Schema::hasTable('wms_cost_allocation_corrections'), fn ($query) => $query->whereNotExists(fn ($subquery) => $subquery->selectRaw('1')->from('wms_cost_allocation_corrections as corrections')->whereColumn('corrections.allocation_id', 'wms_cost_allocations.id')))
             ->selectRaw('COALESCE(SUM(value), 0) AS value')
+            ->selectRaw('COALESCE(SUM(ROUND(value, 2)), 0) AS gl_value')
             ->selectRaw('COALESCE(SUM(CASE WHEN cost_status = "PENDING" THEN value ELSE 0 END), 0) AS pending_value')
             ->selectRaw('COALESCE(SUM(CASE WHEN cost_status = "PENDING" THEN 1 ELSE 0 END), 0) AS pending_count')
             ->selectRaw('COALESCE(SUM(CASE WHEN journal_entry_id IS NULL THEN 1 ELSE 0 END), 0) AS unlinked_count')
@@ -111,6 +117,9 @@ final class InventoryReconciliationService
                 ->where('business_date', '<=', $asOfDate)
                 ->where('status', '!=', 'REVERSED')
                 ->when($itemId, fn ($query) => $query->where('item_id', $itemId));
+            if (Schema::hasTable('wms_cost_allocation_corrections')) {
+                $allocationIds->whereNotExists(fn ($query) => $query->selectRaw('1')->from('wms_cost_allocation_corrections as corrections')->whereColumn('corrections.allocation_id', 'wms_cost_allocations.id'));
+            }
             $lineUnlinked = (clone $allocationIds)
                 ->leftJoin('wms_cost_allocation_journal_lines as links', 'links.allocation_id', '=', 'wms_cost_allocations.id')
                 ->whereNull('links.id')->count('wms_cost_allocations.id');
@@ -120,6 +129,7 @@ final class InventoryReconciliationService
                 ->whereIn('allocations.warehouse_id', $warehouseIds)
                 ->where('allocations.business_date', '<=', $asOfDate)
                 ->where('allocations.status', '!=', 'REVERSED')
+                ->when(Schema::hasTable('wms_cost_allocation_corrections'), fn ($query) => $query->whereNotExists(fn ($subquery) => $subquery->selectRaw('1')->from('wms_cost_allocation_corrections as corrections')->whereColumn('corrections.allocation_id', 'allocations.id')))
                 ->when($itemId, fn ($query) => $query->where('allocations.item_id', $itemId))
                 ->where(fn ($query) => $query->whereNull('lines.id')->orWhereNull('links.identity_key')->orWhereNull('allocations.journal_entry_id')->orWhereColumn('lines.journal_entry_id', '!=', 'allocations.journal_entry_id')->orWhereColumn('links.revision', '!=', 'allocations.revision'))
                 ->distinct()->count('allocations.id');
@@ -144,6 +154,9 @@ final class InventoryReconciliationService
             'as_of_date' => $asOfDate,
             'warehouse_ids' => $warehouseIds,
             'item_id' => $itemId,
+            'corrected_legacy_duplicates' => Schema::hasTable('wms_cost_allocation_corrections')
+                ? DB::table('wms_cost_allocation_corrections')->where('correction_type', 'LEGACY_DUPLICATE')->whereIn('allocation_id', CostAllocation::query()->whereIn('warehouse_id', $warehouseIds)->select('id'))->count()
+                : 0,
             'balance_basis' => 'CURRENT_PROJECTION',
             'unresolved_legacy_review' => $unresolvedLegacyReview,
             ...InventoryReconciliationCalculator::totals(
@@ -156,6 +169,7 @@ final class InventoryReconciliationService
                 $lineUnlinked,
                 $lineMismatched,
                 (string) $roundingDifference,
+                (string) ($allocation->gl_value ?? '0'),
             ),
         ];
     }

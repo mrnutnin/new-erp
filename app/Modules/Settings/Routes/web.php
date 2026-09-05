@@ -1,6 +1,7 @@
 <?php
 
 use App\Modules\Finance\Controllers\DocumentSequenceController;
+use App\Modules\Platform\Controllers\DocumentTemplateController;
 use App\Modules\Settings\Controllers\AuditLogController;
 use App\Modules\Settings\Controllers\BranchController;
 use App\Modules\Settings\Controllers\CompanySettingController;
@@ -22,6 +23,26 @@ Route::middleware(['auth', 'program:settings'])
             ->middleware('permission:settings.company.view')->name('company.edit');
         Route::put('/company', [CompanySettingController::class, 'update'])
             ->middleware('permission:settings.company.update')->name('company.update');
+        Route::get('/document-templates', [DocumentTemplateController::class, 'index'])
+            ->middleware('permission:settings.document-templates.view')->name('document-templates.index');
+        Route::get('/document-templates/create', [DocumentTemplateController::class, 'create'])
+            ->middleware('permission:settings.document-templates.update')->name('document-templates.create');
+        Route::get('/document-templates/versions/{version}/edit', [DocumentTemplateController::class, 'edit'])
+            ->middleware('permission:settings.document-templates.update')->name('document-templates.edit');
+        Route::post('/document-templates', [DocumentTemplateController::class, 'store'])
+            ->middleware('permission:settings.document-templates.update')->name('document-templates.store');
+        Route::post('/document-templates/preview', [DocumentTemplateController::class, 'preview'])
+            ->middleware('permission:settings.document-templates.view')->name('document-templates.preview');
+        Route::get('/document-templates/versions/{version}/preview', [DocumentTemplateController::class, 'previewVersion'])
+            ->middleware('permission:settings.document-templates.view')->name('document-templates.preview-version');
+        Route::post('/document-templates/versions/{version}/publish', [DocumentTemplateController::class, 'publish'])
+            ->middleware('permission:settings.document-templates.update')->name('document-templates.publish');
+        Route::put('/document-templates/versions/{version}', [DocumentTemplateController::class, 'update'])
+            ->middleware('permission:settings.document-templates.update')->name('document-templates.update');
+        Route::post('/document-templates/{template}/versions', [DocumentTemplateController::class, 'newVersion'])
+            ->middleware('permission:settings.document-templates.update')->name('document-templates.new-version');
+        Route::post('/document-templates/{template}/archive', [DocumentTemplateController::class, 'archive'])
+            ->middleware('permission:settings.document-templates.update')->name('document-templates.archive');
 
         // Permission names remain under finance during the transition so existing roles keep access.
         Route::get('/document-sequences', [DocumentSequenceController::class, 'index'])

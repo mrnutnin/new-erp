@@ -119,6 +119,12 @@ class DatabaseSeeder extends Seeder
             ['warehouse_id' => $warehouse->id, 'document_type' => 'ADVANCE_DEPOSIT_AI'],
             ['name' => 'ใบรับเงินล่วงหน้า', 'prefix' => 'AI', 'number_format' => '{PREFIX}-{YYYY}-{NUMBER:6}', 'reset_rule' => 'YEARLY', 'next_number' => 1, 'is_active' => true, 'number_reuse_policy' => 'NEVER_REUSE', 'created_by' => $user->id],
         );
+        foreach ([['PETTY_CASH', 'ใบสำคัญเงินสดย่อย', 'PC'], ['PETTY_CASH_TOP_UP', 'ใบเติมเงินสดย่อย', 'PCT'], ['PETTY_CASH_CLEARING', 'ใบเคลียร์เงินสดย่อย', 'PCC'], ['EMPLOYEE_ADVANCE', 'ใบเงินทดรองจ่ายพนักงาน', 'EA'], ['EMPLOYEE_ADVANCE_CLEARING', 'ใบเคลียร์เงินทดรองพนักงาน', 'EAC']] as [$type, $name, $prefix]) {
+            DocumentSequence::query()->firstOrCreate(
+                ['warehouse_id' => $warehouse->id, 'document_type' => $type],
+                ['name' => $name, 'prefix' => $prefix, 'number_format' => '{PREFIX}-{YYYY}-{NUMBER:6}', 'reset_rule' => 'YEARLY', 'next_number' => 1, 'is_active' => true, 'number_reuse_policy' => 'NEVER_REUSE', 'created_by' => $user->id],
+            );
+        }
 
         DocumentSequence::query()->firstOrCreate(
             ['warehouse_id' => $warehouse->id, 'document_type' => 'INVENTORY_ADJUSTMENT'],

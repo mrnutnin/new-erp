@@ -20,11 +20,13 @@ Route::middleware(['auth', 'warehouse'])->prefix('wms')->name('wms.')->group(fun
     // WMS routes are inventory-scoped; Purchasing has its own /purchasing entry.
     Route::get('/', EntryController::class)->middleware(['program:wms', 'permission:wms.dashboard.view'])->name('index');
     Route::middleware('program:wms')->group(function (): void {
+    Route::get('/dashboard/data/{section}', [EntryController::class, 'data'])->middleware('permission:wms.dashboard.view')->name('dashboard.data');
     Route::get('/workflow', [WorkflowController::class, 'index'])->name('workflow.index');
     Route::get('/opening-balances', [OpeningBalanceController::class, 'index'])->middleware('permission:wms.opening-balances.view')->name('opening-balances.index');
     Route::get('/opening-balances/template', [OpeningBalanceController::class, 'template'])->middleware('permission:wms.opening-balances.create')->name('opening-balances.template');
     Route::post('/opening-balances/import', [OpeningBalanceController::class, 'importStage'])->middleware('permission:wms.opening-balances.create')->name('opening-balances.import.stage');
     Route::get('/opening-balances/import/{batch}', [OpeningBalanceController::class, 'importShow'])->middleware('permission:wms.opening-balances.create')->name('opening-balances.import.show');
+    Route::get('/opening-balances/import/{batch}/errors', [OpeningBalanceController::class, 'importErrors'])->middleware('permission:wms.opening-balances.create')->name('opening-balances.import.errors');
     Route::put('/opening-balances/import/{batch}/commit', [OpeningBalanceController::class, 'importCommit'])->middleware('permission:wms.opening-balances.create')->name('opening-balances.import.commit');
     Route::get('/opening-balances/data', [OpeningBalanceController::class, 'data'])->middleware('permission:wms.opening-balances.view')->name('opening-balances.data');
     Route::get('/opening-balances/create', [OpeningBalanceController::class, 'create'])->middleware('permission:wms.opening-balances.create')->name('opening-balances.create');
@@ -103,10 +105,12 @@ Route::middleware(['auth', 'warehouse'])->prefix('wms')->name('wms.')->group(fun
     Route::get('/transfers/incoming/data', [TransferController::class, 'data'])->defaults('direction', 'in')->middleware('permission:wms.transfers.view')->name('transfers.incoming.data');
     Route::get('/transfers', [TransferController::class, 'index'])->defaults('direction', 'all')->middleware('permission:wms.transfers.view')->name('transfers.index');
     Route::get('/transfers/data', [TransferController::class, 'data'])->defaults('direction', 'all')->middleware('permission:wms.transfers.view')->name('transfers.data');
-    Route::get('/transfers/{transfer}', [TransferController::class, 'show'])->middleware('permission:wms.transfers.view')->name('transfers.show');
+    Route::get('/transfers/create', [TransferController::class, 'create'])->middleware('permission:wms.transfers.create')->name('transfers.create');
+    Route::get('/transfers/item-options', [TransferController::class, 'itemOptions'])->middleware('permission:wms.transfers.create')->name('transfers.item-options');
     Route::get('/transfers/{transfer}/receive', [TransferController::class, 'receive'])->middleware('permission:wms.transfers.complete')->name('transfers.receive');
     Route::get('/transfers/{transfer}/lines', [TransferController::class, 'lines'])->middleware('permission:wms.transfers.view')->name('transfers.lines');
-    Route::get('/transfers/create', [TransferController::class, 'create'])->middleware('permission:wms.transfers.create')->name('transfers.create');
+    Route::get('/transfers/{transfer}', [TransferController::class, 'show'])->middleware('permission:wms.transfers.view')->name('transfers.show');
+    Route::delete('/transfers/{transfer}', [TransferController::class, 'destroy'])->middleware('permission:wms.transfers.delete')->name('transfers.destroy');
     Route::post('/transfers', [TransferController::class, 'store'])->middleware('permission:wms.transfers.create')->name('transfers.store');
     Route::post('/transfers/{transfer}/dispatch', [TransferController::class, 'dispatch'])->middleware('permission:wms.transfers.dispatch')->name('transfers.dispatch');
     Route::post('/transfers/{transfer}/complete', [TransferController::class, 'complete'])->middleware('permission:wms.transfers.complete')->name('transfers.complete');
@@ -145,6 +149,7 @@ Route::middleware(['auth', 'warehouse'])->prefix('wms')->name('wms.')->group(fun
     Route::get('/item-categories/{category}/edit', [ItemCategoryController::class, 'edit'])->middleware('permission:wms.item-categories.update')->name('item-categories.edit');
     Route::put('/item-categories/{category}', [ItemCategoryController::class, 'update'])->middleware('permission:wms.item-categories.update')->name('item-categories.update');
     Route::delete('/item-categories/{category}', [ItemCategoryController::class, 'destroy'])->middleware('permission:wms.item-categories.delete')->name('item-categories.destroy');
+    Route::delete('/items/{item}', [ItemController::class, 'destroy'])->middleware('permission:wms.items.delete')->name('items.destroy');
     Route::get('/uoms', [UomController::class, 'index'])->middleware('permission:wms.uoms.view')->name('uoms.index');
     Route::get('/uoms/data', [UomController::class, 'data'])->middleware('permission:wms.uoms.view')->name('uoms.data');
     Route::get('/uoms/options', [UomController::class, 'options'])->middleware('permission:wms.uoms.view')->name('uoms.options');
@@ -152,8 +157,10 @@ Route::middleware(['auth', 'warehouse'])->prefix('wms')->name('wms.')->group(fun
     Route::post('/uoms', [UomController::class, 'store'])->middleware('permission:wms.uoms.create')->name('uoms.store');
     Route::get('/uoms/{uom}/edit', [UomController::class, 'edit'])->middleware('permission:wms.uoms.update')->name('uoms.edit');
     Route::put('/uoms/{uom}', [UomController::class, 'update'])->middleware('permission:wms.uoms.update')->name('uoms.update');
+    Route::delete('/uoms/{uom}', [UomController::class, 'destroy'])->middleware('permission:wms.uoms.delete')->name('uoms.destroy');
     Route::get('/uom-conversions', [UomController::class, 'conversions'])->middleware('permission:wms.uom-conversions.view')->name('uom-conversions.index');
     Route::get('/uom-conversions/data', [UomController::class, 'conversionData'])->middleware('permission:wms.uom-conversions.view')->name('uom-conversions.data');
     Route::post('/uom-conversions', [UomController::class, 'conversionStore'])->middleware('permission:wms.uom-conversions.create')->name('uom-conversions.store');
+    Route::delete('/uom-conversions/{conversion}', [UomController::class, 'conversionDestroy'])->middleware('permission:wms.uom-conversions.delete')->name('uom-conversions.destroy');
     });
 });

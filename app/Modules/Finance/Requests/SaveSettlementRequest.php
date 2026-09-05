@@ -110,6 +110,9 @@ class SaveSettlementRequest extends FormRequest
             if ($allocationCents > $gross) {
                 $validator->errors()->add('allocations', 'ยอดจัดสรรต้องไม่เกินยอดเอกสาร');
             }
+            if ($this->input('document_type') === 'PAYMENT' && $allocationCents !== $gross) {
+                $validator->errors()->add('allocations', 'เอกสารจ่ายต้องจัดสรรยอดให้ครบตามยอดเอกสาร');
+            }
         }];
     }
 }

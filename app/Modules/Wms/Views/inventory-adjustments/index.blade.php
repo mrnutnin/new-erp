@@ -1,8 +1,10 @@
 @extends('Wms::layout')
 @section('title', 'ปรับปรุงสินค้าคงเหลือ | WMS')
 @section('content')
+@push('scripts')<script>$(function(){const t=$('#adjustment-table'),f=$('#adjustment-filters');t.on('preXhr.dt',function(e,s,d){d.status=f.find('.js-wms-filter-status').val();d.date_from=f.find('.js-wms-filter-from').val();d.date_to=f.find('.js-wms-filter-to').val();});f.on('click','.js-wms-apply-filter,.js-wms-reset-filter',function(){if($(this).hasClass('js-wms-reset-filter'))f.find('select,input').val('');t.DataTable().ajax.reload();});});</script>@endpush
 <div class="container-fluid px-3 px-lg-4 py-4">
  <div class="d-flex flex-wrap justify-content-between align-items-end gap-3 mb-4"><div><p class="eyebrow mb-2">WMS / INVENTORY</p><h1 class="h3 mb-2">ปรับปรุงสินค้าคงเหลือ</h1><p class="text-secondary mb-0">สร้างรายการเพิ่ม/ลดจากการตรวจนับ แล้วอนุมัติก่อนลง Stock และ GL</p></div><div class="d-flex flex-wrap align-items-end gap-2">@include('Wms::partials.warehouse-selector') <a class="btn btn-dark" href="{{ route('wms.inventory-adjustments.create') }}"><i class="bx bx-plus me-1" aria-hidden="true"></i>สร้างรายการ</a></div></div>
+ @include('Wms::partials.document-filters', ['filterId' => 'adjustment-filters', 'statusOptions' => ['DRAFT' => 'ร่าง', 'APPROVED' => 'อนุมัติแล้ว', 'POSTED' => 'ลงบัญชีแล้ว', 'VOID' => 'ยกเลิก', 'REVERSED' => 'กลับรายการแล้ว']])
  <div class="card border-0 shadow-sm"><div class="card-body"><table id="adjustment-table" class="table table-hover align-middle w-100" data-url="{{ route('wms.inventory-adjustments.data') }}"><thead><tr><th>เลขที่เอกสาร</th><th>วันที่</th><th>รายการ</th><th>ทิศทาง</th><th>จำนวนรวม</th><th>มูลค่ารวม</th><th>เหตุผล</th><th>สถานะ</th><th>จัดการ</th></tr></thead></table></div></div>
 </div>
 @endsection

@@ -11,6 +11,13 @@ return [
             'a4' => [
                 'format' => 'A4',
                 'orientation' => 'P',
+                'fontDir' => [resource_path('fonts')],
+                'fontdata' => [
+                    'notosansthai' => [
+                        'R' => 'NotoSansThai-Variable.ttf',
+                    ],
+                ],
+                'default_font' => 'notosansthai',
                 'margin_top' => 16,
                 'margin_right' => 12,
                 'margin_bottom' => 16,

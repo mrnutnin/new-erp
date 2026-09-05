@@ -2,8 +2,10 @@
 @php($isIncoming = $direction === 'in')
 @section('title', ($isIncoming ? 'รับโอนสินค้า' : 'โอนสินค้าออก').' | WMS')
 @section('content')
+@push('scripts')<script>$(function(){const t=$('#transfers-table'),f=$('#transfer-filters');t.on('preXhr.dt',function(e,s,d){d.status=f.find('.js-wms-filter-status').val();d.date_from=f.find('.js-wms-filter-from').val();d.date_to=f.find('.js-wms-filter-to').val();});f.on('click','.js-wms-apply-filter,.js-wms-reset-filter',function(){if($(this).hasClass('js-wms-reset-filter'))f.find('select,input').val('');t.DataTable().ajax.reload();});});</script>@endpush
 <div class="container-fluid px-3 px-lg-4 py-4">
     <div class="d-flex flex-wrap justify-content-between align-items-end gap-3 mb-4"><div><p class="eyebrow mb-2">WMS / TRANSFER</p><h1 class="h3 mb-2">{{ $isIncoming ? 'รับโอนสินค้าเข้า' : 'โอนสินค้าออก' }}</h1><p class="text-secondary mb-0">{{ $isIncoming ? 'ตรวจสอบและรับสินค้าจากคลังต้นทาง โดยรักษาต้นทุนเดิม' : 'สร้างรายการส่งสินค้าออกจากคลังปัจจุบันไปยังคลังปลายทาง' }}</p></div><div class="d-flex flex-wrap align-items-end gap-2">@include('Wms::partials.warehouse-selector') @if(!$isIncoming && auth()->user()->hasPermission('wms.transfers.create'))<a class="btn btn-app-primary" href="{{ route('wms.transfers.create') }}"><i class="bx bx-plus me-1" aria-hidden="true"></i>สร้างใบโอนออก</a>@endif</div></div>
+    @include('Wms::partials.document-filters', ['filterId' => 'transfer-filters', 'statusOptions' => ['DRAFT' => 'ร่าง', 'DISPATCHED' => 'ส่งออกแล้ว', 'PARTIALLY_ACCEPTED' => 'รับบางส่วน', 'ACCEPTED' => 'รับครบแล้ว', 'REJECTED' => 'ปฏิเสธ', 'VOID' => 'ยกเลิก']])
     <div class="card border-0 shadow-sm"><div class="card-body p-3 p-lg-4"><div class="table-responsive"><table id="transfers-table" class="table table-hover align-middle w-100" data-url="{{ route($isIncoming ? 'wms.transfers.incoming.data' : 'wms.transfers.outgoing.data') }}"><thead><tr><th>เลขที่</th><th>วันที่</th><th>ต้นทาง</th><th>ปลายทาง</th><th>สถานะ</th><th class="text-end">จัดการ</th></tr></thead></table></div></div></div>
 </div>
 @endsection
@@ -13,7 +15,7 @@ $(function () {
     var table = $('#transfers-table'), token = '{{ csrf_token() }}', escape = $.fn.dataTable.render.text();
     var statusClasses = {DRAFT:'app-status-neutral', DISPATCHED:'app-status-info', PARTIALLY_ACCEPTED:'app-status-warning', ACCEPTED:'app-status-success', REJECTED:'app-status-danger', VOID:'app-status-neutral'};
     var dataTable = table.DataTable($.extend(true, {}, window.erpDataTableDefaults, {
-        ajax: table.data('url'), buttons: [window.erpExcelButton(table)], columns: [
+        ajax: table.data('url'), order: [[1, 'desc'], [0, 'desc']], buttons: [window.erpExcelButton(table)], columns: [
             {data:'document_number', render:escape}, {data:'document_date', render:escape}, {data:'source_label', render:escape}, {data:'destination_label', render:escape},
             {data:'status_label', render:function (value, type, row) { return '<span class="badge '+(statusClasses[row.status] || 'app-status-neutral')+'">'+escape.display(value || '-')+'</span>'; }},
             {data:null, orderable:false, searchable:false, className:'text-end', render:function (value, type, row) {

@@ -15,8 +15,26 @@
             @endif
         </div>
 
+        <div class="card border-0 shadow-sm mb-4">
+            <div class="card-body p-4">
+                <h2 class="h6 mb-3">ตัวกรอง</h2>
+                <div class="row g-3">
+                    <div class="col-12 col-md-3"><label class="form-label" for="settlement-filter-type">ประเภทเอกสาร</label><select class="form-select" id="settlement-filter-type"><option value="">ทั้งหมด</option><option value="RECEIPT">รับเงิน</option><option value="PAYMENT">จ่ายเงิน</option></select></div>
+                    <div class="col-12 col-md-3"><label class="form-label" for="settlement-filter-status">สถานะ</label><select class="form-select" id="settlement-filter-status"><option value="">ทั้งหมด</option><option value="DRAFT">ร่าง</option><option value="APPROVED">อนุมัติแล้ว</option><option value="POSTED">ลงบัญชีแล้ว</option><option value="VOID">ยกเลิก</option></select></div>
+                    <div class="col-12 col-md-3"><label class="form-label" for="settlement-filter-warehouse">คลัง/สาขา</label><select class="form-select" id="settlement-filter-warehouse"><option value="">ทั้งหมด</option>@foreach($warehouses as $warehouse)<option value="{{ $warehouse->id }}">{{ $warehouse->code }} · {{ $warehouse->name }}</option>@endforeach</select></div>
+                    <div class="col-12 col-md-3"><label class="form-label" for="settlement-filter-bank">บัญชีเงิน</label><select class="form-select" id="settlement-filter-bank"><option value="">ทั้งหมด</option>@foreach($bankAccounts as $bank)<option value="{{ $bank->id }}">{{ $bank->code }} · {{ $bank->name }}</option>@endforeach</select></div>
+                    <div class="col-12 col-md-3"><label class="form-label" for="settlement-filter-from">วันที่รับ/จ่าย ตั้งแต่</label><input class="form-control" id="settlement-filter-from" type="date"></div>
+                    <div class="col-12 col-md-3"><label class="form-label" for="settlement-filter-to">วันที่รับ/จ่าย ถึง</label><input class="form-control" id="settlement-filter-to" type="date"></div>
+                    <div class="col-12 col-md-3"><label class="form-label" for="settlement-filter-min">ยอดสุทธิขั้นต่ำ</label><input class="form-control" id="settlement-filter-min" type="number" min="0" step="0.01" inputmode="decimal"></div>
+                    <div class="col-12 col-md-3"><label class="form-label" for="settlement-filter-max">ยอดสุทธิสูงสุด</label><input class="form-control" id="settlement-filter-max" type="number" min="0" step="0.01" inputmode="decimal"></div>
+                    <div class="col-12 d-flex justify-content-end gap-2"><button class="btn btn-outline-secondary" id="settlement-filter-reset" type="button">ล้างตัวกรอง</button></div>
+                </div>
+            </div>
+        </div>
+
         <div class="card border-0 shadow-sm">
             <div class="card-body p-4">
+                <h2 class="h6 mb-3">รายการรับเงิน / จ่ายเงิน</h2>
                 <div class="table-responsive">
                     <table class="table table-hover align-middle w-100" id="settlements-table"
                            data-url="{{ route('finance.settlements.data') }}"
@@ -57,8 +75,8 @@
                     render: function (value, type) {
                         if (type !== 'display') return value;
                         return value === 'รับเงิน'
-                            ? '<span class="badge text-bg-success">รับเงิน</span>'
-                            : '<span class="badge text-bg-warning">จ่ายเงิน</span>';
+                            ? '<span class="badge app-status-success">รับเงิน</span>'
+                            : '<span class="badge app-status-warning">จ่ายเงิน</span>';
                     }
                 },
                 { data: 'settlement_date_label', name: 'finance_settlements.settlement_date', render: text.display },
@@ -71,8 +89,8 @@
                     name: 'finance_settlements.status',
                     render: function (value, type) {
                         if (type !== 'display') return value;
-                        var classes = { 'ร่าง': 'text-bg-secondary', 'อนุมัติแล้ว': 'text-bg-info', 'ลงบัญชีแล้ว': 'text-bg-success', 'ยกเลิก': 'text-bg-danger' };
-                        return '<span class="badge ' + (classes[value] || 'text-bg-secondary') + '">' + text.display(value) + '</span>';
+                        var classes = { 'ร่าง': 'app-status-neutral', 'อนุมัติแล้ว': 'app-status-info', 'ลงบัญชีแล้ว': 'app-status-success', 'ยกเลิก': 'app-status-danger' };
+                        return '<span class="badge ' + (classes[value] || 'app-status-neutral') + '">' + text.display(value) + '</span>';
                     }
                 },
                 {
@@ -84,7 +102,7 @@
                         var count = parseInt(row.intent_count, 10) || 0;
                         var amount = parseFloat(row.intent_amount) || 0;
                         if (type !== 'display') return amount;
-                        return '<span class="badge text-bg-info">' + count + ' รายการ</span><span class="ms-2">' + amount.toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + '</span>';
+                        return '<span class="badge app-status-info">' + count + ' รายการ</span><span class="ms-2">' + amount.toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + '</span>';
                     }
                 },
                 {
@@ -128,11 +146,33 @@
                 });
 
             var dataTable = $table.DataTable($.extend(true, {}, window.erpDataTableDefaults, {
-                ajax: $table.data('url'),
+                ajax: {
+                    url: $table.data('url'),
+                    data: function (params) {
+                        params.document_type = $('#settlement-filter-type').val();
+                        params.status = $('#settlement-filter-status').val();
+                        params.warehouse_id = $('#settlement-filter-warehouse').val();
+                        params.bank_account_id = $('#settlement-filter-bank').val();
+                        params.date_from = $('#settlement-filter-from').val();
+                        params.date_to = $('#settlement-filter-to').val();
+                        params.amount_min = $('#settlement-filter-min').val();
+                        params.amount_max = $('#settlement-filter-max').val();
+                    }
+                },
                 order: [[2, 'desc']],
                 buttons: [window.erpExcelButton($table)],
                 columns: columns
             }));
+
+            $('#settlement-filter-type, #settlement-filter-status, #settlement-filter-warehouse, #settlement-filter-bank, #settlement-filter-from, #settlement-filter-to, #settlement-filter-min, #settlement-filter-max').on('change keyup', function (event) {
+                if (event.type === 'keyup' && event.key !== 'Enter') return;
+                dataTable.ajax.reload();
+            });
+            $('#settlement-filter-reset').on('click', function () {
+                $('#settlement-filter-type, #settlement-filter-status, #settlement-filter-warehouse, #settlement-filter-bank').val('');
+                $('#settlement-filter-from, #settlement-filter-to, #settlement-filter-min, #settlement-filter-max').val('');
+                dataTable.ajax.reload();
+            });
 
             function submitSettlementState($button, reason) {
                 if ($button.data('submitting')) return;

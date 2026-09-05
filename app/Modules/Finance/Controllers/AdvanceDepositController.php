@@ -22,7 +22,8 @@ class AdvanceDepositController extends Controller
 {
     public function index(): View
     {
-        return view('Finance::advance-deposits.index');
+        $instrumentType = request()->routeIs('finance.advances.*') ? 'ADVANCE' : (request()->routeIs('finance.deposits.*') ? 'DEPOSIT' : null);
+        return view('Finance::advance-deposits.index', compact('instrumentType'));
     }
 
     public function data(Request $request, GlobalSettings $settings): JsonResponse
@@ -31,6 +32,14 @@ class AdvanceDepositController extends Controller
         $query = AdvanceDeposit::query()->with('party')
             ->where('branch_id', $request->attributes->get('selectedBranch')->id)
             ->whereIn('warehouse_id', $this->authorizedWarehouseIds($request));
+        $instrumentType = $request->routeIs('finance.advances.*') ? 'ADVANCE' : ($request->routeIs('finance.deposits.*') ? 'DEPOSIT' : null);
+        $query->when($instrumentType, fn (Builder $query) => $query->where('instrument_type', $instrumentType));
+        $query->when($request->filled('status') && in_array($request->input('status'), ['POSTED', 'PARTIAL', 'APPLIED', 'REVERSED', 'VOID'], true), fn (Builder $query) => $query->where('status', $request->input('status')))
+            ->when($request->filled('direction') && in_array($request->input('direction'), ['RECEIPT', 'PAYMENT'], true), fn (Builder $query) => $query->where('direction', $request->input('direction')))
+            ->when($request->filled('date_from'), fn (Builder $query) => $query->whereDate('posting_date', '>=', $request->input('date_from')))
+            ->when($request->filled('date_to'), fn (Builder $query) => $query->whereDate('posting_date', '<=', $request->input('date_to')))
+            ->when($request->filled('amount_min') && is_numeric($request->input('amount_min')), fn (Builder $query) => $query->where('original_amount', '>=', (float) $request->input('amount_min')))
+            ->when($request->filled('amount_max') && is_numeric($request->input('amount_max')), fn (Builder $query) => $query->where('original_amount', '<=', (float) $request->input('amount_max')));
 
         return DataTables::eloquent($query)
             ->order(fn (Builder $q) => $q->reorder('finance_advance_deposits.posting_date', 'desc')->orderByDesc('finance_advance_deposits.id'))

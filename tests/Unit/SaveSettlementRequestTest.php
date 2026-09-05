@@ -94,4 +94,24 @@ class SaveSettlementRequestTest extends TestCase
 
         $this->assertFalse($validator->fails());
     }
+
+    public function test_payment_allocations_must_cover_the_full_document_amount(): void
+    {
+        $request = SaveSettlementRequest::create('/', 'POST', [
+            'document_type' => 'PAYMENT',
+            'party_type' => 'SUPPLIER',
+            'gross_amount' => '100.00',
+            'tax_amount' => '0.00',
+            'withholding_amount' => '0.00',
+            'net_amount' => '100.00',
+            'allocations' => [['open_item_id' => 10, 'amount' => '90.00']],
+        ]);
+        $validator = (new Factory(new Translator(new ArrayLoader, 'en')))->make($request->all(), []);
+        foreach ($request->after() as $callback) {
+            $validator->after($callback);
+        }
+
+        $this->assertTrue($validator->fails());
+        $this->assertTrue($validator->errors()->has('allocations'));
+    }
 }

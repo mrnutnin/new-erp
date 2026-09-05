@@ -142,15 +142,71 @@ Preview และ PDF ต้องใช้ renderer path เดียวกั�
 - Multi-language translation management เต็มรูปแบบ
 - Dynamic report designer และ spreadsheet-like layout
 
+## Progress log
+
+> Phase 1 foundation (2026-09-04): สร้าง Template/Version schema, Platform models และ publish contract แล้ว; migration local MySQL ผ่าน และ unit tests ผ่าน 3 tests / 12 assertions. ยังไม่เริ่ม builder, renderer หรือ PDF integration.
+
+> Phase 1 template service (2026-09-04): เพิ่ม `DocumentTemplateService` สำหรับ create template/version, publish, retire และ resolve default โดย scope ตามบริษัท, retire published version เดิม และใช้ transaction ทุก mutation; tests ที่เกี่ยวข้องผ่าน 4 tests / 17 assertions.
+
+> Phase 2 template lifecycle (2026-09-04): เพิ่มแก้ไขเฉพาะ Draft, สร้าง Draft Version ใหม่จาก Version ล่าสุด และ Archive แบบ soft lifecycle; Published แก้ไขทับไม่ได้เพื่อรักษาเอกสารย้อนหลัง; เพิ่มปุ่ม Preview/Edit/New Version/Archive บนหน้า Settings และอัปเดต checklist แล้ว.
+
+> Phase 2 branding (2026-09-04): เปิดใช้ `company.logo` ใน field registry และ shared renderer; Preview ใช้ logo จาก Global Settings และ Purchase Order PDF ส่ง company logo เข้า renderer แล้ว.
+
+> Phase 2 PDF preview (2026-09-04): ปรับ Preview ของ Version ให้ใช้ `DocumentPdfRenderer` และตอบกลับ `application/pdf` แบบ inline; browser จึงเปิด PDF จริงจาก URL เดิม และใช้ HTML renderer เดียวกับ Preview.
+
+> Phase 2 layout properties (2026-09-04): เพิ่มค่าต่อ Section สำหรับ alignment, spacing, image size, label และ visible; เก็บใน definition เดิม และ renderer ใช้ค่าร่วมกันทั้ง HTML Preview/PDF.
+
+> Phase 2 UX polish (2026-09-04): ปรับ Section card เป็น responsive two-row layout แยก controls หลักกับ Layout Properties และรองรับหน้าจอแคบ โดยไม่เพิ่ม dependency.
+
+> Phase 2 page separation (2026-09-04): แยกหน้า Template List, Create และ Edit Draft เป็นคนละ URL; List เน้นการจัดการรายการ ส่วน Form เน้นการออกแบบและ Preview ลดความหนาแน่นของหน้าจอ.
+
+> Phase 2 form layout (2026-09-04): หน้า Create/Edit จัด Card แก้ไขและ Card Preview เป็น `col-xl-6` คนละครึ่งจอ และยัง stack อัตโนมัติบนจอเล็ก.
+
+> Phase 2 renderer fields (2026-09-04): ปรับ shared renderer ให้ใช้ Section เป็นตัวควบคุมหลัก ป้องกัน company logo/name แสดงซ้ำกับ header และรองรับ company/party/document/totals fields ที่อยู่ใน registry มากขึ้น.
+
+> Phase 2 preview UX (2026-09-04): หน้า Edit Draft โหลด HTML Preview อัตโนมัติ และมีปุ่มเปิด PDF Preview จริงในแท็บใหม่ผ่าน Version preview route.
+
+> Phase 2 section ordering (2026-09-04): จัดกลุ่ม company header sections ให้ render ก่อน Supplier ตามลำดับที่ออกแบบ และป้องกัน Logo/ชื่อบริษัทซ้ำกับ header อัตโนมัติ.
+
+> Phase 2 ajax save (2026-09-04): หน้า Edit Draft บันทึกผ่าน Ajax โดยไม่ reload หน้า และ refresh เฉพาะ HTML Preview เมื่อบันทึกสำเร็จ.
+
+> Phase 2 header placement (2026-09-04): ย้าย company sections ให้อยู่ใน Header เดียวกับที่อยู่บริษัท และจัดตามลำดับ Logo → ชื่อบริษัท → ที่อยู่/เลขผู้เสียภาษี → ข้อมูลเอกสาร เพื่อไม่ให้ Logo อยู่หลัง Supplier.
+
+> Phase 2 duplicate suppression (2026-09-04): ป้องกัน document title/number/date แสดงซ้ำระหว่าง Header metadata กับ Section ที่ผู้ใช้เลือก โดยให้ Section เป็นแหล่งแสดงผลหลัก.
+
+> Phase 2 PDF parity (2026-09-04): เพิ่ม print CSS แบบ inline ใน shared renderer เพื่อให้ mPDF รองรับ layout primitives เดียวกับ HTML Preview เช่น header columns, table, signatures, borders และ typography.
+
+> Phase 2 signatures and A4 (2026-09-04): เพิ่ม `signatures.prepared_by`/`signatures.approved_by` สำหรับเลือกผู้จัดทำและผู้อนุมัติ และกำหนด PDF เป็น A4 พร้อม repeat table header และป้องกันแถวตารางถูกตัดข้ามหน้า.
+
+> Phase 2 parity tests (2026-09-04): เพิ่ม regression test ตรวจ section order, duplicate document metadata suppression และสร้าง PDF จาก HTML เดียวกัน; ชุด Document tests ผ่าน 33 tests / 148 assertions.
+
+> Phase 2 CSS isolation (2026-09-04): scope print CSS ใต้ `.document-render` เพื่อไม่ให้ rule ของ PDF เช่น `.row` ไปทับ Bootstrap grid ของหน้า Builder และทำให้ Create/Edit แสดง Form กับ Preview เป็น `col-xl-6` ได้ถูกต้อง.
+
+> Phase 1 field/payload boundary (2026-09-04): เพิ่ม `DocumentFieldRegistry` และ `NormalizedDocumentPayloadContract` เพื่อ whitelist field และกำหนด payload กลางสำหรับ renderer; ครอบคลุม company, party, document, lines, totals และ signatures โดยไม่ให้ renderer queryฐานข้อมูลเอง; tests foundation รวม 7 tests / 22 assertions ผ่าน.
+
+> Phase 2 builder UI foundation (2026-09-04): เพิ่ม Settings routes/controller/view สำหรับสร้าง Template Draft, แสดง version, ตั้ง Default และ Publish โดยใช้ `settings.company.view/update` permission; UI contract tests ผ่าน 5 tests / 16 assertions. ยังไม่ใช่ drag-and-drop และยังไม่เชื่อม PDF renderer.
+
+> Phase 2 preview foundation (2026-09-04): เพิ่ม Preview panel แบบ responsive และแยก endpoint ที่ใช้ normalized sample payload, แสดงผล sections/lines/totals เบื้องต้นโดยไม่บันทึกข้อมูล; UI/field contract tests ผ่าน 5 tests / 19 assertions.
+
+> Phase 3 shared renderer integration (2026-09-04): เพิ่ม `DocumentTemplateRenderService` และ shared render view ให้ Preview กับ PDF ใช้ definition/payload path เดียวกัน; Purchase Order PDF ใช้ Published Default Template ได้ และ fallback เป็น renderer เดิมเมื่อไม่มี template; contract tests ผ่าน 4 tests / 17 assertions.
+
+> Phase 2 visual ordering (2026-09-04): เพิ่ม native drag-and-drop สำหรับจัดลำดับ section โดยไม่เพิ่ม dependency และ sync ลำดับกลับเข้า definition อัตโนมัติ; UI contract tests เพิ่ม coverage แล้ว.
+
+> Phase 2 PDF stability (2026-09-04): แยก browser-only `<style>` ออกจาก HTML ก่อนส่งเข้า mPDF เพราะ CSS scoped layout ทำให้เกิดหน้าว่าง 678 หน้า; ใช้ inline layout สำหรับ header, table, totals และ signatures เพื่อรักษาตำแหน่งและเส้นตาราง. ตรวจ PDF จาก Version 2 จริงแล้วเหลือ 1 หน้า.
+
+> Phase 2 preview parity (2026-09-04): เพิ่ม mPDF-safe CSS primitives สำหรับ typography, spacing, fixed table columns และ right-aligned document metadata; แยก signature sections ออกจาก body เพื่อวาง Footer ด้านล่างเสมอ และจัด title/number/date ใน Header ตามลำดับ.
+
+> Phase 2 PDF font (2026-09-04): เพิ่ม `Noto Sans Thai` และตั้งเป็น default font ของ A4 mPDF profile เพื่อให้เอกสารภาษาไทยอ่านง่ายและแสดงผลสม่ำเสมอ โดย HTML Preview ไม่ได้รับผลกระทบ.
+
 ## Checklist
 
-- [ ] ยืนยัน document types และ field registry กับเจ้าของแต่ละ module
-- [ ] สร้าง migration/model/policy ของ Platform template
-- [ ] สร้าง version/publish lifecycle
-- [ ] สร้าง normalized payload contract สำหรับ Purchasing
-- [ ] สร้าง section-based builder
-- [ ] สร้าง Preview และ PDF renderer เดียวกัน
-- [ ] เชื่อม Purchasing PDF และ fallback template
+- [~] ยืนยัน document types และ field registry กับเจ้าของแต่ละ module (มี registry foundation สำหรับ Purchasing แล้ว; รอ business confirmation)
+- [x] สร้าง migration/model/policy ของ Platform template (migration/models/contract foundation แล้ว)
+- [x] สร้าง version/publish lifecycle (service + publish/retire contract foundation แล้ว; UI ยังไม่เริ่ม)
+- [x] สร้าง normalized payload contract สำหรับ Purchasing (foundation contract แล้ว)
+- [~] สร้าง section-based builder (มี form, field whitelist, Preview panel และ native drag-and-drop ordering; ยังไม่รองรับการแก้ template version เดิม)
+- [~] สร้าง Preview และ PDF renderer เดียวกัน (ใช้ definition/payload และ markup เดียวกัน; PDF strip เฉพาะ browser-only style ก่อนส่ง mPDF; ยังเหลือปรับ print quality ให้ครบทุก document type)
+- [~] เชื่อม Purchasing PDF และ fallback template (Purchase Order แล้ว; เหลือ PR/GR/Invoice/Credit Note/Landed Cost)
 - [ ] เพิ่ม cache, audit และ security tests
 - [ ] เพิ่ม automated PDF smoke tests
 - [ ] Owner ตรวจ print quality และ publish เป็น production template

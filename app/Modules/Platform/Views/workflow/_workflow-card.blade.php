@@ -1,25 +1,26 @@
 @if(!empty($workflow['decision_cards']))
+    <p class="eyebrow mb-2">จุดควบคุมก่อนดำเนินการ</p>
     <div class="row g-3 mb-4">
         @foreach($workflow['decision_cards'] as $decision)
             @continue(($decision['mode'] ?? 'daily') !== $mode)
-            @php($decisionAllowed = auth()->user()->hasPermission($decision['permission']))
-            @php($decisionUrl = $decisionAllowed && !empty($decision['route']) && Route::has($decision['route']) ? route($decision['route']) : null)
             <div class="col-md-6">
                 <article class="card h-100 border-0 shadow-sm">
                     <div class="card-body p-3">
                         <div class="d-flex justify-content-between gap-2 mb-2">
                             <h3 class="h6 mb-0">{{ $decision['title'] }}</h3>
-                            <span class="badge {{ $decisionAllowed ? 'app-status-warning' : 'app-status-neutral' }}">
-                                {{ $decisionAllowed ? 'ต้องตรวจสอบ' : 'ไม่มีสิทธิ์' }}
+                            <span class="badge {{ $decision['status_badge_class'] ?? 'app-status-warning' }}">
+                                {{ $decision['status'] ?? 'ยังไม่พร้อม' }}
                             </span>
                         </div>
                         <p class="small text-secondary mb-2">{{ $decision['description'] }}</p>
-                        <p class="small text-warning-emphasis mb-2">
+                        @if(!empty($decision['block_reason']))<p class="small text-warning-emphasis mb-2">
                             <i class="bx bx-info-circle me-1" aria-hidden="true"></i>
-                            {{ $decisionAllowed ? $decision['block_reason'] : 'ไม่มีสิทธิ์เข้าถึงข้อมูลส่วนนี้' }}
-                        </p>
-                        @if($decisionUrl)
-                            <a class="btn btn-sm btn-outline-secondary" href="{{ $decisionUrl }}">เปิดหน้าตรวจสอบ</a>
+                            {{ $decision['block_reason'] }}
+                        </p>@endif
+                        @if(!empty($decision['url']))
+                            <a class="btn btn-sm btn-outline-secondary" href="{{ $decision['url'] }}">เปิดหน้าตรวจสอบ</a>
+                        @elseif(!empty($decision['recovery_url']) && (!isset($decision['recovery_permission']) || auth()->user()->hasPermission($decision['recovery_permission'])))
+                            <a class="btn btn-sm btn-outline-secondary" href="{{ $decision['recovery_url'] }}">{{ $decision['recovery_label'] ?? 'เปิดหน้าตั้งค่า' }}</a>
                         @endif
                         <details class="small mt-2">
                             <summary class="text-secondary">ทำผิดหรือย้อนกลับอย่างไร</summary>
@@ -71,7 +72,7 @@
                                 @endif
                             </div>
 
-                            @if(!$step['url'] || (!empty($step['configuration_warning']) && !empty($step['block_reason'])))
+                            @if(!empty($step['block_reason']) && (!$step['url'] || !empty($step['configuration_warning'])))
                                 <p class="small text-warning-emphasis mb-0 mt-2">
                                     <i class="bx bx-info-circle me-1" aria-hidden="true"></i>{{ $step['block_reason'] }}
                                 </p>

@@ -53,7 +53,7 @@ class ItemCategoryController extends Controller
 
     public function destroy(Request $request, ItemCategory $category, AuditLogger $audit): JsonResponse
     {
-        if ($category->items()->exists()) {
+        if ($category->items()->withTrashed()->exists()) {
             return response()->json(['status' => false, 'msg' => 'ลบหมวดที่มีสินค้าไม่ได้'], 422);
         }$before = $category->toArray();
         $category->delete();

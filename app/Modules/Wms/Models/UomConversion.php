@@ -3,9 +3,11 @@
 namespace App\Modules\Wms\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 class UomConversion extends Model
 {
+    use SoftDeletes;
     protected $table = 'wms_uom_conversions';
 
     protected $fillable = ['from_uom_id', 'to_uom_id', 'factor', 'effective_from', 'effective_to', 'created_by'];

@@ -12,6 +12,7 @@ use Carbon\CarbonImmutable;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
 use Yajra\DataTables\Facades\DataTables;
@@ -26,7 +27,7 @@ class UomController extends Controller
     public function data(Request $request): JsonResponse
     {
         $query = Uom::query()->when($request->input('is_active') !== null && $request->input('is_active') !== '', fn ($q) => $q->where('is_active', $request->boolean('is_active')));
-        return DataTables::eloquent($query)->addColumn('status_label', fn ($r) => $r->is_active ? 'ใช้งาน' : 'ปิดใช้งาน')->addColumn('edit_url', fn ($r) => auth()->user()->hasPermission('wms.uoms.update') ? route('wms.uoms.edit', $r) : null)->toJson();
+        return DataTables::eloquent($query)->addColumn('status_label', fn ($r) => $r->is_active ? 'ใช้งาน' : 'ปิดใช้งาน')->addColumn('edit_url', fn ($r) => auth()->user()->hasPermission('wms.uoms.update') ? route('wms.uoms.edit', $r) : null)->addColumn('delete_url', fn ($r) => auth()->user()->hasPermission('wms.uoms.delete') ? route('wms.uoms.destroy', $r) : null)->toJson();
     }
 
     public function options(Request $request): JsonResponse
@@ -64,6 +65,28 @@ class UomController extends Controller
         return response()->json(['status' => true, 'msg' => 'แก้ไขหน่วยนับแล้ว']);
     }
 
+    public function destroy(Request $request, Uom $uom, AuditLogger $audit): JsonResponse
+    {
+        $references = [
+            ['wms_items', 'base_uom_id'], ['wms_stock_movements', 'uom_id'], ['wms_cost_allocations', 'uom_id'],
+            ['wms_stock_cost_layers', 'uom_id'], ['wms_stock_balances', 'uom_id'], ['wms_stock_reservations', 'uom_id'],
+            ['wms_inventory_adjustments', 'uom_id'], ['wms_transfer_lines', 'uom_id'],
+            ['wms_opening_balance_lines', 'uom_id'], ['wms_stock_count_lines', 'uom_id'],
+            ['wms_issue_lines', 'uom_id'],
+            ['wms_uom_conversions', 'from_uom_id'], ['wms_uom_conversions', 'to_uom_id'],
+        ];
+        foreach ($references as [$table, $column]) {
+            if (Schema::hasTable($table) && DB::table($table)->where($column, $uom->id)->exists()) {
+                return response()->json(['status' => false, 'msg' => 'ลบหน่วยนับไม่ได้ เนื่องจากถูกนำไปใช้ใน '.$table], 422);
+            }
+        }
+        $before = $uom->toArray();
+        $uom->delete();
+        $audit->record('wms.uom.deleted', $uom, $before, [], $request->user(), $request);
+
+        return response()->json(['status' => true, 'msg' => 'ลบหน่วยนับแล้ว']);
+    }
+
     public function conversions(): View
     {
         return view('Wms::uoms.conversions');
@@ -71,7 +94,7 @@ class UomController extends Controller
 
     public function conversionData(): JsonResponse
     {
-        return DataTables::eloquent(UomConversion::query()->with(['fromUom', 'toUom']))->addColumn('from_label', fn ($r) => $r->fromUom?->code.' · '.$r->fromUom?->name)->addColumn('to_label', fn ($r) => $r->toUom?->code.' · '.$r->toUom?->name)->editColumn('effective_from', fn ($r) => $r->effective_from?->format('d/m/Y') ?: '-')->editColumn('effective_to', fn ($r) => $r->effective_to?->format('d/m/Y') ?: '-')->toJson();
+        return DataTables::eloquent(UomConversion::query()->with(['fromUom', 'toUom']))->addColumn('from_label', fn ($r) => $r->fromUom?->code.' · '.$r->fromUom?->name)->addColumn('to_label', fn ($r) => $r->toUom?->code.' · '.$r->toUom?->name)->addColumn('delete_url', fn ($r) => auth()->user()->hasPermission('wms.uom-conversions.delete') ? route('wms.uom-conversions.destroy', $r) : null)->editColumn('effective_from', fn ($r) => $r->effective_from?->format('d/m/Y') ?: '-')->editColumn('effective_to', fn ($r) => $r->effective_to?->format('d/m/Y') ?: '-')->toJson();
     }
 
     public function conversionStore(SaveUomConversionRequest $request, AuditLogger $audit): JsonResponse
@@ -104,5 +127,14 @@ class UomController extends Controller
         $audit->record('wms.uom_conversion.created', $conversion, [], $conversion->toArray(), $request->user(), $request);
 
         return response()->json(['status' => true, 'msg' => 'เพิ่มอัตราแปลงหน่วยแล้ว']);
+    }
+
+    public function conversionDestroy(Request $request, UomConversion $conversion, AuditLogger $audit): JsonResponse
+    {
+        $before = $conversion->toArray();
+        $conversion->delete();
+        $audit->record('wms.uom_conversion.deleted', $conversion, $before, [], $request->user(), $request);
+
+        return response()->json(['status' => true, 'msg' => 'ลบอัตราแปลงหน่วยแล้ว']);
     }
 }

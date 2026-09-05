@@ -5,10 +5,12 @@ namespace App\Modules\Wms\Models;
 use App\Models\User;
 use App\Models\Warehouse;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\SoftDeletes;
 use LogicException;
 
 class Transfer extends Model
 {
+    use SoftDeletes;
     protected $table = 'wms_transfers';
 
     protected $fillable = [
@@ -37,7 +39,12 @@ class Transfer extends Model
                 throw new LogicException('Transfer ที่เริ่มดำเนินการแล้วแก้ข้อมูลต้นฉบับไม่ได้');
             }
         });
-        static::deleting(fn (): never => throw new LogicException('Transfer history cannot be deleted.'));
+        static::deleting(function (self $transfer): void {
+            if ($transfer->isForceDeleting() || $transfer->status !== 'DRAFT' || $transfer->events()->exists()) {
+                throw new LogicException('ลบได้เฉพาะ Transfer ร่างที่ยังไม่มีประวัติการเคลื่อนไหว');
+            }
+            $transfer->lines()->delete();
+        });
     }
 
     public function sourceWarehouse()

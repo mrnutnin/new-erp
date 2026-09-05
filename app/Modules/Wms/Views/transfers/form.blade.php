@@ -8,3 +8,57 @@
 @push('scripts')
 <script>$(function(){var n=1,itemUrl='{{ route('wms.stock.item-options') }}';function select2($s,url,p){window.erpInitSelect2($s,{theme:'bootstrap-5',placeholder:p,allowClear:true,ajax:{url:url,dataType:'json',delay:250,data:function(x){return{q:x.term||'',page:x.page||1};},processResults:function(x){return x;},cache:true}});}function sync($r){var item=$r.find('.js-item').select2('data')[0],qty=$r.find('.js-quantity').val()||'';$r.find('.js-stock-uom').text(item?.uom_label||'เลือกสินค้า');$r.find('.js-uom-id').val(item?.uom_id||'');$r.find('.js-base-quantity').val(qty);}function init($r){select2($r.find('.js-item'),itemUrl,'ค้นหาสินค้า');$r.find('.js-item').on('select2:select select2:clear',function(){sync($r);});$r.find('.js-quantity').on('input change',function(){ $r.find('.js-base-quantity').val(this.value); });}function reindex(){$('#transfer-lines .transfer-line').each(function(i){$(this).find('[name]').each(function(){this.name=this.name.replace(/lines\[\d+\]/,'lines['+i+']');});});}init($('#transfer-lines .transfer-line'));$('#add-transfer-line').on('click',function(){var r=$('<tr class="transfer-line"><td><select class="form-select js-item" required></select></td><td><span class="js-stock-uom text-secondary">เลือกสินค้า</span><input type="hidden" class="js-uom-id" required><input type="hidden" class="js-base-quantity" value="1" required></td><td><input class="form-control text-end js-quantity" type="number" min="0.00000001" step="0.00000001" value="1" required></td><td><button class="btn btn-sm btn-outline-danger js-remove-line" type="button" aria-label="ลบรายการ">ลบ</button></td></tr>');r.find('.js-item').attr('name','lines['+n+'][item_id]');r.find('.js-uom-id').attr('name','lines['+n+'][uom_id]');r.find('.js-quantity').attr('name','lines['+n+'][planned_quantity]');r.find('.js-base-quantity').attr('name','lines['+n+'][planned_base_quantity]');n++;$('#transfer-lines').append(r);init(r);});$('#transfer-lines').on('click','.js-remove-line',function(){if($('.transfer-line').length>1){$(this).closest('tr').remove();reindex();}});window.erpAjaxForm({form:'#transfer-form',redirect:true});});</script>
 @endpush
+
+@push('scripts')
+<script>
+$(function () {
+    var warehouses = @json($warehouses->map(fn ($warehouse) => ['id' => $warehouse->id, 'label' => $warehouse->name.' · สาขา'.($warehouse->branch?->name ?: $warehouse->branch?->code ?: '-')])->values());
+    var sourceId = String(@json($sourceWarehouse->id));
+    var sourceSelect = $('<select class="form-select" name="source_warehouse_id" required></select>');
+    warehouses.forEach(function (warehouse) {
+        sourceSelect.append(new Option(warehouse.label, warehouse.id, String(warehouse.id) === sourceId, String(warehouse.id) === sourceId));
+    });
+    $('input[disabled]').first().replaceWith(sourceSelect);
+
+    var destination = $('select[name="destination_warehouse_id"]');
+    function refreshDestinations() {
+        sourceId = String(sourceSelect.val() || '');
+        destination.empty().append(new Option('เลือกคลังปลายทาง', ''));
+        warehouses.forEach(function (warehouse) {
+            if (String(warehouse.id) !== sourceId) destination.append(new Option(warehouse.label, warehouse.id));
+        });
+    }
+    sourceSelect.on('change', refreshDestinations);
+    refreshDestinations();
+});
+</script>
+@endpush
+
+@push('scripts')
+<script>
+$(function () {
+    var stockUrl = @json(route('wms.transfers.item-options'));
+    function showAvailable(select, item) {
+        var holder = $(select).closest('td').find('.js-stock-available');
+        if (!holder.length) holder = $('<small class="js-stock-available text-secondary d-block mt-1"></small>').appendTo($(select).closest('td'));
+        holder.text(item.available_label || 'คงเหลือ 0.00');
+    }
+    $(document).on('select2:select', '.js-item', function (event) {
+        var select = this, item = event.params.data, source = $('select[name="source_warehouse_id"]').val();
+        if (!source || !item.id) return;
+        showAvailable(select, {available_label: 'กำลังโหลด Stock...'});
+        $.getJSON(stockUrl, {warehouse_id: source, item_id: item.id, page: 1}).done(function (response) {
+            var current = (response.results || []).find(function (row) { return String(row.id) === String(item.id); });
+            if (current) {
+                Object.assign(item, current);
+                showAvailable(select, item);
+            }
+        });
+    });
+    $(document).on('change', 'select[name="source_warehouse_id"]', function () {
+        $('.js-item').val(null).trigger('change');
+        $('.js-stock-available').remove();
+    });
+});
+</script>
+@endpush

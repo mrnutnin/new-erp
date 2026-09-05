@@ -41,15 +41,22 @@ use Yajra\DataTables\Facades\DataTables;
 
 class SettlementController extends Controller
 {
-    public function index(): View
+    public function index(Request $request): View
     {
-        return view('Finance::settlements.index');
+        $warehouseIds = $this->authorizedWarehouseIds($request);
+
+        return view('Finance::settlements.index', [
+            'warehouses' => Warehouse::query()->whereIn('id', $warehouseIds)->where('is_active', true)->orderBy('code')->get(['id', 'code', 'name']),
+            'bankAccounts' => $this->bankAccounts($request)->get(['id', 'code', 'name']),
+        ]);
     }
 
     public function data(Request $request, GlobalSettings $settings): JsonResponse
     {
         $dateFormat = (string) $settings->value('date_format');
-        $dataTable = DataTables::eloquent($this->settlementsQuery($request))
+        $query = $this->settlementsQuery($request);
+        $this->applyFilters($query, $request);
+        $dataTable = DataTables::eloquent($query)
             ->filter(fn (Builder $query) => $this->applySearch($query, $request))
             ->order(fn (Builder $query) => $this->applyOrder($query, $request))
             ->addColumn('settlement_date_label', fn (Settlement $settlement) => $settlement->settlement_date->format($dateFormat))
@@ -95,7 +102,12 @@ class SettlementController extends Controller
         $this->scopeSettlement($request, $settlement);
         $history = AuditLog::query()->with('user')->where('subject_type', $settlement->getMorphClass())->where('subject_id', $settlement->id)->latest('created_at')->latest('id')->get();
 
-        return view('Finance::settlements.show', ['settlement' => $settlement, 'history' => $history, 'dateFormat' => (string) $settings->value('date_format')]);
+        $allocatedAmount = $settlement->allocationIntents->reduce(fn (string $total, $intent) => JournalBalance::add($total, $intent->amount), '0.00');
+        $unappliedAmount = $settlement->document_type === 'RECEIPT'
+            ? JournalBalance::subtract($settlement->gross_amount, $allocatedAmount)
+            : '0.00';
+
+        return view('Finance::settlements.show', ['settlement' => $settlement, 'history' => $history, 'dateFormat' => (string) $settings->value('date_format'), 'allocatedAmount' => $allocatedAmount, 'unappliedAmount' => $unappliedAmount]);
     }
 
     public function create(Request $request, OpenItemService $openItems): View
@@ -549,6 +561,18 @@ class SettlementController extends Controller
                 ->orWhere('bank_accounts.name', 'like', "%{$search}%")
                 ->orWhere('journal_entries.entry_number', 'like', "%{$search}%"));
         }
+    }
+
+    private function applyFilters(Builder $query, Request $request): void
+    {
+        $query->when($request->filled('document_type') && in_array($request->input('document_type'), ['RECEIPT', 'PAYMENT'], true), fn (Builder $query) => $query->where('finance_settlements.document_type', $request->input('document_type')))
+            ->when($request->filled('status') && in_array($request->input('status'), ['DRAFT', 'APPROVED', 'POSTED', 'VOID'], true), fn (Builder $query) => $query->where('finance_settlements.status', $request->input('status')))
+            ->when($request->filled('warehouse_id') && in_array((int) $request->input('warehouse_id'), $this->authorizedWarehouseIds($request), true), fn (Builder $query) => $query->where('bank_accounts.warehouse_id', (int) $request->input('warehouse_id')))
+            ->when($request->filled('bank_account_id'), fn (Builder $query) => $query->where('finance_settlements.bank_account_id', (int) $request->input('bank_account_id')))
+            ->when($request->filled('date_from'), fn (Builder $query) => $query->whereDate('finance_settlements.settlement_date', '>=', $request->input('date_from')))
+            ->when($request->filled('date_to'), fn (Builder $query) => $query->whereDate('finance_settlements.settlement_date', '<=', $request->input('date_to')))
+            ->when($request->filled('amount_min') && is_numeric($request->input('amount_min')), fn (Builder $query) => $query->where('finance_settlements.net_amount', '>=', (float) $request->input('amount_min')))
+            ->when($request->filled('amount_max') && is_numeric($request->input('amount_max')), fn (Builder $query) => $query->where('finance_settlements.net_amount', '<=', (float) $request->input('amount_max')));
     }
 
     private function applyOrder(Builder $query, Request $request): void

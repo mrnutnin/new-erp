@@ -206,9 +206,19 @@ final class PhysicalSaleCancellationService
             $sourceAllocations = CostAllocation::query()->where('stock_movement_id', $movement->id)->where('status', 'POSTED')->where('cost_status', 'FINAL')->lockForUpdate()->get();
             $reversal = $this->movements->reverseWithinTransaction($movement, ['idempotency_key' => "physical-sale-cancel:{$sale->id}:movement:{$movement->id}", 'business_date' => $date, 'created_by' => $actor->id]);
             foreach ($sourceAllocations as $source) {
-                $allocation = $this->allocations->reverseWithinTransaction($source, $reversal, [
-                    'idempotency_key' => "physical-sale-cancel:{$sale->id}:allocation:{$source->id}",
-                ]);
+                // StockMovementService::reverseWithinTransaction() posts the
+                // reversal movement through the normal costing path and
+                // creates its immutable reversal allocation already. Reuse
+                // that row here; creating another reversal allocation would
+                // make Allocation exceed the reversal Journal amount.
+                $allocation = CostAllocation::query()
+                    ->where('stock_movement_id', $reversal->id)
+                    ->where('parent_allocation_id', $source->id)
+                    ->where('status', '!=', 'REVERSED')
+                    ->lockForUpdate()->first();
+                if (! $allocation) {
+                    throw ValidationException::withMessages(['stock' => 'ไม่พบ reversal allocation ที่สร้างจาก Movement นี้']);
+                }
                 $sourceLineId = CostAllocationJournalLine::query()->where('allocation_id', $source->id)->value('journal_entry_line_id');
                 $line = $sourceLineId ? $reversalCogs->lines()->where('line_number', JournalEntryLine::query()->findOrFail($sourceLineId)->line_number)->first() : null;
                 if (! $line) {

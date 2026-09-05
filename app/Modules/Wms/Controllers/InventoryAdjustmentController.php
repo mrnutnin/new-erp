@@ -38,7 +38,11 @@ final class InventoryAdjustmentController extends Controller
         $warehouseId = (int) $request->attributes->get('selectedWarehouse')->id;
         $labels = ['DRAFT' => 'ร่าง', 'APPROVED' => 'อนุมัติแล้ว', 'POSTED' => 'ลงบัญชีแล้ว', 'VOID' => 'ยกเลิก', 'REVERSED' => 'กลับรายการแล้ว'];
         $directions = ['GAIN' => 'เพิ่มสินค้า', 'LOSS' => 'ลดสินค้า'];
-        $query = InventoryAdjustmentDocument::query()->with(['lines.item:id,code,name', 'lines.uom:id,code', 'creator:id,name'])->where('warehouse_id', $warehouseId)->latest('id');
+        $query = InventoryAdjustmentDocument::query()->with(['lines.item:id,code,name', 'lines.uom:id,code', 'creator:id,name'])->where('warehouse_id', $warehouseId);
+        if ($request->filled('status') && in_array($request->string('status')->toString(), ['DRAFT', 'APPROVED', 'POSTED', 'VOID', 'REVERSED'], true)) $query->where('status', $request->string('status')->toString());
+        if ($request->filled('date_from')) $query->whereDate('document_date', '>=', $request->date('date_from'));
+        if ($request->filled('date_to')) $query->whereDate('document_date', '<=', $request->date('date_to'));
+        $query->latest('id');
 
         return DataTables::eloquent($query)
             ->addColumn('document_number', fn ($r) => $r->document_number)

@@ -13,6 +13,7 @@ use App\Modules\Wms\Requests\SaveItemRequest;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
 use Yajra\DataTables\Facades\DataTables;
@@ -33,7 +34,7 @@ class ItemController extends Controller
             ->when($request->input('asset_capitalizable') !== null && $request->input('asset_capitalizable') !== '', fn ($q) => $q->where('is_asset_capitalizable', $request->boolean('asset_capitalizable')))
             ->when($request->input('is_active') !== null && $request->input('is_active') !== '', fn ($q) => $q->where('is_active', $request->boolean('is_active')));
 
-        return DataTables::eloquent($query)->addColumn('category_label', fn ($r) => $r->category?->code.' · '.$r->category?->name)->addColumn('base_uom_label', fn ($r) => $r->baseUom?->code.' · '.$r->baseUom?->name ?: $r->base_uom)->addColumn('asset_capitalization_label', fn ($r) => $r->is_asset_capitalizable ? 'ได้ · '.($r->defaultAssetCategory?->name ?? '-') : 'ไม่ได้')->addColumn('status_label', fn ($r) => $r->is_active ? 'ใช้งาน' : 'ปิดใช้งาน')->addColumn('edit_url', fn ($r) => auth()->user()->hasPermission('wms.items.update') ? route('wms.items.edit', $r) : null)->toJson();
+        return DataTables::eloquent($query)->addColumn('category_label', fn ($r) => $r->category?->code.' · '.$r->category?->name)->addColumn('base_uom_label', fn ($r) => $r->baseUom?->code.' · '.$r->baseUom?->name ?: $r->base_uom)->addColumn('asset_capitalization_label', fn ($r) => $r->is_asset_capitalizable ? 'ได้ · '.($r->defaultAssetCategory?->name ?? '-') : 'ไม่ได้')->addColumn('status_label', fn ($r) => $r->is_active ? 'ใช้งาน' : 'ปิดใช้งาน')->addColumn('edit_url', fn ($r) => auth()->user()->hasPermission('wms.items.update') ? route('wms.items.edit', $r) : null)->addColumn('delete_url', fn ($r) => auth()->user()->hasPermission('wms.items.delete') ? route('wms.items.destroy', $r) : null)->toJson();
     }
 
     public function categoryOptions(Request $request): JsonResponse
@@ -89,6 +90,26 @@ class ItemController extends Controller
         $this->save($request, $item, $audit, 'updated');
 
         return response()->json(['status' => true, 'msg' => 'แก้ไขสินค้าแล้ว']);
+    }
+
+    public function destroy(Request $request, Item $item, AuditLogger $audit): JsonResponse
+    {
+        $references = [
+            'wms_stock_movements', 'wms_cost_allocations', 'wms_stock_cost_layers', 'wms_stock_balances',
+            'wms_stock_reservations', 'wms_inventory_adjustments', 'wms_transfer_lines',
+            'wms_opening_balance_lines', 'wms_stock_count_lines', 'wms_stock_policies',
+            'wms_issue_lines',
+        ];
+        foreach ($references as $table) {
+            if (Schema::hasTable($table) && DB::table($table)->where('item_id', $item->id)->exists()) {
+                return response()->json(['status' => false, 'msg' => 'ลบสินค้าไม่ได้ เนื่องจากถูกนำไปใช้ใน '.$table], 422);
+            }
+        }
+        $before = $item->toArray();
+        $item->delete();
+        $audit->record('wms.item.deleted', $item, $before, ['deleted_at' => now()->toDateTimeString()], $request->user(), $request);
+
+        return response()->json(['status' => true, 'msg' => 'ลบสินค้าแล้ว']);
     }
 
     private function save(SaveItemRequest $request, Item $item, AuditLogger $audit, string $event): Item
