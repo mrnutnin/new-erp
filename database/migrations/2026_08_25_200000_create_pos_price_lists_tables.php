@@ -13,6 +13,9 @@ return new class extends Migration
             $table->string('code', 50)->unique();
             $table->string('name', 255);
             $table->char('currency', 3)->default('THB');
+            // Nullable during fresh install; Installer creates the default branch
+            // after migrations, and new Price Lists are always branch-scoped.
+            $table->foreignId('branch_id')->nullable()->constrained('branches')->restrictOnDelete();
             // The group code is intentionally a contract boundary. Customer-group
             // ownership stays with the shared Party/POS foundation and is linked
             // without duplicating the customer master here.
@@ -27,6 +30,7 @@ return new class extends Migration
             $table->softDeletes();
 
             $table->index(['customer_group_code', 'is_active', 'effective_from', 'effective_to'], 'pos_price_lists_scope_idx');
+            $table->index(['branch_id', 'is_active', 'effective_from', 'effective_to'], 'pos_price_lists_branch_scope_idx');
         });
 
         Schema::create('pos_price_list_items', function (Blueprint $table) {

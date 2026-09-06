@@ -59,7 +59,7 @@ final class OpenItemService
         $attributes['withholding_base'] = (string) ($attributes['withholding_base'] ?? '0') ?: '0';
         $attributes['withholding_amount'] = (string) ($attributes['withholding_amount'] ?? '0') ?: '0';
         $metadata = Validator::make($attributes, [
-            'document_type' => ['required', Rule::in(['INVOICE', 'CREDIT_NOTE', 'RECEIPT', 'PAYMENT'])],
+            'document_type' => ['required', Rule::in(['INVOICE', 'CREDIT_NOTE', 'RECEIPT', 'PAYMENT', 'OPENING'])],
             'document_number' => ['required', 'string', 'max:100'],
             'due_date' => ['nullable', 'date_format:Y-m-d'],
             'withholding_tax_code_id' => ['nullable', 'integer', 'min:1'],
@@ -95,6 +95,8 @@ final class OpenItemService
                 'sales_credit_note' => ['document_type' => 'CREDIT_NOTE', 'ledger_type' => 'AR', 'party_type' => 'CUSTOMER', 'balance_side' => 'CREDIT'],
                 'customer_payment' => ['document_type' => 'RECEIPT', 'ledger_type' => 'AR', 'party_type' => 'CUSTOMER', 'balance_side' => 'CREDIT'],
                 'supplier_invoice.inventory', 'supplier_invoice.expense' => ['document_type' => 'INVOICE', 'ledger_type' => 'AP', 'party_type' => 'SUPPLIER', 'balance_side' => 'CREDIT'],
+                'opening_ar' => ['document_type' => 'OPENING', 'ledger_type' => 'AR', 'party_type' => 'CUSTOMER', 'balance_side' => 'DEBIT'],
+                'opening_ap' => ['document_type' => 'OPENING', 'ledger_type' => 'AP', 'party_type' => 'SUPPLIER', 'balance_side' => 'CREDIT'],
                 'purchase_credit_note' => ['document_type' => 'CREDIT_NOTE', 'ledger_type' => 'AP', 'party_type' => 'SUPPLIER', 'balance_side' => 'DEBIT'],
                 'supplier_payment' => ['document_type' => 'PAYMENT', 'ledger_type' => 'AP', 'party_type' => 'SUPPLIER', 'balance_side' => 'DEBIT'],
                 default => throw ValidationException::withMessages(['journal_entry_line_id' => 'Accounting event นี้ยังไม่มี Open Item contract']),

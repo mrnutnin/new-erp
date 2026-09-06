@@ -15,14 +15,20 @@ return new class extends Migration
             $table->string('document_number', 80);
             $table->date('document_date');
             $table->enum('status', ['DRAFT', 'APPROVED', 'POSTED', 'VOID', 'REVERSED'])->default('DRAFT');
+            $table->enum('reversal_status', ['NONE', 'REVERSED'])->default('NONE');
             $table->string('reason', 500);
             $table->string('idempotency_key', 180)->unique();
             $table->foreignId('created_by')->nullable()->constrained('users')->nullOnDelete();
             $table->foreignId('approved_by')->nullable()->constrained('users')->nullOnDelete();
             $table->foreignId('posted_by')->nullable()->constrained('users')->nullOnDelete();
+            $table->foreignId('reversed_by')->nullable()->constrained('users')->nullOnDelete();
+            $table->timestamp('reversed_at')->nullable();
+            $table->string('reversal_reason', 500)->nullable();
+            $table->unsignedInteger('reversal_revision')->default(0);
             $table->timestamps();
             $table->unique(['warehouse_id', 'document_number'], 'wms_adj_documents_number_unique');
             $table->index(['warehouse_id', 'document_date', 'status'], 'wms_adj_documents_scope_date_status_idx');
+            $table->unique(['id', 'reversal_revision'], 'wms_adj_documents_reversal_revision_unique');
         });
 
         Schema::table('wms_inventory_adjustments', function (Blueprint $table): void {

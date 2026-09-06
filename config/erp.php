@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'setup' => [
+        'enabled' => (bool) env('ERP_SETUP_ENABLED', false),
+        'token' => (string) env('ERP_SETUP_TOKEN', ''),
+    ],
     'inventory' => [
         // Closed by default until production integration/reconciliation QA is approved.
         'purchase_posting_enabled' => (bool) env('ERP_INVENTORY_PURCHASE_POSTING_ENABLED', false),

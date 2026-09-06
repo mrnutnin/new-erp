@@ -81,6 +81,8 @@ final class PostingEvent
         'asset.write_off' => ['module' => 'Asset', 'document' => 'ตัดออกสินทรัพย์', 'book' => 'GENERAL', 'status' => 'LIVE', 'roles' => ['ASSET_COST', 'ACCUMULATED_DEPRECIATION', 'ACCUMULATED_IMPAIRMENT', 'DISPOSAL_LOSS'], 'reversal' => 'ORIGINAL_JOURNAL'],
         'asset.branch_transfer' => ['module' => 'Asset', 'document' => 'โอนสาขาสินทรัพย์', 'book' => 'GENERAL', 'status' => 'NO_GL', 'roles' => [], 'reversal' => 'DOMAIN_CORRECTION'],
         'accounting.period_adjustment' => ['module' => 'Accounting', 'document' => 'ปรับปรุงงวดบัญชี', 'book' => 'GENERAL', 'status' => 'LIVE', 'roles' => [], 'reversal' => 'ORIGINAL_JOURNAL'],
+        'opening_ar' => ['module' => 'Installer', 'document' => 'ยอดยกมาลูกหนี้', 'book' => 'GENERAL', 'status' => 'LIVE', 'roles' => [], 'reversal' => 'ORIGINAL_JOURNAL'],
+        'opening_ap' => ['module' => 'Installer', 'document' => 'ยอดยกมาเจ้าหนี้', 'book' => 'GENERAL', 'status' => 'LIVE', 'roles' => [], 'reversal' => 'ORIGINAL_JOURNAL'],
     ];
 
     public static function codes(): array

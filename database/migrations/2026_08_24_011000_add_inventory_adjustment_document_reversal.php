@@ -8,6 +8,12 @@ return new class extends Migration
 {
     public function up(): void
     {
+        // Fresh installs create the document table later in this migration batch;
+        // the columns are included in that table definition below.
+        if (! Schema::hasTable('wms_inventory_adjustment_documents')) {
+            return;
+        }
+
         Schema::table('wms_inventory_adjustment_documents', function (Blueprint $table): void {
             $table->enum('reversal_status', ['NONE', 'REVERSED'])->default('NONE')->after('status');
             $table->foreignId('reversed_by')->nullable()->after('posted_by')->constrained('users')->nullOnDelete();
@@ -20,6 +26,10 @@ return new class extends Migration
 
     public function down(): void
     {
+        if (! Schema::hasTable('wms_inventory_adjustment_documents')) {
+            return;
+        }
+
         Schema::table('wms_inventory_adjustment_documents', function (Blueprint $table): void {
             $table->dropUnique('wms_adj_documents_reversal_revision_unique');
             $table->dropForeign(['reversed_by']);

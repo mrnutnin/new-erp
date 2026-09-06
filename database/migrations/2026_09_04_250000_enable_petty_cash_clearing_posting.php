@@ -10,6 +10,18 @@ return new class extends Migration
     public function up(): void
     {
         Schema::table('finance_petty_cash_clearings', function (Blueprint $table): void {
+            if (! Schema::hasColumn('finance_petty_cash_clearings', 'journal_entry_id')) {
+                $table->foreignId('journal_entry_id')->nullable()->unique()->constrained('journal_entries')->nullOnDelete();
+            }
+            if (! Schema::hasColumn('finance_petty_cash_clearings', 'idempotency_key')) {
+                $table->char('idempotency_key', 64)->nullable();
+            }
+            if (! Schema::hasColumn('finance_petty_cash_clearings', 'reversal_journal_entry_id')) {
+                $table->foreignId('reversal_journal_entry_id')->nullable()->unique()->constrained('journal_entries')->nullOnDelete();
+            }
+            if (! Schema::hasColumn('finance_petty_cash_clearings', 'reversal_key')) {
+                $table->char('reversal_key', 64)->nullable();
+            }
             if (! Schema::hasColumn('finance_petty_cash_clearings', 'reversed_by')) {
                 $table->foreignId('reversed_by')->nullable()->after('posted_at')->constrained('users')->nullOnDelete();
             }
@@ -23,10 +35,10 @@ return new class extends Migration
 
         $indexes = collect(DB::select('SHOW INDEX FROM finance_petty_cash_clearings'))
             ->pluck('Key_name')->unique()->all();
-        if (! in_array('finance_petty_cash_clearings_idempotency_key_unique', $indexes, true)) {
+        if (Schema::hasColumn('finance_petty_cash_clearings', 'idempotency_key') && ! in_array('finance_petty_cash_clearings_idempotency_key_unique', $indexes, true)) {
             Schema::table('finance_petty_cash_clearings', fn (Blueprint $table) => $table->unique('idempotency_key', 'finance_petty_cash_clearings_idempotency_key_unique'));
         }
-        if (! in_array('finance_petty_cash_clearings_reversal_key_unique', $indexes, true)) {
+        if (Schema::hasColumn('finance_petty_cash_clearings', 'reversal_key') && ! in_array('finance_petty_cash_clearings_reversal_key_unique', $indexes, true)) {
             Schema::table('finance_petty_cash_clearings', fn (Blueprint $table) => $table->unique('reversal_key', 'finance_petty_cash_clearings_reversal_key_unique'));
         }
 

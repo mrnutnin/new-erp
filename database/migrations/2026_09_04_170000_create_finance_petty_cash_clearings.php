@@ -25,6 +25,10 @@ return new class extends Migration
             $table->timestamp('approved_at')->nullable();
             $table->foreignId('posted_by')->nullable()->constrained('users')->nullOnDelete();
             $table->timestamp('posted_at')->nullable();
+            $table->foreignId('journal_entry_id')->nullable()->unique()->constrained('journal_entries')->nullOnDelete();
+            $table->char('idempotency_key', 64)->nullable()->unique();
+            $table->foreignId('reversal_journal_entry_id')->nullable()->unique()->constrained('journal_entries')->nullOnDelete();
+            $table->char('reversal_key', 64)->nullable()->unique();
             $table->foreignId('voided_by')->nullable()->constrained('users')->nullOnDelete();
             $table->timestamp('voided_at')->nullable();
             $table->string('void_reason', 500)->nullable();

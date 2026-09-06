@@ -8,6 +8,12 @@ return new class extends Migration
 {
     public function up(): void
     {
+        // Fresh installs create the base table later in this migration batch;
+        // the columns are included in that table definition below.
+        if (! Schema::hasTable('wms_inventory_adjustments')) {
+            return;
+        }
+
         Schema::table('wms_inventory_adjustments', function (Blueprint $table): void {
             $table->enum('reversal_status', ['NONE', 'REVERSED'])->default('NONE')->after('status');
             $table->foreignId('reversal_journal_entry_id')->nullable()->after('cost_allocation_id')->constrained('journal_entries')->restrictOnDelete();
@@ -24,6 +30,10 @@ return new class extends Migration
 
     public function down(): void
     {
+        if (! Schema::hasTable('wms_inventory_adjustments')) {
+            return;
+        }
+
         Schema::table('wms_inventory_adjustments', function (Blueprint $table): void {
             $table->dropUnique('wms_adjustments_reversal_journal_unique');
             $table->dropUnique('wms_adjustments_reversal_revision_unique');

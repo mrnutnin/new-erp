@@ -46,6 +46,18 @@ class DocumentSequenceController extends Controller
         'PETTY_CASH_CLEARING' => 'ใบเคลียร์เงินสดย่อย',
         'EMPLOYEE_ADVANCE' => 'ใบเงินทดรองจ่ายพนักงาน',
         'EMPLOYEE_ADVANCE_CLEARING' => 'ใบเคลียร์เงินทดรองพนักงาน',
+        'PURCHASE_RETURN' => 'ใบคืนซื้อ',
+        'BILLING_NOTE' => 'ใบวางบิล',
+        'INTERNAL_TRANSFER' => 'โอนเงินระหว่างบัญชี',
+        'ASSET_REGISTER' => 'ทะเบียนสินทรัพย์',
+        'ASSET_CAPITALIZATION' => 'ใบรับรู้สินทรัพย์',
+        'ASSET_ADDITION' => 'ใบเพิ่มมูลค่าสินทรัพย์',
+        'ASSET_TRANSFER' => 'ใบโอน/ย้ายสินทรัพย์',
+        'ASSET_COUNT' => 'ใบตรวจนับสินทรัพย์',
+        'ASSET_MAINTENANCE' => 'ใบแจ้งซ่อมสินทรัพย์',
+        'ASSET_DEPRECIATION' => 'ชุดคำนวณค่าเสื่อม',
+        'ASSET_IMPAIRMENT' => 'ใบบันทึกด้อยค่าสินทรัพย์',
+        'ASSET_DISPOSAL' => 'ใบจำหน่าย/ตัดออก',
     ];
 
     public function index(): View
