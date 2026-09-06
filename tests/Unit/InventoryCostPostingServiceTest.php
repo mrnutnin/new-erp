@@ -36,6 +36,17 @@ class InventoryCostPostingServiceTest extends TestCase
         $service->buildPreview($allocation, 'inventory.receipt', ['INVENTORY_DEFAULT' => 20]);
     }
 
+    public function test_recost_preview_uses_directional_gain_or_loss_mapping(): void
+    {
+        $allocation = (new CostAllocation(['allocation_type' => 'RECOST', 'direction' => 'IN', 'value' => '10.00']))->forceFill(['id' => 7]);
+        $result = (new InventoryCostPostingService)->buildPreview($allocation, 'inventory.recost', [
+            'INVENTORY_DEFAULT' => 20,
+            'INVENTORY_RECOST_GAIN' => 22,
+        ]);
+
+        $this->assertSame(['INVENTORY_DEFAULT', 'INVENTORY_RECOST_GAIN'], array_column($result['lines'], 'account_mapping'));
+    }
+
     public function test_transfer_allocation_cannot_be_mapped_to_a_gain_or_loss_journal(): void
     {
         $allocation = (new CostAllocation([

@@ -521,6 +521,229 @@ body {
     display: none;
 }
 
+.purchasing-process-scroll {
+    overflow-x: auto;
+    padding: .25rem .25rem 1rem;
+}
+
+.purchasing-mermaid-wrap {
+    min-height: 22rem;
+    overflow-x: auto;
+    padding: 1rem;
+    border: 1px solid rgba(86, 100, 210, .16);
+    border-radius: .8rem;
+    background:
+        radial-gradient(circle at 12% 18%, rgba(86, 100, 210, .08), transparent 30%),
+        radial-gradient(circle at 88% 82%, rgba(58, 154, 166, .08), transparent 28%),
+        rgba(255, 255, 255, .52);
+}
+
+.purchasing-mermaid {
+    min-width: 72rem;
+    margin: 0;
+    background: transparent;
+    color: var(--app-text);
+    font-family: 'Noto Sans Thai', 'Apple SD Gothic Neo', sans-serif;
+    white-space: pre;
+}
+
+.purchasing-mermaid svg {
+    max-width: none;
+    min-height: 20rem;
+}
+
+.purchasing-mermaid .node rect,
+.purchasing-mermaid .node polygon,
+.purchasing-mermaid .node path {
+    stroke-linejoin: round;
+}
+
+.purchasing-mermaid .edgePath .path {
+    stroke-width: 1.5px;
+}
+
+.purchasing-mermaid .edgeLabel rect {
+    fill: var(--app-surface);
+    opacity: .94;
+}
+
+.module-process-diagram {
+    min-height: 22rem;
+    overflow-x: auto;
+    padding: 1rem;
+    border: 1px solid rgba(86, 100, 210, .16);
+    border-radius: .8rem;
+    background:
+        radial-gradient(circle at 12% 18%, rgba(86, 100, 210, .08), transparent 30%),
+        radial-gradient(circle at 88% 82%, rgba(58, 154, 166, .08), transparent 28%),
+        rgba(255, 255, 255, .52);
+}
+
+.module-process-mermaid {
+    min-width: 72rem;
+    margin: 0;
+    background: transparent;
+    color: var(--app-text);
+    font-family: 'Noto Sans Thai', 'Apple SD Gothic Neo', sans-serif;
+    white-space: pre;
+}
+
+.module-process-mermaid svg {
+    max-width: none;
+    min-height: 20rem;
+}
+
+.module-process-mermaid .node rect,
+.module-process-mermaid .node polygon,
+.module-process-mermaid .node path {
+    stroke-linejoin: round;
+}
+
+.module-process-mermaid .edgePath .path {
+    stroke-width: 1.5px;
+}
+
+.module-process-mermaid .edgeLabel rect {
+    fill: var(--app-surface);
+    opacity: .94;
+}
+
+.module-process-note {
+    height: 100%;
+    padding: 1rem;
+    border: 1px solid rgba(45, 49, 66, .12);
+    border-radius: .6rem;
+    background: rgba(255, 255, 255, .6);
+}
+
+.module-process-note i {
+    color: #6478c8;
+    font-size: 1.1rem;
+}
+
+@media (max-width: 767.98px) {
+    .module-process-mermaid {
+        min-width: 64rem;
+    }
+}
+
+.purchasing-process-track {
+    display: flex;
+    min-width: 1280px;
+    align-items: stretch;
+    gap: 1.25rem;
+}
+
+.purchasing-process-stage {
+    position: relative;
+    flex: 1 1 0;
+    min-width: 8.75rem;
+}
+
+.purchasing-process-stage:not(:last-child)::after {
+    position: absolute;
+    top: 5.8rem;
+    right: -1rem;
+    content: '→';
+    color: var(--app-muted);
+    font-size: 1.35rem;
+    font-weight: 600;
+}
+
+.purchasing-process-stage-head {
+    display: flex;
+    align-items: center;
+    gap: .5rem;
+    min-height: 2rem;
+    margin-bottom: .75rem;
+}
+
+.purchasing-process-number {
+    display: inline-grid;
+    width: 1.75rem;
+    height: 1.75rem;
+    place-items: center;
+    border-radius: 50%;
+    background: rgba(45, 49, 66, .1);
+    color: var(--app-text);
+    font-size: .72rem;
+    font-weight: 700;
+}
+
+.purchasing-process-owner {
+    color: var(--app-muted);
+    font-size: .75rem;
+    font-weight: 600;
+}
+
+.purchasing-process-node {
+    min-height: 13rem;
+    padding: 1rem;
+    border: 1px solid rgba(45, 49, 66, .15);
+    border-radius: .5rem;
+    background: rgba(255, 255, 255, .72);
+}
+
+.purchasing-process-node p {
+    color: var(--app-muted);
+    font-size: .82rem;
+}
+
+.purchasing-process-io {
+    display: grid;
+    gap: .5rem;
+    color: var(--app-text);
+    font-size: .74rem;
+}
+
+.purchasing-process-io > span {
+    display: grid;
+    gap: .1rem;
+}
+
+.purchasing-process-io small {
+    color: var(--app-muted);
+    font-size: .66rem;
+    text-transform: uppercase;
+}
+
+.purchasing-process-io i {
+    color: var(--app-muted);
+}
+
+.purchasing-process-stage.is-focal .purchasing-process-number {
+    background: var(--app-text);
+    color: #fff;
+}
+
+.purchasing-process-stage.is-focal .purchasing-process-node {
+    border-color: var(--app-text);
+    background: rgba(45, 49, 66, .05);
+}
+
+.purchasing-process-branch {
+    height: 100%;
+    padding: 1rem;
+    border: 1px solid rgba(45, 49, 66, .12);
+    border-radius: .5rem;
+    background: rgba(255, 255, 255, .45);
+}
+
+.purchasing-process-branch i {
+    color: var(--app-text);
+    font-size: 1.1rem;
+}
+
+.purchasing-process-branch.is-service {
+    border-style: dashed;
+}
+
+@media (max-width: 767.98px) {
+    .purchasing-process-track {
+        min-width: 1120px;
+    }
+}
+
 .card,
 .btn,
 .form-control,

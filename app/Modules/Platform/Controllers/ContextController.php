@@ -22,6 +22,7 @@ class ContextController extends Controller
     {
         $programs = $request->user()->programs()
             ->where('is_enabled', true)
+            ->orderByRaw("CASE WHEN code = 'settings' THEN 1 ELSE 0 END")
             ->orderBy('sort_order')
             ->get()
             ->filter(fn ($program) => $capability->isProgramAvailable($program->code))

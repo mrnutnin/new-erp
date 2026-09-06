@@ -16,12 +16,24 @@ final class PurchaseThreeWayMatchGate
             return;
         }
 
+        $varianceBlockers = [
+            'receipt_exceeds_po_quantity', 'invoice_exceeds_received_quantity',
+            'invoice_price_variance', 'receipt_cost_variance',
+        ];
+        $nonVarianceBlockers = array_values(array_diff($result['blockers'] ?? [], $varianceBlockers));
+        if ($nonVarianceBlockers !== []) {
+            throw ValidationException::withMessages([
+                'lines' => 'Purchase Invoice ยังไม่ผ่าน 3-way matching: '.implode(', ', $nonVarianceBlockers),
+            ]);
+        }
+
         // A variance may proceed only when the current PO/GR/Invoice snapshot
         // has an explicit approval. A changed source produces a new hash and
         // therefore must be reviewed again.
         $approvalPolicy = new PurchaseThreeWayMatchPolicy(requireApprovalOnVariance: true, blockOnVariance: false);
         $approvalResult = $this->previewWithPolicy($document, $approvalPolicy);
         $approved = $approvalResult !== null
+            && array_intersect($approvalResult['blockers'] ?? [], $varianceBlockers) !== []
             && PurchaseVarianceApproval::query()
                 ->where('purchase_document_id', $document->id)
                 ->where('status', 'APPROVED')

@@ -54,6 +54,11 @@ class SalesDocument extends Model
         return $this->belongsTo(self::class, 'source_invoice_id');
     }
 
+    public function billingNoteLines(): HasMany
+    {
+        return $this->hasMany(BillingNoteLine::class);
+    }
+
     public function journalEntry(): BelongsTo
     {
         return $this->belongsTo(JournalEntry::class);

@@ -66,8 +66,11 @@ final class PostingEvent
         'petty_cash_clearing' => ['module' => 'Finance', 'document' => 'เคลียร์เงินสดย่อย', 'book' => 'GENERAL', 'status' => 'LIVE', 'roles' => ['PETTY_CASH_VARIANCE_GAIN', 'PETTY_CASH_VARIANCE_LOSS'], 'reversal' => 'ORIGINAL_JOURNAL'],
         'sales_commission_payout' => ['module' => 'Finance', 'document' => 'จ่ายคอมมิชชั่น', 'book' => 'PAYMENT', 'status' => 'LIVE', 'roles' => ['COMMISSION_EXPENSE'], 'reversal' => 'ORIGINAL_JOURNAL'],
         'inventory_adjustment' => ['module' => 'WMS', 'document' => 'ปรับปรุงสินค้าคงเหลือ', 'book' => 'GENERAL', 'status' => 'LIVE', 'roles' => ['INVENTORY', 'ADJUSTMENT_GAIN', 'ADJUSTMENT_LOSS'], 'reversal' => 'ORIGINAL_JOURNAL'],
-        'inventory.recost' => ['module' => 'WMS', 'document' => 'ปรับต้นทุนสินค้า', 'book' => 'GENERAL', 'status' => 'DEFERRED', 'roles' => ['INVENTORY'], 'reversal' => 'DELTA_OR_REVERSAL'],
-        'inventory.receipt' => ['module' => 'WMS', 'document' => 'รับสินค้า', 'book' => 'PURCHASE', 'status' => 'DEFERRED', 'roles' => ['INVENTORY'], 'reversal' => 'ORIGINAL_JOURNAL'],
+        'inventory.recost' => ['module' => 'WMS', 'document' => 'ปรับต้นทุนสินค้า', 'book' => 'GENERAL', 'status' => 'LIVE', 'roles' => ['INVENTORY', 'RECOST_GAIN', 'RECOST_LOSS'], 'reversal' => 'DELTA_OR_REVERSAL'],
+        // Goods Receipt is operational/source-only in this ERP flow. The
+        // Inventory and AP Journal is created by supplier_invoice.inventory;
+        // posting another Journal at receipt would duplicate inventory value.
+        'inventory.receipt' => ['module' => 'WMS', 'document' => 'รับสินค้า (ไม่ลงบัญชีซ้ำ)', 'book' => 'PURCHASE', 'status' => 'NO_GL', 'roles' => [], 'reversal' => 'ORIGINAL_JOURNAL'],
         'production.material_issue' => ['module' => 'Production', 'document' => 'เบิกวัตถุดิบผลิต', 'book' => 'GENERAL', 'status' => 'DEFERRED', 'roles' => ['WIP', 'INVENTORY'], 'reversal' => 'ORIGINAL_JOURNAL'],
         'production.finished_receipt' => ['module' => 'Production', 'document' => 'รับสินค้าสำเร็จรูป', 'book' => 'GENERAL', 'status' => 'DEFERRED', 'roles' => ['FINISHED_GOODS', 'WIP', 'PRODUCTION_VARIANCE'], 'reversal' => 'ORIGINAL_JOURNAL'],
         'asset.depreciation' => ['module' => 'Asset', 'document' => 'ค่าเสื่อมราคา', 'book' => 'GENERAL', 'status' => 'LIVE', 'roles' => ['DEPRECIATION_EXPENSE', 'ACCUMULATED_DEPRECIATION'], 'reversal' => 'ORIGINAL_JOURNAL'],

@@ -29,6 +29,7 @@ class PostingConfigurationMockupSeeder extends Seeder
             'employee_advance_clearing' => ['EMPLOYEE_ADVANCE' => '12600'],
             'sales_commission_payout' => ['COMMISSION_EXPENSE' => '53000'],
             'inventory_adjustment' => ['INVENTORY' => '13000', 'ADJUSTMENT_GAIN' => '42100', 'ADJUSTMENT_LOSS' => '52100'],
+            'inventory.recost' => ['INVENTORY' => '13000', 'RECOST_GAIN' => '42200', 'RECOST_LOSS' => '52200'],
             'asset.depreciation' => ['DEPRECIATION_EXPENSE' => '54000', 'ACCUMULATED_DEPRECIATION' => '15110'],
             'asset.capitalization' => ['ASSET_COST' => '15100', 'CAPITALIZATION_CLEARING' => '15140'],
             'asset.addition' => ['ASSET_COST' => '15100', 'CAPITALIZATION_CLEARING' => '15140'],

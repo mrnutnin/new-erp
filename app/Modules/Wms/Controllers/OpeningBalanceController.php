@@ -79,6 +79,11 @@ final class OpeningBalanceController extends Controller
         return DataTables::eloquent($query->latest('id'))
             ->addColumn('line_count', fn ($row) => $row->lines->count())
             ->editColumn('cutover_date', fn ($row) => $row->cutover_date?->format('d/m/Y'))
+            ->addColumn('costing_method_label', fn ($row) => match ($row->costing_method) {
+                'FIFO' => 'FIFO',
+                'AVG', 'AVERAGE' => 'ถัวเฉลี่ย',
+                default => $row->costing_method ?: '-',
+            })
             ->editColumn('total_value', fn ($row) => WmsDecimal::format($row->total_value))
             ->addColumn('status_label', fn ($row) => $labels[$row->status] ?? $row->status)
             ->addColumn('show_url', fn ($row) => route('wms.opening-balances.show', $row))

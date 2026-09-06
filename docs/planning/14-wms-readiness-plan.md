@@ -17,8 +17,12 @@
 - [x] ตั้งค่า Inventory Account และ COGS Account สำหรับสินค้า Stock และ WMS event
 - [x] ตรวจประเภทบัญชี, active และ postable
 - [x] แสดง readiness ตาม mapping จริง
+- [x] เปิด `inventory.recost` เป็น `LIVE` พร้อม mapping แบบ event-scoped: Inventory, Recost Gain และ Recost Loss
+- [x] กำหนด `inventory.receipt` เป็น `NO_GL`/source-only เพื่อไม่สร้าง Journal ซ้ำกับ Supplier Invoice
+- [x] ตรวจ readiness หลัง migrate: Recost พร้อมใช้ครบ 3 roles และ Receipt ไม่ต้องตั้ง mapping GL
+- [x] QA mapping/runtime: Unit 21 tests / 62 assertions และ MySQL Recost integration 1 test / 15 assertions ผ่าน
 
-เกณฑ์ผ่าน: Inventory/COGS Mapping เป็น `พร้อมทำ` (Receipt/Recost mapping ตั้งแล้ว; การเปิด event ยังถูกควบคุมด้วย feature policy)
+เกณฑ์ผ่าน: Inventory/COGS Mapping เป็น `พร้อมทำ`; Receipt ไม่ลงบัญชีซ้ำ และ Recost ใช้ mapping ตาม event ได้จริง
 
 ### 2. Opening Balance
 

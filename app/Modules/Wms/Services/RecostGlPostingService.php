@@ -62,8 +62,9 @@ final class RecostGlPostingService
             if ((int) $locked->warehouse_id !== (int) $warehouse->id) {
                 throw ValidationException::withMessages(['warehouse_id' => 'Warehouse ของ Recost ไม่ตรงกับ Journal']);
             }
-            $inventory = $this->mappings->resolve('INVENTORY_DEFAULT');
-            $variance = $this->mappings->resolve($plan['mapping_keys'][1]);
+            $inventory = $this->mappings->resolveForEvent('inventory.recost', 'INVENTORY')['account'];
+            $varianceRole = $plan['mapping_keys'][1] === 'INVENTORY_RECOST_GAIN' ? 'RECOST_GAIN' : 'RECOST_LOSS';
+            $variance = $this->mappings->resolveForEvent('inventory.recost', $varianceRole)['account'];
             // Journal lines follow Global Setting's accounting precision;
             // Recost layers retain eight decimals, so normalize only at the
             // GL boundary with the same half-up policy as other postings.

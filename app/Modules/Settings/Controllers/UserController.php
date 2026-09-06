@@ -103,7 +103,7 @@ class UserController extends Controller
 
     public function edit(User $user): View
     {
-        $user->load(['branches:id', 'programs:id', 'warehouses:id', 'roles:id']);
+        $user->load(['branches:id', 'programs:id', 'warehouses:id', 'roles.permissions']);
 
         return $this->formView($user);
     }
@@ -179,6 +179,14 @@ class UserController extends Controller
 
     private function formView(User $user): View
     {
+        $user->loadMissing('roles.permissions');
+        $effectivePermissions = $user->roles
+            ->where('is_active', true)
+            ->flatMap(fn ($role) => $role->permissions)
+            ->unique('id')
+            ->sortBy('code')
+            ->values();
+
         return view('Settings::users.form', [
             'user' => $user,
             'programs' => Program::query()->where('is_enabled', true)->orderBy('sort_order')->get(),
@@ -189,6 +197,7 @@ class UserController extends Controller
             'selectedBranches' => $user->exists ? $user->branches->pluck('id')->all() : [],
             'selectedWarehouses' => $user->exists ? $user->warehouses->pluck('id')->all() : [],
             'selectedRoles' => $user->exists ? $user->roles->pluck('id')->all() : [],
+            'effectivePermissions' => $effectivePermissions,
         ]);
     }
 

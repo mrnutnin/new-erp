@@ -24,6 +24,7 @@
 
 - [ ] User DataTable โหลดแบบ server-side พร้อม search, pagination และ page length
 - [ ] เพิ่ม/แก้ไข user พร้อม Role, Program และ Warehouse assignment
+- [x] หน้า User/Profile แสดงสิทธิ์ Feature/Function ที่ได้รับจริงจาก Active Role พร้อม permission code
 - [ ] ปิด user ตนเองถูกปฏิเสธ 422 ที่ `is_active`
 - [ ] ถอด Settings program ของตนเองถูกปฏิเสธ 422 ที่ `program_ids`
 - [ ] ถอด admin role ของตนเองถูกปฏิเสธ 422 ที่ `role_ids`

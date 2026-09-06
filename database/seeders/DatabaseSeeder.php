@@ -46,6 +46,7 @@ class DatabaseSeeder extends Seeder
         ]);
 
         $programs = collect([
+            ['code' => 'dashboard', 'name' => 'Dashboard', 'description' => 'ภาพรวมองค์กรสำหรับผู้บริหาร', 'requires_branch' => false, 'requires_warehouse' => false, 'entry_route' => 'dashboard'],
             ['code' => 'settings', 'name' => 'Global Setting', 'description' => 'ตั้งค่าระบบและข้อมูลบริษัท', 'requires_branch' => false, 'requires_warehouse' => false, 'entry_route' => 'settings.index'],
             ['code' => 'purchasing', 'name' => 'Purchasing', 'description' => 'บริหารจัดซื้อ', 'requires_branch' => true, 'requires_warehouse' => true, 'entry_route' => 'purchasing.index'],
             ['code' => 'wms', 'name' => 'WMS', 'description' => 'บริหารคลังสินค้าและสต็อก', 'requires_branch' => true, 'requires_warehouse' => true, 'entry_route' => 'wms.index'],
@@ -58,7 +59,7 @@ class DatabaseSeeder extends Seeder
         ])->map(function (array $attributes, int $index) {
             return Program::query()->updateOrCreate(['code' => $attributes['code']], [
                 ...$attributes,
-                'is_enabled' => true,
+                'is_enabled' => $attributes['code'] !== 'logistics',
                 'sort_order' => $index + 1,
             ]);
         });

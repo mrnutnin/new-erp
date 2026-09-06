@@ -151,7 +151,7 @@
 - [ ] การชำระเงิน
 - [~] ใบรับมัดจำ (AI) — Finance advance/deposit foundation มีแล้ว; full posting/application ยัง gated
 - [ ] ใบแจ้งหนี้
-- [ ] ใบวางบิล
+- [~] ใบวางบิล — MVP รวม Posted Invoice ที่มียอดคงค้าง, ออก/ยกเลิกเอกสาร และไม่สร้าง GL ซ้ำ; ยังเหลือ PDF/พิมพ์
 - [~] ใบลดหนี้/รับคืน (CN/Sales Return) — DRAFT + source-line Select2 AJAX, duplicate guard, date/status filters และ PDF หลายหน้า/โลโก้บริษัทพร้อม; Stock/GL reversal ยัง deferred
 - [ ] ใบเพิ่มหนี้ (DN)
 - [ ] รายงานวิเคราะห์ขายสุทธิ

@@ -217,9 +217,9 @@ class WorkflowCatalogTest extends TestCase
         $workflow = collect(WorkflowCatalog::for('wms'))->firstWhere('code', 'procure-to-pay');
         $decision = collect($workflow['decision_cards'])->firstWhere('code', 'purchase-three-way-match');
 
-        $this->assertNull($decision['route']);
+        $this->assertSame('purchasing.purchase-documents.index', $decision['route']);
         $this->assertStringContainsString('PO, Goods Receipt และ Credit Purchase', $decision['description']);
-        $this->assertStringContainsString('read-only preflight', $decision['description']);
+        $this->assertStringContainsString('variance approval', $decision['description']);
         $this->assertStringContainsString('ห้ามใช้ Journal', $decision['block_reason']);
         $this->assertStringContainsString('จำนวนต่าง', $decision['recovery_hint']);
         $this->assertStringContainsString('ราคา/ต้นทุนต่าง', $decision['recovery_hint']);

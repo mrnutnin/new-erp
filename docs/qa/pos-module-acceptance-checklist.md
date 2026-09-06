@@ -74,7 +74,7 @@
 
 - [ ] Campaign เงื่อนไขซับซ้อน เช่น ช่องทางขาย/e-commerce หรือ rule engine หลายมิติ
 - [ ] HS/IV stock issue, COGS และ GL posting สำหรับสินค้าคงคลัง จนกว่า WMS costing/Inventory-to-GL gate จะเปิด
-- [ ] ใบแจ้งหนี้, ใบวางบิล และใบเพิ่มหนี้เต็มรูปแบบ
+- [~] ใบวางบิล MVP — รวม Posted Invoice ที่มียอดคงค้างตามลูกค้า, Draft/ออก/ยกเลิก, เลขเอกสารตามสาขา และไม่สร้าง GL ซ้ำ; PDF/พิมพ์และใบเพิ่มหนี้ยังไม่รวม
 - [ ] Cashier shift/cash reconciliation และ payment channel analytics
 - [ ] e-Commerce/payment gateway/webhook/e-Tax Invoice integration
 

@@ -14,7 +14,6 @@ final class OperationalPostingAccountResolutionAuditTest extends TestCase
         $root = dirname(__DIR__, 2).'/app/Modules';
         $exceptions = [
             'Purchasing/Services/ProcurementSourceBuilder.php',
-            'Wms/Services/RecostGlPostingService.php',
         ];
         $legacyCallers = [];
 
@@ -30,6 +29,6 @@ final class OperationalPostingAccountResolutionAuditTest extends TestCase
 
         sort($legacyCallers);
         self::assertSame($exceptions, $legacyCallers);
-        self::assertSame('DEFERRED', PostingEvent::contract('inventory.recost')['status']);
+        self::assertSame('LIVE', PostingEvent::contract('inventory.recost')['status']);
     }
 }

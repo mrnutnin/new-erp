@@ -80,7 +80,10 @@ final class InventoryCostPostingContract
                     'INVENTORY_DEFAULT',
                     $direction === 'IN' ? 'INVENTORY_ADJUSTMENT_GAIN' : 'INVENTORY_ADJUSTMENT_LOSS',
                 ],
-                'inventory.recost' => ['INVENTORY_REVALUATION'],
+                'inventory.recost' => [
+                    'INVENTORY_DEFAULT',
+                    $direction === 'IN' ? 'INVENTORY_RECOST_GAIN' : 'INVENTORY_RECOST_LOSS',
+                ],
             },
             'requires_source_account' => $eventCode === 'inventory.receipt',
             'creates_journal' => false,
@@ -95,6 +98,8 @@ final class InventoryCostPostingContract
             'INVENTORY_DEFAULT' => 'INVENTORY',
             'INVENTORY_ADJUSTMENT_GAIN' => 'ADJUSTMENT_GAIN',
             'INVENTORY_ADJUSTMENT_LOSS' => 'ADJUSTMENT_LOSS',
+            'INVENTORY_RECOST_GAIN' => 'RECOST_GAIN',
+            'INVENTORY_RECOST_LOSS' => 'RECOST_LOSS',
         ];
         $provenance = [];
         foreach ($requirements['mapping_keys'] as $key) {

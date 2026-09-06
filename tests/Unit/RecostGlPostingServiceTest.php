@@ -11,7 +11,7 @@ final class RecostGlPostingServiceTest extends TestCase
     {
         $routes = file_get_contents(base_path('app/Modules/Wms/Routes/web.php'));
         $this->assertStringNotContainsString('RecostGlPostingService', $routes);
-        $this->assertStringContainsString("'inventory.recost' => throw ValidationException", file_get_contents(base_path('app/Modules/Wms/Services/InventoryCostPostingService.php')));
+        $this->assertStringContainsString("'inventory.recost' =>", file_get_contents(base_path('app/Modules/Wms/Services/InventoryCostPostingService.php')));
         $this->assertTrue(class_exists(RecostGlPostingService::class));
     }
 }

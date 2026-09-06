@@ -51,6 +51,11 @@ class PhysicalSale extends Model
         return $this->hasMany(AdvanceDepositApplication::class, 'physical_sale_id');
     }
 
+    public function billingNoteLines(): HasMany
+    {
+        return $this->hasMany(BillingNoteLine::class, 'physical_sale_id');
+    }
+
     public function warehouse(): BelongsTo
     {
         return $this->belongsTo(Warehouse::class);

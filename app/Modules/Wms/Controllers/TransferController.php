@@ -32,6 +32,7 @@ final class TransferController extends Controller
             'direction' => $direction,
             'warehouse' => $request->attributes->get('selectedWarehouse'),
             'warehouses' => $this->warehouses($request),
+            'branches' => $this->branches($request),
         ]);
     }
 
@@ -40,12 +41,19 @@ final class TransferController extends Controller
         $warehouseId = (int) $request->attributes->get('selectedWarehouse')->id;
         $direction = (string) ($request->route('direction') ?: $request->query('direction', 'all'));
         $query = Transfer::query()
-            ->with(['sourceWarehouse:id,name', 'destinationWarehouse:id,name'])
+            ->with(['sourceWarehouse:id,branch_id,name', 'sourceWarehouse.branch:id,code,name', 'destinationWarehouse:id,branch_id,name', 'destinationWarehouse.branch:id,code,name'])
             ->orderByDesc('document_date')
             ->orderByDesc('id');
         if ($request->filled('status') && in_array($request->string('status')->toString(), ['DRAFT', 'DISPATCHED', 'PARTIALLY_ACCEPTED', 'ACCEPTED', 'REJECTED', 'VOID'], true)) $query->where('status', $request->string('status')->toString());
         if ($request->filled('date_from')) $query->whereDate('document_date', '>=', $request->date('date_from'));
         if ($request->filled('date_to')) $query->whereDate('document_date', '<=', $request->date('date_to'));
+        $branchIds = $this->branches($request)->pluck('id');
+        if ($request->filled('source_branch_id') && $branchIds->contains((int) $request->input('source_branch_id'))) {
+            $query->whereHas('sourceWarehouse', fn ($warehouse) => $warehouse->where('branch_id', (int) $request->input('source_branch_id')));
+        }
+        if ($request->filled('destination_branch_id') && $branchIds->contains((int) $request->input('destination_branch_id'))) {
+            $query->whereHas('destinationWarehouse', fn ($warehouse) => $warehouse->where('branch_id', (int) $request->input('destination_branch_id')));
+        }
         if ($direction === 'out') {
             $query->where('source_warehouse_id', $warehouseId);
         } elseif ($direction === 'in') {
@@ -55,8 +63,8 @@ final class TransferController extends Controller
         }
         $labels = ['DRAFT' => 'ร่าง', 'DISPATCHED' => 'ส่งออกแล้ว', 'PARTIALLY_ACCEPTED' => 'รับบางส่วน', 'ACCEPTED' => 'รับครบแล้ว', 'REJECTED' => 'ปฏิเสธ', 'VOID' => 'ยกเลิก'];
         $table = DataTables::eloquent($query)
-            ->addColumn('source_label', fn (Transfer $r) => $r->sourceWarehouse?->name ?: '-')
-            ->addColumn('destination_label', fn (Transfer $r) => $r->destinationWarehouse?->name ?: '-')
+            ->addColumn('source_label', fn (Transfer $r) => $this->warehouseLabel($r->sourceWarehouse))
+            ->addColumn('destination_label', fn (Transfer $r) => $this->warehouseLabel($r->destinationWarehouse))
             ->addColumn('status_label', fn (Transfer $r) => $labels[$r->status] ?? $r->status)
             ->editColumn('document_date', fn (Transfer $r) => $r->document_date?->format((string) $settings->value('date_format')) ?: '-')
             ->addColumn('can_dispatch', fn (Transfer $r) => $request->user()->hasPermission('wms.transfers.dispatch') && $r->status === 'DRAFT' && (int) $r->source_warehouse_id === $warehouseId)
@@ -247,5 +255,34 @@ final class TransferController extends Controller
         return $request->user()->warehouses()->where('is_active', true)
             ->where('branch_id', $request->attributes->get('selectedBranch')->id)
             ->orderBy('name')->get(['warehouses.id', 'warehouses.code', 'warehouses.name']);
+    }
+
+    private function branches(Request $request)
+    {
+        $branches = $request->user()->branches()->where('branches.is_active', true)->orderBy('code')->get(['branches.id', 'branches.code', 'branches.name']);
+        if ($branches->isNotEmpty()) {
+            return $branches;
+        }
+
+        return $request->user()->warehouses()
+            ->where('warehouses.is_active', true)
+            ->with('branch:id,code,name')
+            ->get()
+            ->pluck('branch')
+            ->filter()
+            ->unique('id')
+            ->sortBy('code')
+            ->values();
+    }
+
+    private function warehouseLabel(?\App\Models\Warehouse $warehouse): string
+    {
+        if (! $warehouse) {
+            return '-';
+        }
+
+        return collect([$warehouse->code, $warehouse->name, $warehouse->branch?->code ?: $warehouse->branch?->name])
+            ->filter()
+            ->implode(' · ');
     }
 }

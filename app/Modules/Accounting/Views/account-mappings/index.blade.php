@@ -45,8 +45,9 @@ $(function () {
     var readinessCard = function (item) {
         var complete = item.ready;
         var deferred = item.status !== 'LIVE';
-        var tone = complete ? 'success' : (deferred ? 'secondary' : 'warning');
-        var label = complete ? 'พร้อมใช้' : (deferred ? 'ยังไม่เปิดใช้' : 'ต้องตรวจสอบ');
+        var noGl = item.status === 'NO_GL';
+        var tone = noGl ? 'secondary' : (complete ? 'success' : (deferred ? 'secondary' : 'warning'));
+        var label = noGl ? 'ไม่ลงบัญชีซ้ำ' : (complete ? 'พร้อมใช้' : (deferred ? 'ยังไม่เปิดใช้' : 'ต้องตรวจสอบ'));
         var roleClass = complete ? 'text-success' : 'text-warning-emphasis';
 
         return '<div class="col-md-6 col-xl-4"><a class="d-block h-100 text-decoration-none" href="' + escapeHtml(item.url) + '"><div class="border rounded-3 p-3 h-100"><div class="d-flex justify-content-between gap-2"><strong class="text-dark">' + escapeHtml(item.document) + '</strong><span class="badge text-bg-' + tone + '">' + label + '</span></div><div class="small text-secondary mt-1">' + escapeHtml(item.module) + ' · ' + escapeHtml(item.event_code) + '</div><div class="small mt-2 ' + roleClass + '">' + item.resolved_roles + ' / ' + item.required_roles + ' บทบาทที่ตั้งค่าแล้ว</div></div></a></div>';

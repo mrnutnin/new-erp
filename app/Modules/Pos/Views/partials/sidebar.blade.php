@@ -7,7 +7,7 @@
     <a class="list-group-item list-group-item-action {{ request()->routeIs('pos.workflow.*') ? 'active' : '' }}" href="{{ route('pos.workflow.index') }}"><i class="bx bx-map-alt me-2" aria-hidden="true"></i>คู่มือการทำงาน</a>
 </div>
 
-@if (auth()->user()->hasPermission('pos.sales-intakes.view') || auth()->user()->hasPermission('pos.sales-rfqs.view') || auth()->user()->hasPermission('pos.sales-quotations.view') || auth()->user()->hasPermission('pos.sales-orders.view') || auth()->user()->hasPermission('pos.sales-documents.view') || auth()->user()->hasPermission('pos.physical-sales.view') || auth()->user()->hasPermission('pos.receipts.view') || auth()->user()->hasPermission('pos.receivables.view') || auth()->user()->hasPermission('pos.advance-deposits.view') || auth()->user()->hasPermission('pos.sales-returns.view') || auth()->user()->hasPermission('pos.sales-reports.view'))
+@if (auth()->user()->hasPermission('pos.sales-intakes.view') || auth()->user()->hasPermission('pos.sales-rfqs.view') || auth()->user()->hasPermission('pos.sales-quotations.view') || auth()->user()->hasPermission('pos.sales-orders.view') || auth()->user()->hasPermission('pos.sales-documents.view') || auth()->user()->hasPermission('pos.physical-sales.view') || auth()->user()->hasPermission('pos.billing-notes.view') || auth()->user()->hasPermission('pos.receipts.view') || auth()->user()->hasPermission('pos.receivables.view') || auth()->user()->hasPermission('pos.advance-deposits.view') || auth()->user()->hasPermission('pos.sales-returns.view') || auth()->user()->hasPermission('pos.sales-reports.view'))
     <p class="eyebrow px-3 mb-2">งานขาย</p>
     <div class="list-group mb-4">
         @if (auth()->user()->hasPermission('pos.sales-intakes.view') || auth()->user()->hasPermission('pos.sales-rfqs.view') || auth()->user()->hasPermission('pos.sales-quotations.view') || auth()->user()->hasPermission('pos.sales-orders.view') || auth()->user()->hasPermission('pos.physical-sales.view'))
@@ -36,6 +36,9 @@
         @endif
         @if (auth()->user()->hasPermission('pos.sales-documents.view'))
             <a class="list-group-item list-group-item-action {{ request()->routeIs('pos.sales-documents.*') ? 'active' : '' }}" href="{{ route('pos.sales-documents.index') }}"><i class="bx bx-receipt me-2" aria-hidden="true"></i>ใบแจ้งหนี้</a>
+        @endif
+        @if (auth()->user()->hasPermission('pos.billing-notes.view'))
+            <a class="list-group-item list-group-item-action {{ request()->routeIs('pos.billing-notes.*') ? 'active' : '' }}" href="{{ route('pos.billing-notes.index') }}"><i class="bx bx-notepad me-2" aria-hidden="true"></i>ใบวางบิล</a>
         @endif
         @if (auth()->user()->hasPermission('pos.sales-reports.view'))
             @php($reportsActive = request()->routeIs('pos.sales-reports.*'))

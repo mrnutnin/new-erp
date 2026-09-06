@@ -34,7 +34,8 @@ PO รองรับ 2 กรณี: สร้างจาก PR ที่ Appr
 - [x] มี optional `PurchasingGoodsReceiptMockupSeeder` สำหรับ local review: PR Approved → PO Approved → Receipt Draft รับบางส่วน 4/10, ใช้ same-UOM factor 1 และไม่สร้าง Journal/Movement/Cost Layer
 - [x] PO → Goods Receipt ตรวจ supplier/warehouse/item/UOM และยอดรับสะสมไม่เกิน PO line แล้ว
 - [x] Purchase Document ปกติแยก service/expense path ชัดเจน (`supplier_invoice.expense`); Inventory path รองรับเฉพาะ Invoice, `NONE_VAT`, stock item ทุกบรรทัด และยังปิด feature gate
-- [x] มี pure `PurchaseThreeWayMatchContract` สำหรับ preflight แบบ read-only: ตรวจ Supplier/Warehouse, explicit PO line identity, Item/UOM, ordered/received/invoiced quantity, PO/Receipt/Invoice value variance และ stable idempotency/source-of-truth key โดยไม่เขียน Stock/Cost/GL
+- [x] มี `PurchaseThreeWayMatchContract` และ runtime `PurchaseThreeWayMatchGate`: ตรวจ Supplier/Warehouse, explicit PO line identity, Item/UOM, ordered/received/invoiced quantity, PO/Receipt/Invoice value variance และ stable idempotency/source-of-truth key โดยไม่เขียน Stock/Cost/GL
+- [x] มี variance approval แบบ persistent พร้อม policy/match snapshot, evidence hash, approve/reject/recover และ Audit Log; approval ใช้ได้เฉพาะ quantity/price variance และไม่สามารถ bypass blocker ด้าน linkage ได้
 
 ## Evidence
 
@@ -58,19 +59,18 @@ PO รองรับ 2 กรณี: สร้างจาก PR ที่ Appr
 - [ ] แก้ Draft แล้วตรวจ snapshot/UOM/cost ที่ส่งจาก form; Approve และ Void ต้องเห็นเฉพาะผู้มี permission และปุ่มถูก disable ระหว่าง request
 - [ ] เปิด WMS → Stock Card ตรวจ Item Select2, วันที่/ประเภท/ทิศทางแบบ human-readable, DataTable AJAX และยอด On-hand/Reserved/Available
 - [ ] ตรวจว่า Receipt UI ไม่มีปุ่มหรือ route Receipt Post และข้อความแจ้งว่าไม่สร้าง Movement/Cost Layer/GL
-- [ ] เปิด Workflow Center ของ WMS → Procure-to-Pay ตรวจ card `ตรวจ 3-way match ก่อน Post`: ต้องบอกจุดตรวจ PO/Receipt/Credit Purchase, quantity/value variance และวิธีแก้ Draft/Void/Reverse โดยไม่แก้ Journal เอง
+- [x] เปิด Workflow Center ของ WMS → Procure-to-Pay ตรวจ card `ตรวจ 3-way match ก่อน Post`: แสดงจุดตรวจ PO/Receipt/Credit Purchase, quantity/value variance, variance approval และวิธีแก้ Draft/Void/Reverse โดยไม่แก้ Journal เอง
 
 - Manual UI sign-off ของ Goods Receipt ยังรอการตรวจใน browser แม้ routes และหน้าจอพร้อมแล้ว
 - ยังไม่เปิด Receipt → Inventory Post และไม่สร้าง Movement/Cost Layer/Journal จาก Receipt
 - Readiness review: Recost/valuation foundation มี queue, stale/retry safety และ reconciliation read path แล้ว แต่ยังไม่ถือว่าเปิด Stock/Cost writer ได้ เพราะ Receipt ยังไม่มี Post route และ Purchase Inventory adapter ยังปิด feature gate
 - ก่อนเปิด live Recost ต้องยืนยัน policy เรื่องวันที่: `StockRecostService::resolveFromReceipt()` จับ pending layer ตาม warehouse/item/UOM; release test ต้องยืนยันว่าจะจำกัด pending layer ตาม business date หรืออนุญาตให้ receipt ย้อนแก้ผลกระทบตาม dependency chain
 - Historical reconciliation ใช้ Stock Balance เป็น `CURRENT_PROJECTION` ตามที่แสดงใน UI/เอกสาร จึงยังไม่ใช่ historical stock snapshot สำหรับ period close
-- 3-way matching (PO ↔ Goods Receipt ↔ Purchase Document) **ยังไม่เปิดใช้**: schema foundation เพิ่ม nullable `purchase_order_line_id` บน Purchase Document line และ `purchase_document_receipt_allocations` สำหรับจัดสรรหนึ่ง invoice line ไปหลาย receipt lines แล้ว แต่ยังไม่มี route/runtime allocation หรือ variance approval; `PurchaseReceiptSourceValidator` ยังเป็น guard แบบ Purchase Invoice ↔ Posted Inventory Journal/Movement
+- 3-way matching (PO ↔ Goods Receipt ↔ Purchase Document) เปิดใช้ที่ preflight/approve/post gate แล้ว: schema allocation, route preview, runtime gate และ variance approval พร้อม; Receipt → Inventory Post ยังคงปิดแยกเป็น boundary ของ WMS
 - Credit Purchase/Credit Note ตรวจ original posted invoice, supplier/warehouse เดียวกัน, AP open item และ ceiling แยกตามบัญชีแล้ว; Gate 2 เพิ่ม full-line linkage ไป Goods Receipt และ stock reversal แบบ immutable/idempotent พร้อม persistent local evidence (`CN-OPS-GATE2-20260824-N9OTKFEGWMXD`) แล้ว แต่ยังปิด feature flag จนกว่าจะผ่าน owner operational sign-off
-- ยังไม่มี live variance gate ที่ผูกกับ posting สำหรับ PO quantity/receipt quantity/invoice quantity และ PO price/receipt cost/invoice price; pure contract มีไว้ทำ preflight เท่านั้น ขณะที่ runtime ปัจจุบันยังมีเพียง PO over-receipt guard และ Purchase Document line-total arithmetic
-- `PurchaseThreeWayMatchContract` และ `PurchaseThreeWayMatchService` เป็น foundation สำหรับ variance preflight และ schema linkage พร้อมใช้เป็น read model แล้ว แต่ยังไม่เชื่อมกับ route/posting จนกว่าจะมี runtime allocation และ policy approval ที่ผูกกับผู้อนุมัติ
-- `PurchaseThreeWayMatchService` ตรวจ persisted receipt allocation จริงแบบ read-only แล้ว และคืน `CLEAR`/`BLOCKED`/`APPROVAL_REQUIRED`; ยังไม่มี controller/request หรือ runtime allocation และไม่อนุมัติ variance เอง
-- `PurchaseThreeWayMatchGate` ถูกเรียกตอน Approve และ Credit Purchase Post แบบ bounded; inventory line ที่ไม่มี allocation จะถูกปฏิเสธ, expense/service line ผ่านได้ และ gate ไม่สร้าง Stock/Cost/GL
+- live variance gate ผูกกับ Approve และ Purchase Document Post แล้วสำหรับ PO quantity/receipt quantity/invoice quantity และ PO price/receipt cost/invoice price; snapshot เปลี่ยนเมื่อใด approval เดิมจะใช้ไม่ได้และต้องตรวจใหม่
+- `PurchaseThreeWayMatchService` ตรวจ persisted receipt allocation จริงแบบ read-only และคืน `CLEAR`/`BLOCKED`/`APPROVAL_REQUIRED`; `PurchaseVarianceApprovalService` จัดการอนุมัติ/ไม่อนุมัติ/เริ่มตรวจใหม่ โดยบันทึก actor, reason, policy snapshot, match snapshot และ evidence hash
+- `PurchaseThreeWayMatchGate` ถูกเรียกตอน Approve และ Credit Purchase Post แบบ bounded; inventory line ที่ไม่มี allocation หรือมี identity mismatch จะถูกปฏิเสธ, expense/service line ผ่านได้ และ gate ไม่สร้าง Stock/Cost/GL
 - Duplicate stock ปัจจุบันถูกเลี่ยงด้วยการไม่เปิด Receipt → Inventory Post และแยก expense event ออกจาก inventory event; ก่อนเปิดจริงต้องเลือก source of truth เดียว (แนะนำ Purchase Document + explicit receipt-line allocation) และบังคับ idempotency/variance gate เพื่อไม่ให้ Invoice และ Receipt สร้าง Stock ซ้ำ
 - `GoodsReceiptInventoryService` เป็น closed service boundary ที่สร้าง Movement/Cost ได้ภายใน transaction เมื่อถูกเรียกโดยโค้ดภายใน แต่ยังไม่มี route และยังไม่ผูก `purchase_document_receipt_allocations`; ห้ามเปิด route จนกว่าจะตัดสิน source-of-truth ระหว่าง Purchase Document Inventory Post กับ Goods Receipt writer และเพิ่ม 3-way allocation/reconciliation gate
 - `GoodsReceiptInventoryPostingContractTest` มี baseline blocker ใน test bootstrap เมื่อทดสอบ `ValidationException` (ไม่มี Laravel app bindings เช่น `config`/`validator`); boundary audit และ focused contract checks ผ่านแล้ว ส่วนการแก้ bootstrap ให้ Master จัดการแยกต่างหาก

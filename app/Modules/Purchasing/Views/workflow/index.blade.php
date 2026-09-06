@@ -18,6 +18,7 @@
         @foreach($workflowModes as $mode => $label)
             <li class="nav-item"><button class="nav-link {{ $mode === $defaultWorkflowMode ? 'active' : '' }}" data-bs-toggle="pill" data-bs-target="#purchasing-workflow-{{ $mode }}" type="button">{{ $label }}</button></li>
         @endforeach
+        <li class="nav-item"><button class="nav-link" data-bs-toggle="pill" data-bs-target="#purchasing-process-workflow" type="button"><i class="bx bx-git-branch me-1" aria-hidden="true"></i>Process Workflow</button></li>
     </ul>
     <div class="tab-content">
         @foreach($workflowModes as $mode => $label)
@@ -30,6 +31,9 @@
                 @endforelse
             </div>
         @endforeach
+        <div class="tab-pane fade" id="purchasing-process-workflow">
+            @include('Purchasing::workflow._process-diagram')
+        </div>
     </div>
 </div>
 @endsection

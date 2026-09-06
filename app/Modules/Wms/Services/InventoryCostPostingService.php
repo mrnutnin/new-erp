@@ -109,7 +109,9 @@ final class InventoryCostPostingService
                 'inventory_adjustment' => $allocation->direction === 'IN'
                     ? ($add('INVENTORY_DEFAULT', 'DEBIT') || $add('INVENTORY_ADJUSTMENT_GAIN', 'CREDIT'))
                     : ($add('INVENTORY_ADJUSTMENT_LOSS', 'DEBIT') || $add('INVENTORY_DEFAULT', 'CREDIT')),
-                'inventory.recost' => throw ValidationException::withMessages(['event_code' => 'ยังไม่เปิดใช้การ Post recost จนกว่าจะมี mapping revaluation และ reversal contract']),
+                'inventory.recost' => $allocation->direction === 'IN'
+                    ? ($add('INVENTORY_DEFAULT', 'DEBIT') || $add('INVENTORY_RECOST_GAIN', 'CREDIT'))
+                    : ($add('INVENTORY_RECOST_LOSS', 'DEBIT') || $add('INVENTORY_DEFAULT', 'CREDIT')),
                 'inventory.receipt' => throw ValidationException::withMessages(['event_code' => 'Receipt ต้องมี source account จากเอกสารต้นทางก่อนจึงสร้าง Journal ได้']),
                 default => throw ValidationException::withMessages(['event_code' => 'ไม่รองรับ Inventory event นี้']),
             };
@@ -128,7 +130,10 @@ final class InventoryCostPostingService
             'inventory_adjustment' => $allocation->direction === 'IN'
                 ? ['INVENTORY_DEFAULT', 'INVENTORY_ADJUSTMENT_GAIN']
                 : ['INVENTORY_ADJUSTMENT_LOSS', 'INVENTORY_DEFAULT'],
-            'inventory.recost' => ['INVENTORY_REVALUATION'],
+            'inventory.recost' => [
+                'INVENTORY_DEFAULT',
+                $allocation->direction === 'IN' ? 'INVENTORY_RECOST_GAIN' : 'INVENTORY_RECOST_LOSS',
+            ],
             'inventory.receipt' => ['INVENTORY_DEFAULT'],
             default => [],
         };

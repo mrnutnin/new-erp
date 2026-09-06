@@ -71,11 +71,18 @@
                             <div class="row g-3">
                                 @forelse ($permissionGroups as $prefix => $permissions)
                                     <div class="col-12 col-md-6">
+                                        @php($groupId = 'permission-group-'.$loop->index)
                                         <fieldset class="border rounded-3 p-3 h-100">
-                                            <legend class="float-none w-auto px-2 fs-6 fw-semibold mb-2">{{ $prefix }}</legend>
+                                            <legend class="float-none w-100 px-2 fs-6 fw-semibold mb-2 d-flex justify-content-between align-items-center">
+                                                <span>{{ $prefix }}</span>
+                                                <label class="small fw-normal text-secondary mb-0">
+                                                    <input class="form-check-input me-1 js-check-all" type="checkbox" data-group="{{ $groupId }}" @disabled($role->code === 'admin')>
+                                                    เลือกทั้งหมด
+                                                </label>
+                                            </legend>
                                             @foreach ($permissions as $permission)
                                                 <div class="form-check mb-2">
-                                                    <input class="form-check-input" type="checkbox" id="permission_{{ $permission->id }}" name="permission_ids[]" value="{{ $permission->id }}" @checked($role->code === 'admin' || in_array($permission->id, old('permission_ids', $selectedPermissions))) @disabled($role->code === 'admin')>
+                                                    <input class="form-check-input js-permission" type="checkbox" data-group="{{ $groupId }}" id="permission_{{ $permission->id }}" name="permission_ids[]" value="{{ $permission->id }}" @checked($role->code === 'admin' || in_array($permission->id, old('permission_ids', $selectedPermissions))) @disabled($role->code === 'admin')>
                                                     <label class="form-check-label" for="permission_{{ $permission->id }}">
                                                         {{ $permission->name }}
                                                         <span class="d-block small text-secondary">{{ $permission->code }}</span>
@@ -112,6 +119,24 @@
 @push('scripts')
     <script>
         $(function () {
+            function syncCheckAll(group) {
+                var $permissions = $('.js-permission[data-group="' + group + '"]');
+                var checked = $permissions.filter(':checked').length;
+                var $toggle = $('.js-check-all[data-group="' + group + '"]');
+                $toggle.prop('checked', checked === $permissions.length);
+                $toggle.prop('indeterminate', checked > 0 && checked < $permissions.length);
+            }
+
+            $('.js-check-all').each(function () {
+                syncCheckAll($(this).data('group'));
+            }).on('change', function () {
+                $('.js-permission[data-group="' + $(this).data('group') + '"]').prop('checked', this.checked);
+                $(this).prop('indeterminate', false);
+            });
+            $('.js-permission').on('change', function () {
+                syncCheckAll($(this).data('group'));
+            });
+
             window.erpAjaxForm({
                 form: '#role-form',
                 redirect: @json(! $role->exists),

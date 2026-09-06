@@ -96,6 +96,8 @@
             </div>
         </div>
 
+        @include('Platform::partials.permission-summary', ['effectivePermissions' => $effectivePermissions])
+
         <div class="card border-0 shadow-sm">
             <div class="card-body p-4 p-md-5">
                 <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-1">

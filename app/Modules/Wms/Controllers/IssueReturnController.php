@@ -26,17 +26,19 @@ use Yajra\DataTables\Facades\DataTables;
 
 final class IssueReturnController extends Controller
 {
-    public function issuesIndex(): View
+    public function issuesIndex(Request $request): View
     {
-        return view('Wms::issues.index');
+        return view('Wms::issues.index', ['issueTypeOptions' => $this->issueTypeOptions($request)]);
     }
 
     public function issuesData(Request $request, GlobalSettings $settings): JsonResponse
     {
         $warehouseId = (int) $request->attributes->get('selectedWarehouse')->id;
+        $issueTypeOptions = $this->issueTypeOptions($request);
         $labels = ['DRAFT' => 'ร่าง', 'APPROVED' => 'อนุมัติแล้ว', 'POSTED' => 'ลง Stock แล้ว', 'VOID' => 'ยกเลิก'];
         $query = IssueDocument::query()->with(['lines.item:id,code,name'])->where('warehouse_id', $warehouseId);
         if ($request->filled('status') && in_array($request->string('status')->toString(), ['DRAFT', 'APPROVED', 'POSTED', 'VOID'], true)) $query->where('status', $request->string('status')->toString());
+        if ($request->filled('issue_type') && $issueTypeOptions->has($request->string('issue_type')->toString())) $query->where('issue_type', $request->string('issue_type')->toString());
         if ($request->filled('date_from')) $query->whereDate('document_date', '>=', $request->date('date_from'));
         if ($request->filled('date_to')) $query->whereDate('document_date', '<=', $request->date('date_to'));
         $query->latest('id');
@@ -45,6 +47,7 @@ final class IssueReturnController extends Controller
             ->addColumn('business_date', fn ($row) => $row->document_date?->format((string) ($settings->value('date_format') ?: 'd/m/Y')) ?: '-')
             ->addColumn('line_count', fn ($row) => $row->lines->count())
             ->addColumn('item_label', fn ($row) => $row->lines->map(fn ($line) => trim(($line->item?->code ?: '').' · '.($line->item?->name ?: '-'), ' ·'))->unique()->implode(', '))
+            ->addColumn('issue_type_label', fn ($row) => $issueTypeOptions->get($row->issue_type, $row->issue_type ?: '-'))
             ->addColumn('status_label', fn ($row) => $labels[$row->status] ?? $row->status)
             ->addColumn('quantity', fn ($row) => WmsDecimal::format($row->lines->sum('quantity')))
             ->addColumn('show_url', fn ($row) => route('wms.issues.show', $row))
@@ -230,6 +233,19 @@ final class IssueReturnController extends Controller
 
             return ['id' => $x->id, 'text' => ($x->item?->code ?: '-').' · '.($x->item?->name ?: '-').' (เหลือ '.WmsDecimal::format($remaining).' '.($x->uom?->code ?: '').')', 'remaining' => $remaining];
         })->filter(fn ($x) => $x['remaining'] > 0)->values()]);
+    }
+
+    private function issueTypeOptions(Request $request)
+    {
+        $warehouseId = (int) $request->attributes->get('selectedWarehouse')->id;
+        $defaults = collect(['GENERAL' => 'เบิกทั่วไป', 'PRODUCTION' => 'เบิกเข้าผลิต', 'PROJECT' => 'เบิกโครงการ']);
+        $configured = IssueType::query()
+            ->where('warehouse_id', $warehouseId)
+            ->orderBy('name')
+            ->get(['code', 'name'])
+            ->mapWithKeys(fn (IssueType $type) => [$type->code => $type->name]);
+
+        return $defaults->merge($configured);
     }
 
     private function scopeIssue(Request $request, IssueDocument $document): void

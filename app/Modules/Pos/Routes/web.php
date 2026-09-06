@@ -1,6 +1,7 @@
 <?php
 
 use App\Modules\Pos\Controllers\AdvanceDepositController;
+use App\Modules\Pos\Controllers\BillingNoteController;
 use App\Modules\Pos\Controllers\BranchSalesTargetController;
 use App\Modules\Pos\Controllers\CommissionPaymentBatchController;
 use App\Modules\Pos\Controllers\CustomerController;
@@ -33,6 +34,15 @@ Route::middleware(['auth', 'program:pos', 'warehouse'])->prefix('pos')->name('po
     Route::get('/', EntryController::class)->middleware('permission:pos.dashboard.view')->name('index');
     Route::get('/dashboard/data/{section}', [EntryController::class, 'data'])->middleware('permission:pos.dashboard.view')->name('dashboard.data');
     Route::get('/workflow', [WorkflowController::class, 'index'])->name('workflow.index');
+    Route::get('/billing-notes', [BillingNoteController::class, 'index'])->middleware('permission:pos.billing-notes.view')->name('billing-notes.index');
+    Route::get('/billing-notes/data', [BillingNoteController::class, 'data'])->middleware('permission:pos.billing-notes.view')->name('billing-notes.data');
+    Route::get('/billing-notes/party-options', [BillingNoteController::class, 'partyOptions'])->middleware('permission:pos.billing-notes.create')->name('billing-notes.party-options');
+    Route::get('/billing-notes/invoice-options', [BillingNoteController::class, 'invoiceOptions'])->middleware('permission:pos.billing-notes.create')->name('billing-notes.invoice-options');
+    Route::get('/billing-notes/create', [BillingNoteController::class, 'create'])->middleware('permission:pos.billing-notes.create')->name('billing-notes.create');
+    Route::post('/billing-notes', [BillingNoteController::class, 'store'])->middleware('permission:pos.billing-notes.create')->name('billing-notes.store');
+    Route::get('/billing-notes/{billingNote}', [BillingNoteController::class, 'show'])->middleware('permission:pos.billing-notes.view')->name('billing-notes.show');
+    Route::post('/billing-notes/{billingNote}/issue', [BillingNoteController::class, 'issue'])->middleware('permission:pos.billing-notes.issue')->name('billing-notes.issue');
+    Route::post('/billing-notes/{billingNote}/cancel', [BillingNoteController::class, 'cancel'])->middleware('permission:pos.billing-notes.cancel')->name('billing-notes.cancel');
     Route::get('/sales-intakes', [SalesIntakeController::class, 'index'])->middleware('permission:pos.sales-intakes.view')->name('sales-intakes.index');
     Route::get('/sales-intakes/data', [SalesIntakeController::class, 'data'])->middleware('permission:pos.sales-intakes.view')->name('sales-intakes.data');
     Route::get('/sales-intakes/party-options', [SalesIntakeController::class, 'partyOptions'])->middleware('permission:pos.sales-intakes.view')->name('sales-intakes.party-options');

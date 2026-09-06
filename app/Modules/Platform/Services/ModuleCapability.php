@@ -11,6 +11,8 @@ final class ModuleCapability
 
     public const ASSET = 'asset';
 
+    public const LOGISTICS = 'logistics';
+
     public function __construct(private readonly GlobalSettings $settings) {}
 
     public function businessProfile(): string
@@ -35,6 +37,8 @@ final class ModuleCapability
         return match ($program) {
             self::PRODUCTION => $this->isEnabled(self::PRODUCTION),
             self::ASSET => $this->isEnabled(self::ASSET),
+            // Logistics is intentionally hidden while the MVP scope is limited.
+            self::LOGISTICS => false,
             default => true,
         };
     }

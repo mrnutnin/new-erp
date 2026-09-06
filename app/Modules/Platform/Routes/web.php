@@ -2,7 +2,6 @@
 
 use App\Modules\Platform\Controllers\AuthController;
 use App\Modules\Platform\Controllers\ContextController;
-use App\Modules\Platform\Controllers\DashboardController;
 use App\Modules\Platform\Controllers\EntryController;
 use App\Modules\Platform\Controllers\ProfileController;
 use Illuminate\Support\Facades\Route;
@@ -29,8 +28,5 @@ Route::middleware('auth')->group(function () {
         Route::post('/select-branch', [ContextController::class, 'storeBranch'])->name('branches.store');
         Route::get('/select-warehouse', [ContextController::class, 'warehouses'])->name('warehouses.index');
 
-        Route::get('/dashboard', DashboardController::class)
-            ->middleware('warehouse')
-            ->name('dashboard');
     });
 });

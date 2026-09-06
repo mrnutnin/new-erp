@@ -107,6 +107,8 @@
                                 </div>
                             </div>
 
+                            @include('Platform::partials.permission-summary', ['effectivePermissions' => $effectivePermissions])
+
                             <div class="d-flex justify-content-between align-items-center mt-4">
                                 <a class="btn btn-outline-dark" href="{{ route('settings.users.index') }}">
                                     <i class="bx bx-arrow-back me-1" aria-hidden="true"></i>ยกเลิก

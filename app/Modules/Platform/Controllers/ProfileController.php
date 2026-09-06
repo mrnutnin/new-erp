@@ -21,9 +21,16 @@ class ProfileController extends Controller
             'programs:id,code,name',
             'branches:id,code,name',
             'warehouses:id,branch_id,code,name',
+            'roles.permissions',
         ]);
+        $effectivePermissions = $user->roles
+            ->where('is_active', true)
+            ->flatMap(fn ($role) => $role->permissions)
+            ->unique('id')
+            ->sortBy('code')
+            ->values();
 
-        return view('Platform::profile.edit', compact('user'));
+        return view('Platform::profile.edit', compact('user', 'effectivePermissions'));
     }
 
     public function auditData(Request $request): JsonResponse

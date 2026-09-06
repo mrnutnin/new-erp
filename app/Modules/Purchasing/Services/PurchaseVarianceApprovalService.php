@@ -51,7 +51,9 @@ final class PurchaseVarianceApprovalService
         }
         $policy = $this->approvalPolicy();
         $match = $this->gate->previewWithPolicy($document, $policy);
-        if ($match === null || ! array_intersect($match['blockers'] ?? [], ['receipt_exceeds_po_quantity', 'invoice_exceeds_received_quantity', 'invoice_price_variance', 'receipt_cost_variance'])) {
+        $varianceBlockers = ['receipt_exceeds_po_quantity', 'invoice_exceeds_received_quantity', 'invoice_price_variance', 'receipt_cost_variance'];
+        $nonVarianceBlockers = array_values(array_diff($match['blockers'] ?? [], $varianceBlockers));
+        if ($match === null || ! array_intersect($match['blockers'] ?? [], $varianceBlockers) || $nonVarianceBlockers !== []) {
             throw ValidationException::withMessages(['variance' => 'ไม่พบ variance ที่ต้องอนุมัติ']);
         }
 
