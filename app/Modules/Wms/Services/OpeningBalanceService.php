@@ -18,6 +18,7 @@ final class OpeningBalanceService
     public function __construct(
         private readonly GlobalSettings $settings,
         private readonly StockBalanceProjectionService $balances,
+        private readonly CostPropagationTriggerDispatcher $costPropagation,
     ) {}
 
     public function createDraft(array $data, User $actor): OpeningBalanceBatch
@@ -134,6 +135,7 @@ final class OpeningBalanceService
             }
 
             $locked->update(['status' => 'POSTED', 'posted_at' => now(), 'posted_by' => $actor->id]);
+            $this->costPropagation->dispatchIfEnabled('OPENING_BALANCE', $locked->id, 0, [], $actor->id);
 
             return $locked->fresh('lines');
         }, 3);

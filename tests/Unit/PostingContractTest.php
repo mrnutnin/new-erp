@@ -25,6 +25,15 @@ class PostingContractTest extends TestCase
         $this->assertSame(['INVENTORY', 'ACCOUNTS_PAYABLE'], PostingEvent::roles('supplier_invoice.inventory'));
         $this->assertSame('NO_GL', PostingEvent::contract('asset.branch_transfer')['status']);
         $this->assertSame('DEFERRED', PostingEvent::contract('expense_payment')['status']);
+        $this->assertSame(['COGS', 'INVENTORY'], PostingEvent::roles('inventory.revaluation.cogs'));
+        $this->assertSame(['ISSUE_EXPENSE', 'INVENTORY'], PostingEvent::roles('inventory.revaluation.issue_expense'));
+        $this->assertSame(['WIP', 'INVENTORY'], PostingEvent::roles('production.revaluation.wip'));
+        $this->assertSame(['FINISHED_GOODS', 'WIP'], PostingEvent::roles('production.revaluation.finished_goods'));
+        $this->assertSame(['PURCHASE_RETURN_VARIANCE', 'INVENTORY'], PostingEvent::roles('purchasing.revaluation.return_cost'));
+        $this->assertSame(['ISSUE_EXPENSE', 'INVENTORY'], PostingEvent::roles('inventory.issue'));
+        $this->assertSame(['INVENTORY', 'ISSUE_EXPENSE'], PostingEvent::roles('inventory.issue_return'));
+        $this->assertSame('LIVE', PostingEvent::contract('production.material_issue')['status']);
+        $this->assertSame(['INVENTORY', 'WIP'], PostingEvent::roles('production.material_return'));
     }
 
     public function test_unknown_events_are_rejected(): void

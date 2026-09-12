@@ -4,10 +4,10 @@ namespace App\Modules\Purchasing\Services;
 
 use App\Models\User;
 use App\Modules\Purchasing\Models\PurchaseReturn;
-use App\Modules\Purchasing\Support\PurchaseReturnWmsPostingContract;
+use App\Modules\Wms\Services\CostPropagationTriggerDispatcher;
 use App\Modules\Wms\Services\CreditPurchaseInventoryReversalAdapter;
-use App\Modules\Wms\Services\PurchaseReturnPartialInventoryAdapter;
 use App\Modules\Wms\Services\PurchaseDocumentPostingService;
+use App\Modules\Wms\Services\PurchaseReturnPartialInventoryAdapter;
 use Brick\Math\BigDecimal;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -20,6 +20,7 @@ final class PurchaseReturnPostingService
         private readonly PurchaseDocumentPostingService $documents,
         private readonly CreditPurchaseInventoryReversalAdapter $reversal,
         private readonly PurchaseReturnPartialInventoryAdapter $partialInventory,
+        private readonly CostPropagationTriggerDispatcher $costPropagation,
     ) {}
 
     public function post(PurchaseReturn $purchaseReturn, string $postingDate, User $actor, Request $request, bool $inventoryFeatureEnabled = false): PurchaseReturn
@@ -51,6 +52,8 @@ final class PurchaseReturnPostingService
             }
             $this->reversal->reverse($credit, $postingDate, $return->reason, $actor, true);
             $return->update(['status' => 'POSTED', 'posted_by' => $actor->id, 'posted_at' => now(), 'updated_by' => $actor->id]);
+            // Full return is dispatched by CreditPurchaseInventoryReversalAdapter,
+            // which owns the immutable reversal movement.
 
             return $return->fresh(['creditNote', 'lines']);
         }, 3);
@@ -88,6 +91,7 @@ final class PurchaseReturnPostingService
             $movement = $this->partialInventory->post($return, $actor, true);
             $this->partialInventory->linkCostJournal($return->fresh('creditNote'), $movement);
             $return->update(['status' => 'POSTED', 'posted_by' => $actor->id, 'posted_at' => now(), 'updated_by' => $actor->id]);
+            $this->costPropagation->dispatchIfEnabled('PURCHASE_RETURN', $return->id, 0, [], $actor->id);
 
             return $return->fresh(['creditNote', 'lines']);
         }, 3);

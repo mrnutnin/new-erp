@@ -49,19 +49,19 @@ final class SalesReturnInventoryPostingService
             $sourceQty = BigDecimal::of((string) $source->base_quantity);
             $returnQty = BigDecimal::of((string) $line->stock_quantity);
             $unitCost = $sourceValue->dividedBy($sourceQty, 8, RoundingMode::HALF_UP)->__toString();
+            $returnValue = $sourceValue->multipliedBy($returnQty)->dividedBy($sourceQty, 8, RoundingMode::HALF_UP);
             $movement = $this->movements->recordIntent([
                 'warehouse_id' => $warehouse->id, 'item_id' => $line->item_id, 'uom_id' => $line->stock_uom_id,
                 'movement_type' => $source->movement_type, 'direction' => 'IN', 'quantity' => $line->quantity, 'base_quantity' => $line->stock_quantity,
-                'business_date' => $date, 'source_type' => 'POS', 'source_id' => "sales-return:{$return->id}:line:{$line->id}", 'source_reference' => $return->document_number,
+                // The return movement follows the return document date; the
+                // supplied date is reserved for the accounting journal.
+                'business_date' => $return->document_date->format('Y-m-d'), 'source_type' => 'POS', 'source_id' => "sales-return:{$return->id}:line:{$line->id}", 'source_reference' => $return->document_number,
                 'idempotency_key' => "sales-return:{$return->id}:line:{$line->id}:movement", 'created_by' => $actor->id,
-                'metadata' => ['sales_return_id' => $return->id, 'sales_return_line_id' => $line->id, 'physical_sale_line_id' => $line->physical_sale_line_id, 'unit_cost' => $unitCost, 'unit_cost_trusted' => true],
+                'metadata' => ['sales_return_id' => $return->id, 'sales_return_line_id' => $line->id, 'physical_sale_line_id' => $line->physical_sale_line_id, 'credit_note_mode' => 'RETURN', 'unit_cost' => $unitCost, 'unit_cost_trusted' => true, 'receipt_value' => $returnValue->toScale(8, RoundingMode::UNNECESSARY)->__toString()],
             ]);
             $movement = $this->movements->postWithinTransaction($movement);
-            $receipt = $this->allocations->record($movement, (string) ($sources->first()->method ?: 'RETURN'), [
-                'allocation_type' => 'RETURN', 'quantity' => $returnQty->__toString(), 'unit_cost' => $unitCost,
-                'value' => $sourceValue->multipliedBy($returnQty)->dividedBy($sourceQty, 8, RoundingMode::HALF_UP)->__toString(),
-                'idempotency_key' => "sales-return:{$return->id}:line:{$line->id}:allocation",
-            ]);
+            $receipt = CostAllocation::query()->where('stock_movement_id', $movement->id)
+                ->where('status', '!=', 'REVERSED')->lockForUpdate()->sole();
             foreach ($this->partialLineage($receipt, $sources, $returnQty, $sourceQty) as $allocation) {
                 $sourceAllocation = $sources->firstWhere('id', $allocation->parent_allocation_id);
                 $inventorySourceLineId = CostAllocationJournalLine::query()->where('allocation_id', $sourceAllocation->id)->value('journal_entry_line_id');

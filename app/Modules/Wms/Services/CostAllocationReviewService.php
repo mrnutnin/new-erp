@@ -16,8 +16,9 @@ final class CostAllocationReviewService
         if (! $confirmed || mb_strlen(trim($reason)) < 10) {
             throw ValidationException::withMessages(['review' => 'ต้องยืนยันและระบุเหตุผลอย่างน้อย 10 ตัวอักษร']);
         }
-        if ((string) $allocation->status !== 'PENDING' || $allocation->journal_entry_id === null) {
-            throw ValidationException::withMessages(['allocation' => 'รองรับเฉพาะ allocation PENDING ที่มี Journal link']);
+        $journalProofMissing = data_get($evidence, 'journal_proof_missing') === true;
+        if (! in_array((string) $allocation->status, ['PENDING', 'POSTED'], true) || ($allocation->journal_entry_id === null && ! $journalProofMissing)) {
+            throw ValidationException::withMessages(['allocation' => 'รองรับเฉพาะ allocation PENDING/POSTED ที่มี Journal proof หรือหลักฐานระบุว่า proof หาย']);
         }
         if (count($evidence) < 3) {
             throw ValidationException::withMessages(['evidence' => 'หลักฐานไม่ครบ ต้องมี source, journal และ movement/reversal evidence']);

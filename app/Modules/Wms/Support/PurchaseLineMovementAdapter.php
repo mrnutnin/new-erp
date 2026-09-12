@@ -33,15 +33,16 @@ final class PurchaseLineMovementAdapter
         $baseQuantity = $receipt['base_quantity'] ?? self::baseQuantity($line, $quantity);
         $costValue = $receipt['allocated_amount'] ?? (string) $line->gross_amount;
         $cost = InventoryPurchaseCostPolicy::resolve($costValue, $baseQuantity, (string) $document->tax_treatment);
+        $movementUomId = (int) ($receipt['stock_uom_id'] ?? $line->item->base_uom_id);
 
         if ($receipt !== null) {
-            $quantity = $receipt['quantity'];
+            $quantity = $baseQuantity;
         }
 
         return [
             'warehouse_id' => (int) $document->warehouse_id,
             'item_id' => (int) $line->item_id,
-            'uom_id' => (int) $line->uom_id,
+            'uom_id' => $movementUomId,
             'movement_type' => 'RECEIPT',
             'direction' => 'IN',
             'status' => 'DRAFT',
@@ -58,6 +59,7 @@ final class PurchaseLineMovementAdapter
                 'unit_cost' => $cost['unit_cost'],
                 'unit_cost_trusted' => true,
                 'cost_value' => $cost['value'],
+                'receipt_value' => BigDecimal::of($cost['value'])->toScale(8, RoundingMode::UNNECESSARY)->__toString(),
                 'cost_policy_version' => $cost['policy_version'],
                 ...($receipt === null ? [] : [
                     'receipt_allocation_ids' => $receipt['allocation_ids'],
@@ -91,6 +93,7 @@ final class PurchaseLineMovementAdapter
         $allocationIds = [];
         $receiptLineIds = [];
         $receiptIds = [];
+        $stockUomId = null;
         $snapshots = [];
         foreach ($allocations as $allocation) {
             $receiptLine = $allocation->goodsReceiptLine;
@@ -104,7 +107,12 @@ final class PurchaseLineMovementAdapter
                 throw ValidationException::withMessages(['lines' => 'Receipt allocation ต้องมี quantity และ amount มากกว่าศูนย์']);
             }
             $quantity = $quantity->plus($allocationQty);
-            $baseQuantity = $baseQuantity->plus((string) $receiptLine->stock_quantity);
+            $factor = BigDecimal::of((string) $receiptLine->factor);
+            $baseQuantity = $baseQuantity->plus($allocationQty->multipliedBy($factor));
+            if ($stockUomId !== null && $stockUomId !== (int) $receiptLine->stock_uom_id) {
+                throw ValidationException::withMessages(['lines' => 'Receipt allocations ของ Purchase line ต้องใช้ Stock UOM เดียวกัน']);
+            }
+            $stockUomId = (int) $receiptLine->stock_uom_id;
             $allocatedAmount = $allocatedAmount->plus($allocationAmount);
             $allocationIds[] = (int) $allocation->id;
             $receiptLineIds[] = (int) $receiptLine->id;
@@ -116,6 +124,7 @@ final class PurchaseLineMovementAdapter
             'quantity' => $quantity->toScale(8, RoundingMode::HALF_UP)->__toString(),
             'base_quantity' => $baseQuantity->toScale(8, RoundingMode::HALF_UP)->__toString(),
             'allocated_amount' => $allocatedAmount->toScale(2, RoundingMode::HALF_UP)->__toString(),
+            'stock_uom_id' => $stockUomId,
             'allocation_ids' => $allocationIds,
             'receipt_line_ids' => $receiptLineIds,
             'receipt_ids' => $receiptIds,

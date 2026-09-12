@@ -2,22 +2,20 @@
 
 namespace App\Modules\Wms\Services;
 
+use App\Models\User;
+use App\Modules\Accounting\Models\JournalEntryLine;
 use App\Modules\Purchasing\Models\PurchaseReturn;
-use App\Modules\Purchasing\Support\PurchaseReturnPartialPostingContract;
 use App\Modules\Purchasing\Support\PurchaseReturnPartialCostAllocationContract;
+use App\Modules\Purchasing\Support\PurchaseReturnPartialMultiLayerJournalLinkContract;
+use App\Modules\Purchasing\Support\PurchaseReturnPartialPostingContract;
 use App\Modules\Settings\Services\GlobalSettings;
+use App\Modules\Wms\Models\CostAllocation;
 use App\Modules\Wms\Models\StockBalance;
 use App\Modules\Wms\Models\StockCostLayer;
-use App\Modules\Wms\Models\CostAllocation;
-use App\Modules\Accounting\Models\JournalEntryLine;
-use App\Modules\Purchasing\Support\PurchaseReturnPartialJournalLinkContract;
-use App\Modules\Purchasing\Support\PurchaseReturnPartialMultiLayerJournalLinkContract;
-use App\Modules\Wms\Services\InventoryCostAllocationService;
-use Brick\Math\BigDecimal;
-use Illuminate\Validation\ValidationException;
-use App\Models\User;
-use Illuminate\Support\Facades\DB;
 use App\Modules\Wms\Models\StockMovement;
+use Brick\Math\BigDecimal;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 
 /** Feature-gated Partial Return WMS boundary. */
 final class PurchaseReturnPartialInventoryAdapter
@@ -49,6 +47,7 @@ final class PurchaseReturnPartialInventoryAdapter
             foreach ($allocations as $allocation) {
                 $this->allocations->linkJournalLineWithinTransaction($allocation, $journalLine);
             }
+
             return $allocations->first()->fresh();
         }, 3);
     }
@@ -62,14 +61,17 @@ final class PurchaseReturnPartialInventoryAdapter
         return DB::transaction(function () use ($purchaseReturn, $actor): StockMovement {
             $plan = $this->preflight($purchaseReturn);
             $return = $purchaseReturn->fresh(['lines.goodsReceiptLine']);
-        $line = $return->lines->sole();
-        $movement = $this->movements->recordIntent([
+            $line = $return->lines->sole();
+            $movement = $this->movements->recordIntent([
                 'warehouse_id' => $return->warehouse_id, 'item_id' => $line->item_id, 'uom_id' => $plan['movement']['stock_uom_id'],
                 'movement_type' => 'ISSUE', 'direction' => 'OUT', 'status' => 'DRAFT',
                 'quantity' => $plan['movement']['stock_quantity'], 'base_quantity' => $plan['movement']['stock_quantity'],
                 'business_date' => $return->return_date->format('Y-m-d'), 'source_type' => 'PURCHASING', 'source_id' => (string) $return->id,
                 'source_reference' => $return->return_number, 'idempotency_key' => $plan['movement']['idempotency_key'],
-                'metadata' => ['purchase_return_id' => $return->id, 'partial_return_ratio' => $plan['movement']['return_ratio']], 'created_by' => $actor->id,
+                'metadata' => [
+                    'purchase_return_id' => $return->id, 'purchase_return_mode' => 'PARTIAL',
+                    'credit_note_mode' => 'RETURN', 'partial_return_ratio' => $plan['movement']['return_ratio'],
+                ], 'created_by' => $actor->id,
             ]);
 
             return $this->movements->postWithinTransaction($movement);

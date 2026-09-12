@@ -72,6 +72,20 @@
 
 เกณฑ์ผ่าน: มีหน้าปลายทางและตรวจสอบรายการย้อนหลังได้
 
+### 5.1 Manual Production Movement (ไม่มี Production Module)
+
+- [x] Wave 1 foundation: reuse Issue/Adjustment documents with PRODUCTION and PRODUCTION_RECEIPT context, including WMS menu/form routes
+- [ ] Complete production-specific cost/mapping contract and enable Finished Receipt Post only after reconciliation readiness
+
+รายละเอียด checklist อยู่ที่ [`docs/planning/21-wms-manual-production-movement-checklist.md`](21-wms-manual-production-movement-checklist.md)
+
+- [~] WMS รองรับเบิกวัตถุดิบผลิตและรับสินค้าผลิตเสร็จแบบ Manual โดยไม่บังคับเปิด Production
+- [ ] เชื่อมรายการเข้ากับ Stock Movement, AVG/FIFO, Cost Layer, Allocation และ Accounting event เดียวกับ WMS
+- [ ] เพิ่ม Draft → Approve → Post, idempotency, reversal และ audit trail
+- [ ] รองรับการเปลี่ยน source จาก `MANUAL` เป็น `PRODUCTION_ORDER` เมื่อเปิด Production ภายหลัง
+
+เกณฑ์ผ่าน: บริษัทที่ไม่เปิด Production ทำรายการผลิตผ่าน WMS ได้ และ Inventory/Allocation/GL reconcile เป็นศูนย์
+
 ### 6. Inventory / COGS Reconciliation
 
 - [x] Stock กับ Allocation (Stock Balance ↔ Allocation พร้อมผลต่าง)

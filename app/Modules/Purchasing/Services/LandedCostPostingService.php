@@ -5,12 +5,13 @@ namespace App\Modules\Purchasing\Services;
 use App\Models\User;
 use App\Models\Warehouse;
 use App\Modules\Purchasing\Models\LandedCost;
+use App\Modules\Purchasing\Models\PurchaseDocumentReceiptAllocation;
 use App\Modules\Wms\Models\CostAllocation;
 use App\Modules\Wms\Models\CostRecalculationRequest;
 use App\Modules\Wms\Models\StockMovement;
+use App\Modules\Wms\Services\CostPropagationTriggerDispatcher;
 use App\Modules\Wms\Services\InventoryCostAllocationService;
 use App\Modules\Wms\Services\RecostGlPostingService;
-use Brick\Math\BigDecimal;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
@@ -19,6 +20,8 @@ final class LandedCostPostingService
     public function __construct(
         private readonly InventoryCostAllocationService $allocations,
         private readonly RecostGlPostingService $recostGl,
+        private readonly CostPropagationTriggerDispatcher $costPropagation,
+        private readonly LandedCostPropagationCostResolver $propagationCosts,
     ) {}
 
     /**
@@ -48,6 +51,7 @@ final class LandedCostPostingService
             }
 
             $locked->forceFill(['status' => 'POSTED', 'posted_at' => now(), 'posted_by' => $actor?->id, 'updated_by' => $actor?->id])->save();
+            $this->costPropagation->dispatchIfEnabled('LANDED_COST', $locked->id, 0, $this->propagationCosts->resolve($locked), $actor?->id);
 
             return $locked->fresh(['lines', 'receipts', 'allocations']);
         }, 3);
@@ -60,15 +64,34 @@ final class LandedCostPostingService
         }
 
         $receiptLine = $allocation->goodsReceiptLine;
-        $movement = StockMovement::query()
-            ->where('source_type', 'GOODS_RECEIPT')
-            ->where('source_id', $receiptLine->goods_receipt_id)
+        $owners = PurchaseDocumentReceiptAllocation::query()
+            ->where('goods_receipt_line_id', $receiptLine->id)
+            ->whereHas('purchaseDocumentLine.document', fn ($query) => $query->where('document_type', 'INVOICE')->where('status', 'POSTED'))
+            ->with('purchaseDocumentLine.document:id,status,document_type')
+            ->get(['id', 'purchase_document_line_id', 'goods_receipt_line_id']);
+        $movementKeys = $owners->map(function (PurchaseDocumentReceiptAllocation $owner): ?string {
+            $line = $owner->purchaseDocumentLine;
+            $document = $line?->document;
+            if (! $line || ! $document) {
+                return null;
+            }
+
+            return "purchase:{$document->id}:line:{$line->id}:receipt:0";
+        })->filter()->unique()->values();
+        $movements = StockMovement::query()
+            ->whereIn('idempotency_key', $movementKeys->all())
+            ->where('source_type', 'PURCHASING')
             ->where('status', 'POSTED')
-            ->whereJsonContains('metadata->goods_receipt_line_id', (int) $receiptLine->id)
-            ->lockForUpdate()->first();
-        if (! $movement) {
-            throw ValidationException::withMessages(['allocations' => "ไม่พบ Posted Stock Movement ของ Goods Receipt line #{$receiptLine->id}"]);
+            ->lockForUpdate()
+            ->get(['id', 'warehouse_id', 'item_id', 'uom_id', 'business_date', 'idempotency_key']);
+        if ($movements->count() !== 1) {
+            throw ValidationException::withMessages([
+                'allocations' => $movements->isEmpty()
+                    ? "ไม่พบ Posted Purchase Invoice Stock Movement ของ Goods Receipt line #{$receiptLine->id}"
+                    : "Goods Receipt line #{$receiptLine->id} มี Purchase Invoice stock owner มากกว่าหนึ่งรายการ กรุณาตรวจสอบก่อน Post Landed Cost",
+            ]);
         }
+        $movement = $movements->sole();
 
         $source = CostAllocation::query()->where('stock_movement_id', $movement->id)->where('allocation_type', 'RECEIPT')->where('cost_status', 'FINAL')->where('status', '!=', 'REVERSED')->lockForUpdate()->first();
         if (! $source) {

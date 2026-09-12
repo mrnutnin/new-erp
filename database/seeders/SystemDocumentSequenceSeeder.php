@@ -61,6 +61,7 @@ class SystemDocumentSequenceSeeder extends Seeder
             ['module' => 'wms', 'type' => 'INVENTORY_ADJUSTMENT', 'name' => 'ใบปรับปรุงสินค้าคงเหลือ', 'prefix' => 'ADJ'],
             ['module' => 'wms', 'type' => 'INVENTORY_ISSUE', 'name' => 'ใบเบิกสินค้า', 'prefix' => 'ISSUE'],
             ['module' => 'wms', 'type' => 'INVENTORY_RETURN', 'name' => 'ใบรับคืนจากการเบิก', 'prefix' => 'IRTN'],
+            ['module' => 'wms', 'type' => 'PRODUCTION_FINISHED_RECEIPT', 'name' => 'ใบรับสินค้าผลิตเสร็จ', 'prefix' => 'FGR'],
             ['module' => 'wms', 'type' => 'WMS_TRANSFER', 'name' => 'ใบโอนสินค้า', 'prefix' => 'TR'],
             ['module' => 'wms', 'type' => 'STOCK_COUNT', 'name' => 'ใบนับสินค้า', 'prefix' => 'SC'],
             ['module' => 'pos', 'type' => 'SALES_RFQ', 'name' => 'ใบขอราคาขาย', 'prefix' => 'RFQ'],

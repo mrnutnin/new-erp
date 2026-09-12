@@ -131,7 +131,10 @@ final class StockMovementService
             return $this->postWithinTransaction($existing);
         }
 
-        $metadata = is_array($source->metadata) ? $source->metadata : [];
+        $metadata = [
+            ...(is_array($source->metadata) ? $source->metadata : []),
+            ...(is_array($attributes['metadata'] ?? null) ? $attributes['metadata'] : []),
+        ];
         $direction = $source->direction === 'IN' ? 'OUT' : 'IN';
 
         // Reversal is a real inventory delta, not a marker row. Keep it DRAFT

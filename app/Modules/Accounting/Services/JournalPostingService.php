@@ -203,6 +203,7 @@ class JournalPostingService
             'posting_metadata' => ['nullable', 'array'],
             'posting_metadata.contract_version' => ['required_with:posting_metadata', 'integer', 'min:1'],
             'posting_metadata.event_code' => ['required_with:posting_metadata', 'string', 'max:80'],
+            'posting_metadata.credit_note_mode' => ['nullable', Rule::in(['RETURN', 'NON_RETURN'])],
             'posting_metadata.accounts' => ['required_with:posting_metadata', 'array', 'max:50'],
             'posting_metadata.accounts.*.account_role' => ['required', 'string', 'max:80', 'regex:/^[A-Z][A-Z0-9_]*$/'],
             'posting_metadata.accounts.*.account_id' => ['required', 'integer', 'min:1'],

@@ -14,6 +14,9 @@ final class SalesReturnInventoryPostingContractTest extends TestCase
         self::assertStringContainsString('assertReturnQuantity', $source);
         self::assertStringContainsString("->where('status', 'POSTED')", $source);
         self::assertStringContainsString('partialLineage', $source);
+        self::assertStringContainsString("'receipt_value' => \$returnValue", $source);
+        self::assertStringContainsString("'credit_note_mode' => 'RETURN'", $source);
+        self::assertStringContainsString("where('stock_movement_id', \$movement->id)", $source);
         self::assertStringContainsString("'parent_allocation_id' => \$source->id", $source);
         self::assertStringContainsString("'source_cost_allocation_id' => \$row['sourceAllocation']->id", $source);
         self::assertStringContainsString("'direction' => 'IN'", $source);

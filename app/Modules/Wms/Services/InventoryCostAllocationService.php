@@ -229,28 +229,80 @@ final class InventoryCostAllocationService
     }
 
     /**
-     * Historical valuation source. Never joins current stock balances; pending
-     * provisional value is returned separately so reports cannot call it final.
+     * Historical valuation source. Quantity comes from the Posted Movement
+     * ledger (one row per movement), while value comes from allocations. A
+     * movement can have multiple split allocations, so summing allocation
+     * quantity would double-count on-hand; pending provisional value remains
+     * separate so reports cannot call it final.
      */
     public function historicalValuationQuery(string $date, ?int $warehouseId = null, ?int $itemId = null): Builder
     {
-        $query = $this->asOf($date)
+        $allocationValues = DB::table('wms_cost_allocations')
+            ->where('wms_cost_allocations.business_date', '<=', $date)
+            ->where('wms_cost_allocations.status', '!=', 'REVERSED')
+            ->whereNotExists(fn ($correction) => $correction
+                ->selectRaw('1')
+                ->from('wms_cost_allocation_corrections')
+                ->whereColumn('wms_cost_allocation_corrections.allocation_id', 'wms_cost_allocations.id'))
+            ->selectRaw('stock_movement_id, SUM(CASE WHEN cost_status = "PENDING" THEN 0 ELSE value END) AS movement_value')
+            ->groupBy('stock_movement_id');
+        $movementRows = StockMovement::query()
+            ->leftJoinSub($allocationValues, 'allocation_values', fn ($join) => $join->on('allocation_values.stock_movement_id', '=', 'wms_stock_movements.id'))
+            ->where('wms_stock_movements.status', 'POSTED')
+            ->where('wms_stock_movements.business_date', '<=', $date)
+            ->when($warehouseId, fn (Builder $query) => $query->where('wms_stock_movements.warehouse_id', $warehouseId))
+            ->when($itemId, fn (Builder $query) => $query->where('wms_stock_movements.item_id', $itemId))
+            ->select([
+                'wms_stock_movements.id', 'wms_stock_movements.item_id', 'wms_stock_movements.warehouse_id',
+                'wms_stock_movements.business_date', 'wms_stock_movements.direction', 'wms_stock_movements.base_quantity',
+            ])
+            ->selectRaw('COALESCE(allocation_values.movement_value, 0) AS movement_value');
+        $quantityStates = DB::query()->fromSub($movementRows, 'movement_rows')
+            ->select('movement_rows.*')
+            ->selectRaw("SUM(CASE WHEN direction = 'IN' THEN base_quantity ELSE -base_quantity END) OVER (PARTITION BY item_id, warehouse_id ORDER BY business_date, id ROWS UNBOUNDED PRECEDING) AS running_quantity");
+        $terminalStates = DB::query()->fromSub($quantityStates, 'quantity_states')
+            ->select('quantity_states.*')
+            ->selectRaw('CASE WHEN ABS(running_quantity) < 0.00000001 THEN 1 ELSE 0 END AS terminal_marker');
+        $resetStates = DB::query()->fromSub($terminalStates, 'terminal_states')
+            ->select('terminal_states.*')
+            ->selectRaw('(SUM(terminal_marker) OVER (PARTITION BY item_id, warehouse_id ORDER BY business_date, id ROWS UNBOUNDED PRECEDING) - terminal_marker) AS reset_group');
+        $valueStates = DB::query()->fromSub($resetStates, 'reset_states')
+            ->select('reset_states.*')
+            ->selectRaw("CASE WHEN terminal_marker = 1 THEN 0 ELSE SUM(movement_value) OVER (PARTITION BY item_id, warehouse_id, reset_group ORDER BY business_date, id ROWS UNBOUNDED PRECEDING) END AS running_value");
+        // MariaDB treats filtering a ROW_NUMBER() alias in a derived table as
+        // an invalid mixed aggregate query. Resolve the last movement with
+        // indexed MAX(date)/MAX(id) subqueries instead.
+        $latestDates = DB::query()->fromSub($movementRows, 'latest_rows')
+            ->selectRaw('item_id, warehouse_id, MAX(business_date) AS latest_date')
+            ->groupBy('item_id', 'warehouse_id');
+        $latestKeys = DB::query()->fromSub($movementRows, 'latest_rows')
+            ->joinSub($latestDates, 'latest_dates', fn ($join) => $join->on('latest_dates.item_id', '=', 'latest_rows.item_id')->on('latest_dates.warehouse_id', '=', 'latest_rows.warehouse_id')->on('latest_dates.latest_date', '=', 'latest_rows.business_date'))
+            ->selectRaw('latest_rows.item_id, latest_rows.warehouse_id, MAX(latest_rows.id) AS latest_id')
+            ->groupBy('latest_rows.item_id', 'latest_rows.warehouse_id');
+        $final = DB::query()->fromSub($valueStates, 'value_states')
+            ->joinSub($latestKeys, 'latest_keys', fn ($join) => $join->on('latest_keys.item_id', '=', 'value_states.item_id')->on('latest_keys.warehouse_id', '=', 'value_states.warehouse_id')->on('latest_keys.latest_id', '=', 'value_states.id'))
+            ->selectRaw('value_states.item_id, value_states.warehouse_id, value_states.running_quantity AS final_quantity, value_states.running_value AS final_value');
+        $stats = DB::table('wms_cost_allocations')
+            ->where('wms_cost_allocations.business_date', '<=', $date)
+            ->where('wms_cost_allocations.status', '!=', 'REVERSED')
+            ->whereNotExists(fn ($correction) => $correction
+                ->selectRaw('1')
+                ->from('wms_cost_allocation_corrections')
+                ->whereColumn('wms_cost_allocation_corrections.allocation_id', 'wms_cost_allocations.id'))
+            ->when($warehouseId, fn ($query) => $query->where('wms_cost_allocations.warehouse_id', $warehouseId))
+            ->when($itemId, fn ($query) => $query->where('wms_cost_allocations.item_id', $itemId))
             ->selectRaw('item_id, warehouse_id')
-            ->selectRaw('SUM(CASE WHEN cost_status = "PENDING" OR allocation_type = "RECOST" THEN 0 WHEN direction = "IN" THEN quantity ELSE -quantity END) AS final_quantity')
-            ->selectRaw('SUM(CASE WHEN cost_status = "PENDING" THEN 0 ELSE value END) AS final_value')
             ->selectRaw('SUM(CASE WHEN cost_status = "PENDING" THEN value ELSE 0 END) AS pending_value')
             ->selectRaw('SUM(CASE WHEN cost_status = "PENDING" THEN 1 ELSE 0 END) AS pending_count')
             ->selectRaw('SUM(CASE WHEN journal_entry_id IS NULL THEN 1 ELSE 0 END) AS unlinked_count')
             ->groupBy('item_id', 'warehouse_id');
 
-        if ($warehouseId) {
-            $query->where('warehouse_id', $warehouseId);
-        }
-        if ($itemId) {
-            $query->where('item_id', $itemId);
-        }
-
-        return $query;
+        return CostAllocation::query()->fromSub($final, 'historical_values')
+            ->leftJoinSub($stats, 'allocation_stats', fn ($join) => $join->on('allocation_stats.item_id', '=', 'historical_values.item_id')->on('allocation_stats.warehouse_id', '=', 'historical_values.warehouse_id'))
+            ->selectRaw('historical_values.item_id, historical_values.warehouse_id, historical_values.final_quantity, historical_values.final_value')
+            ->selectRaw('COALESCE(allocation_stats.pending_value, 0) AS pending_value')
+            ->selectRaw('COALESCE(allocation_stats.pending_count, 0) AS pending_count')
+            ->selectRaw('COALESCE(allocation_stats.unlinked_count, 0) AS unlinked_count');
     }
 
     public function historicalValuationPage(string $date, ?int $warehouseId = null, ?int $itemId = null, int $perPage = 50): LengthAwarePaginator

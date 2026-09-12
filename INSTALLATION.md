@@ -83,7 +83,7 @@ php artisan storage:link
 `.env.example` ปัจจุบันใช้ database queue ดังนั้น production ต้องมี queue worker ที่เหมาะกับ infrastructure จริง หรือเปลี่ยน driver ที่รองรับก่อนเปิด feature ที่ใช้ jobs เช่น inventory recost:
 
 ```bash
-php artisan queue:work --tries=3
+php artisan queue:work --queue=cost-propagation,default --tries=3
 ```
 
 Scheduler ให้ผูก `php artisan schedule:run` ทุกนาทีด้วย cron/service ของ environment หลังตรวจสอบ `routes/console.php` และ scheduled jobs รอบ release นั้นแล้ว

@@ -80,6 +80,43 @@
         </div>
     </div>
 
+    <div class="card border-info-subtle shadow-sm mb-4">
+        <div class="card-body p-3 p-lg-4">
+            <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+                <div><h2 class="h5 mb-1">เอกสารต้นทาง</h2><p class="text-secondary small mb-0">ใบโอนสินค้าที่ส่งออกจากคลังต้นทางมายังคลังนี้</p></div>
+                <a class="btn btn-sm btn-app-soft" href="{{ route('wms.transfers.show', $transfer) }}"><i class="bx bx-link-external me-1" aria-hidden="true"></i>ดูเอกสารต้นทาง</a>
+            </div>
+            <div class="row g-3">
+                <div class="col-12 col-md-3"><div class="text-secondary small">เลขที่เอกสารต้นทาง</div><div class="fw-semibold">{{ $transfer->document_number }}</div></div>
+                <div class="col-12 col-md-3"><div class="text-secondary small">คลังต้นทาง</div><div class="fw-semibold">{{ $transfer->sourceWarehouse?->name ?: '-' }}</div></div>
+                <div class="col-12 col-md-3"><div class="text-secondary small">สถานะเอกสาร</div><div class="fw-semibold">{{ $statusLabels[$transfer->status] ?? $transfer->status }}</div></div>
+                <div class="col-12 col-md-3"><div class="text-secondary small">วันที่ส่งออก</div><div class="fw-semibold">{{ $transfer->dispatched_at?->format($dateFormat.' H:i') ?: '-' }}</div></div>
+                @if($transfer->dispatch_reason)<div class="col-12"><div class="text-secondary small">เหตุผลการส่งออก</div><div class="fw-semibold">{{ $transfer->dispatch_reason }}</div></div>@endif
+            </div>
+        </div>
+    </div>
+
+    <div class="card border-primary-subtle shadow-sm mb-4">
+        <div class="card-body p-3 p-lg-4">
+            <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+                <div><h2 class="h5 mb-1">เอกสารรับเข้าปลายทาง</h2><p class="text-secondary small mb-0">การรับเข้าใช้เลขที่ Transfer เดียวกับเอกสารนี้</p></div>
+                @if($isSource && in_array($transfer->status, ['DISPATCHED', 'PARTIALLY_ACCEPTED'], true))
+                    <a class="btn btn-sm btn-app-soft" href="{{ route('wms.transfers.show', $transfer) }}">ติดตามการรับเข้า</a>
+                @endif
+            </div>
+            <div class="row g-3">
+                <div class="col-12 col-md-3"><div class="text-secondary small">เลขที่เอกสารรับเข้า</div><div class="fw-semibold">{{ $transfer->document_number }}</div></div>
+                <div class="col-12 col-md-3"><div class="text-secondary small">คลังปลายทาง</div><div class="fw-semibold">{{ $transfer->destinationWarehouse?->name ?: '-' }}</div></div>
+                <div class="col-12 col-md-3"><div class="text-secondary small">สถานะรับเข้า</div><div class="fw-semibold">{{ ['DRAFT' => 'ยังไม่ส่งออก', 'DISPATCHED' => 'รอรับเข้าปลายทาง', 'PARTIALLY_ACCEPTED' => 'รับเข้าบางส่วน', 'ACCEPTED' => 'รับเข้าครบแล้ว', 'REJECTED' => 'ปลายทางปฏิเสธ', 'VOID' => 'ยกเลิก'][$transfer->status] ?? $transfer->status }}</div></div>
+                <div class="col-12 col-md-3"><div class="text-secondary small">วันที่รับเข้าล่าสุด</div><div class="fw-semibold">{{ $transfer->events->where('event_type', 'ACCEPT')->sortByDesc('created_at')->first()?->created_at?->format($dateFormat.' H:i') ?: '-' }}</div></div>
+                <div class="col-6 col-md-3"><div class="text-secondary small">วางแผน</div><div class="fw-semibold">{{ $receiptSummary['planned'] }}</div></div>
+                <div class="col-6 col-md-3"><div class="text-secondary small text-success">รับแล้ว</div><div class="fw-semibold text-success">{{ $receiptSummary['accepted'] }}</div></div>
+                <div class="col-6 col-md-3"><div class="text-secondary small text-danger">ปฏิเสธ</div><div class="fw-semibold text-danger">{{ $receiptSummary['rejected'] }}</div></div>
+                <div class="col-6 col-md-3"><div class="text-secondary small text-info">คงเหลือรอรับ</div><div class="fw-semibold text-info">{{ $receiptSummary['remaining'] }}</div></div>
+            </div>
+        </div>
+    </div>
+
     <div class="card border-0 shadow-sm mb-4">
         <div class="card-body p-3 p-lg-4">
             <h2 class="h5 mb-3">รายการสินค้า</h2>

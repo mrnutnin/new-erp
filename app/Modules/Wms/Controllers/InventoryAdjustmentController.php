@@ -11,15 +11,23 @@ use App\Modules\Settings\Services\GlobalSettings;
 use App\Modules\Wms\Models\InventoryAdjustment;
 use App\Modules\Wms\Models\InventoryAdjustmentDocument;
 use App\Modules\Wms\Models\Item;
+use App\Modules\Wms\Models\IssueDocument;
 use App\Modules\Wms\Requests\SaveInventoryAdjustmentRequest;
 use App\Modules\Wms\Services\InventoryAdjustmentDocumentReversalService;
 use App\Modules\Wms\Services\InventoryAdjustmentLiveReversalAdapter;
 use App\Modules\Wms\Services\InventoryAdjustmentPostingService;
+use App\Modules\Wms\Services\ManualProductionReceiptPostingService;
+use App\Modules\Wms\Services\CostPropagationTriggerDispatcher;
 use App\Modules\Wms\Support\WmsDecimal;
+use App\Modules\Wms\Support\ManualProductionReceiptContract;
+use Brick\Math\BigDecimal;
+use Brick\Math\RoundingMode;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
 use Yajra\DataTables\Facades\DataTables;
 
@@ -39,6 +47,12 @@ final class InventoryAdjustmentController extends Controller
         $labels = ['DRAFT' => 'ร่าง', 'APPROVED' => 'อนุมัติแล้ว', 'POSTED' => 'ลงบัญชีแล้ว', 'VOID' => 'ยกเลิก', 'REVERSED' => 'กลับรายการแล้ว'];
         $directions = ['GAIN' => 'เพิ่มสินค้า', 'LOSS' => 'ลดสินค้า'];
         $query = InventoryAdjustmentDocument::query()->with(['lines.item:id,code,name', 'lines.uom:id,code', 'creator:id,name'])->where('warehouse_id', $warehouseId);
+        $context = $request->string('document_context')->toString();
+        if ($request->filled('document_context') && in_array($context, ['INVENTORY_ADJUSTMENT', 'PRODUCTION_RECEIPT'], true)) {
+            $this->hasDocumentContextColumn()
+                ? $query->where('document_context', $context)
+                : $query->whereRaw('1 = 0');
+        }
         if ($request->filled('status') && in_array($request->string('status')->toString(), ['DRAFT', 'APPROVED', 'POSTED', 'VOID', 'REVERSED'], true)) $query->where('status', $request->string('status')->toString());
         if ($request->filled('date_from')) $query->whereDate('document_date', '>=', $request->date('date_from'));
         if ($request->filled('date_to')) $query->whereDate('document_date', '<=', $request->date('date_to'));
@@ -50,10 +64,11 @@ final class InventoryAdjustmentController extends Controller
             ->addColumn('item_label', fn ($r) => $r->lines->map(fn ($line) => trim(($line->item?->code ?: '').' · '.($line->item?->name ?: '-'), ' ·'))->unique()->implode(', '))
             ->addColumn('uom_label', fn ($r) => $r->lines->pluck('uom.code')->unique()->implode(', '))
             ->addColumn('direction_label', fn ($r) => $directions[$r->direction] ?? $r->direction ?? '-')
+            ->addColumn('context_label', fn ($r) => $r->document_context === 'PRODUCTION_RECEIPT' ? 'รับสินค้าผลิตเสร็จ' : 'ปรับปรุงสินค้า')
             ->addColumn('status_label', fn ($r) => $labels[$r->status] ?? $r->status)
             ->addColumn('can_approve', fn ($r) => $r->status === 'DRAFT' && $request->user()->hasPermission('wms.inventory-adjustments.approve'))
             ->addColumn('can_post', fn ($r) => $r->status === 'APPROVED'
-                && (bool) config('erp.inventory.adjustment_posting_enabled', false)
+                && (bool) config($r->document_context === 'PRODUCTION_RECEIPT' ? 'erp.inventory.manual_production_receipt_posting_enabled' : 'erp.inventory.adjustment_posting_enabled', false)
                 && $request->user()->hasPermission('wms.inventory-adjustments.post'))
             ->addColumn('can_delete', fn ($r) => $r->status === 'DRAFT' && $request->user()->hasPermission('wms.inventory-adjustments.delete'))
             ->addColumn('can_reverse', fn ($r) => $r->status === 'POSTED' && $r->reversal_status !== 'REVERSED' && (bool) config('erp.inventory.adjustment_posting_enabled', false) && $request->user()->hasPermission('wms.inventory-adjustments.reverse'))
@@ -61,14 +76,54 @@ final class InventoryAdjustmentController extends Controller
             ->addColumn('quantity', fn ($r) => WmsDecimal::format($r->lines->sum('quantity')))
             ->addColumn('value', fn ($r) => WmsDecimal::format($r->lines->sum('value')))
             ->addColumn('reason', fn ($r) => $r->reason)
-            ->addColumn('show_url', fn ($r) => route('wms.inventory-adjustments.documents.show', $r))
+            ->addColumn('show_url', fn ($r) => $r->document_context === 'PRODUCTION_RECEIPT'
+                ? route('wms.production.finished-receipts.show', $r)
+                : route('wms.inventory-adjustments.documents.show', $r))
             ->orderColumn('business_date', 'document_date $1')
             ->toJson();
     }
 
-    public function create(): View
+    public function adjustmentData(Request $request, GlobalSettings $settings): JsonResponse
     {
-        return view('Wms::inventory-adjustments.documents.create', ['document' => null]);
+        $request->merge(['document_context' => 'INVENTORY_ADJUSTMENT']);
+
+        return $this->data($request, $settings);
+    }
+
+    public function create(Request $request): View
+    {
+        $productionMode = $request->routeIs('wms.production.finished-receipts.*') || $request->boolean('production');
+        if ($productionMode && ! $this->hasDocumentContextColumn()) {
+            throw ValidationException::withMessages(['database' => 'ยังไม่ได้เตรียมฐานข้อมูลสำหรับแยกเอกสารรับสินค้าผลิตเสร็จ กรุณากด Prepare Database จาก Installer ก่อน']);
+        }
+
+        $sourceIssue = null;
+        $sourceIssueCostTotal = '0';
+        $sourceIssueHasPendingCost = false;
+        if ($productionMode && $request->filled('source_issue_id')) {
+            $sourceIssue = IssueDocument::query()
+                ->with(['lines.item:id,code,name', 'lines.uom:id,code,name', 'lines.allocation:id,value,cost_status,status'])
+                ->where('warehouse_id', $request->attributes->get('selectedWarehouse')->id)
+                ->where('issue_type', 'PRODUCTION')
+                ->where('status', 'POSTED')
+                ->findOrFail($request->integer('source_issue_id'));
+
+            $sourceIssueCostTotal = $sourceIssue->lines->reduce(
+                fn (BigDecimal $total, $line): BigDecimal => $total->plus($line->allocation ? BigDecimal::of((string) $line->allocation->value)->abs() : BigDecimal::zero()),
+                BigDecimal::zero(),
+            )->toScale(8)->__toString();
+            $sourceIssueHasPendingCost = $sourceIssue->lines->contains(fn ($line): bool => $line->allocation === null || $line->allocation->cost_status !== 'FINAL');
+        }
+
+        return view('Wms::inventory-adjustments.documents.create', [
+            'document' => null,
+            'productionMode' => $productionMode,
+            'sourceIssue' => $sourceIssue,
+            'sourceIssueCostTotal' => $sourceIssueCostTotal,
+            'sourceIssueHasPendingCost' => $sourceIssueHasPendingCost,
+            'quantityDecimals' => WmsDecimal::places(),
+            'valueDecimals' => WmsDecimal::places(),
+        ]);
     }
 
     public function editDocument(Request $request, InventoryAdjustmentDocument $document): View
@@ -77,7 +132,33 @@ final class InventoryAdjustmentController extends Controller
         abort_unless($document->status === 'DRAFT', 422, 'แก้ไขได้เฉพาะเอกสารร่าง');
         $document->load(['lines.item:id,code,name,base_uom_id', 'lines.item.baseUom:id,code,name', 'lines.uom:id,code,name']);
 
-        return view('Wms::inventory-adjustments.documents.create', ['document' => $document]);
+        $productionMode = $document->document_context === 'PRODUCTION_RECEIPT';
+        $sourceIssue = null;
+        $sourceIssueCostTotal = '0';
+        $sourceIssueHasPendingCost = false;
+        if ($productionMode && $document->source_issue_id && $this->hasDocumentSourceIssueColumn()) {
+            $sourceIssue = IssueDocument::query()
+                ->with(['lines.item:id,code,name', 'lines.uom:id,code,name', 'lines.allocation:id,value,cost_status,status'])
+                ->where('warehouse_id', $document->warehouse_id)
+                ->where('issue_type', 'PRODUCTION')
+                ->where('status', 'POSTED')
+                ->find($document->source_issue_id);
+            $sourceIssueCostTotal = $sourceIssue?->lines->reduce(
+                fn (BigDecimal $total, $line): BigDecimal => $total->plus($line->allocation ? BigDecimal::of((string) $line->allocation->value)->abs() : BigDecimal::zero()),
+                BigDecimal::zero(),
+            )->toScale(8)->__toString() ?? '0';
+            $sourceIssueHasPendingCost = $sourceIssue?->lines->contains(fn ($line): bool => $line->allocation === null || $line->allocation->cost_status !== 'FINAL') ?? false;
+        }
+
+        return view('Wms::inventory-adjustments.documents.create', [
+            'document' => $document,
+            'productionMode' => $productionMode,
+            'sourceIssue' => $sourceIssue,
+            'sourceIssueCostTotal' => $sourceIssueCostTotal,
+            'sourceIssueHasPendingCost' => $sourceIssueHasPendingCost,
+            'quantityDecimals' => WmsDecimal::places(),
+            'valueDecimals' => WmsDecimal::places(),
+        ]);
     }
 
     public function updateDocument(SaveInventoryAdjustmentRequest $request, InventoryAdjustmentDocument $document, AuditLogger $audit, DocumentSequenceService $sequences): JsonResponse
@@ -85,12 +166,21 @@ final class InventoryAdjustmentController extends Controller
         $this->scopeDocument($request, $document);
         abort_unless($document->status === 'DRAFT', 422, 'แก้ไขได้เฉพาะเอกสารร่าง');
         $values = $request->validated();
-        DB::transaction(function () use ($values, $document, $request, $audit, $sequences): void {
+        if (($values['document_context'] ?? null) === ManualProductionReceiptContract::CONTEXT) {
+            abort_unless($this->hasDocumentContextColumn(), 422, 'ยังไม่ได้เตรียมฐานข้อมูลสำหรับรับสินค้าผลิตเสร็จ กรุณากด Prepare Database จาก Installer ก่อน');
+            ManualProductionReceiptContract::assert($values);
+            $values = $this->normalizeProductionReceiptValues($values, $request);
+        }
+        $hasDocumentContext = $this->hasDocumentContextColumn();
+        $sequenceType = ($values['document_context'] ?? $document->document_context) === ManualProductionReceiptContract::CONTEXT
+            ? 'PRODUCTION_FINISHED_RECEIPT'
+            : 'INVENTORY_ADJUSTMENT';
+        DB::transaction(function () use ($values, $document, $request, $audit, $sequences, $hasDocumentContext, $sequenceType): void {
             $before = $document->load('lines')->toArray();
             $date = Carbon::parse($values['document_date']);
             $number = $document->document_number;
             if ($document->document_date->toDateString() !== $date->toDateString()) {
-                $sequence = DocumentSequence::query()->whereNull('warehouse_id')->where('document_type', 'INVENTORY_ADJUSTMENT')->where('is_active', true)->lockForUpdate()->first();
+                $sequence = DocumentSequence::query()->whereNull('warehouse_id')->where('document_type', $sequenceType)->where('is_active', true)->lockForUpdate()->first();
                 if (! $sequence) {
                     throw ValidationException::withMessages(['document_date' => 'ยังไม่ได้ตั้งค่าเลขเอกสารสำหรับวันที่ใหม่']);
                 }
@@ -101,7 +191,14 @@ final class InventoryAdjustmentController extends Controller
                 }
                 $number = $sequences->replaceDraftNumberForBranch($sequence, $warehouse->branch, $document->document_number, 'inventory_adjustment_document', (int) $document->id, $date, $request->user()->id);
             }
-            $document->forceFill(['document_number' => $number, 'document_date' => $date, 'direction' => $values['direction'], 'reason' => $values['reason']])->save();
+            $documentValues = ['document_number' => $number, 'document_date' => $date, 'direction' => $values['direction'], 'reason' => $values['reason']];
+            if ($hasDocumentContext) {
+                $documentValues['document_context'] = $values['document_context'] ?? $document->document_context;
+                if (Schema::hasColumn('wms_inventory_adjustment_documents', 'source_issue_id')) {
+                    $documentValues['source_issue_id'] = $values['source_issue_id'] ?? $document->source_issue_id;
+                }
+            }
+            $document->forceFill($documentValues)->save();
             $document->lines()->delete();
             foreach ($values['lines'] as $position => $line) {
                 $item = Item::query()->findOrFail($line['item_id']);
@@ -122,12 +219,28 @@ final class InventoryAdjustmentController extends Controller
             throw ValidationException::withMessages(['warehouse_id' => 'คลังที่เลือกไม่มีสาขา']);
         }
         $values = $request->validated();
-        $sequence = DocumentSequence::query()->whereNull('warehouse_id')->where('document_type', 'INVENTORY_ADJUSTMENT')->first();
-        abort_unless($sequence, 422, 'ยังไม่ได้ตั้งค่าเลขเอกสาร Adjustment');
-        $document = DB::transaction(function () use ($values, $warehouse, $request, $sequences, $sequence, $audit): InventoryAdjustmentDocument {
+        if (($values['document_context'] ?? null) === ManualProductionReceiptContract::CONTEXT) {
+            abort_unless($this->hasDocumentContextColumn(), 422, 'ยังไม่ได้เตรียมฐานข้อมูลสำหรับรับสินค้าผลิตเสร็จ กรุณากด Prepare Database จาก Installer ก่อน');
+            ManualProductionReceiptContract::assert($values);
+            $values = $this->normalizeProductionReceiptValues($values, $request);
+        }
+        $hasDocumentContext = $this->hasDocumentContextColumn();
+        $sequenceType = ($values['document_context'] ?? 'INVENTORY_ADJUSTMENT') === ManualProductionReceiptContract::CONTEXT
+            ? 'PRODUCTION_FINISHED_RECEIPT'
+            : 'INVENTORY_ADJUSTMENT';
+        $sequence = DocumentSequence::query()->whereNull('warehouse_id')->where('document_type', $sequenceType)->first();
+        abort_unless($sequence, 422, $sequenceType === 'PRODUCTION_FINISHED_RECEIPT' ? 'ยังไม่ได้ตั้งค่าเลขเอกสารใบรับสินค้าผลิตเสร็จ' : 'ยังไม่ได้ตั้งค่าเลขเอกสาร Adjustment');
+        $document = DB::transaction(function () use ($values, $warehouse, $request, $sequences, $sequence, $audit, $hasDocumentContext): InventoryAdjustmentDocument {
             $date = Carbon::parse($values['document_date']);
             $number = $sequences->issueForBranch($sequence, $warehouse->branch, $date);
-            $document = InventoryAdjustmentDocument::query()->create(['warehouse_id' => $warehouse->id, 'document_number' => $number, 'document_date' => $date, 'direction' => $values['direction'], 'reason' => $values['reason'], 'idempotency_key' => 'adjustment-document:'.bin2hex(random_bytes(12)), 'created_by' => $request->user()->id]);
+            $documentValues = ['warehouse_id' => $warehouse->id, 'document_number' => $number, 'document_date' => $date, 'direction' => $values['direction'], 'reason' => $values['reason'], 'idempotency_key' => 'adjustment-document:'.bin2hex(random_bytes(12)), 'created_by' => $request->user()->id];
+            if ($hasDocumentContext) {
+                $documentValues['document_context'] = $values['document_context'] ?? 'INVENTORY_ADJUSTMENT';
+                if (Schema::hasColumn('wms_inventory_adjustment_documents', 'source_issue_id')) {
+                    $documentValues['source_issue_id'] = $values['source_issue_id'] ?? null;
+                }
+            }
+            $document = InventoryAdjustmentDocument::query()->create($documentValues);
             $sequences->recordIssued($sequence->fresh(), $number, 'inventory_adjustment_document', $document->id, $date, $request->user()->id);
             foreach ($values['lines'] as $position => $line) {
                 $item = Item::query()->findOrFail($line['item_id']);
@@ -140,20 +253,52 @@ final class InventoryAdjustmentController extends Controller
             return $document;
         });
 
-        return response()->json(['status' => true, 'msg' => 'บันทึกร่าง Adjustment แล้ว', 'redirect' => route('wms.inventory-adjustments.documents.show', $document)]);
+        return response()->json([
+            'status' => true,
+            'msg' => $document->document_context === 'PRODUCTION_RECEIPT' ? 'บันทึกร่างใบรับผลิตแล้ว' : 'บันทึกร่าง Adjustment แล้ว',
+            'redirect' => $document->document_context === 'PRODUCTION_RECEIPT'
+                ? route('wms.production.finished-receipts.show', $document)
+                : route('wms.inventory-adjustments.documents.show', $document),
+        ]);
     }
 
-    public function showDocument(Request $request, InventoryAdjustmentDocument $document, GlobalSettings $settings, InventoryAdjustmentPostingService $posting): View
+    public function showDocument(Request $request, InventoryAdjustmentDocument $document, GlobalSettings $settings, InventoryAdjustmentPostingService $posting, ManualProductionReceiptPostingService $productionPosting): View
     {
         $this->scopeDocument($request, $document);
         $document->load(['warehouse:id,code,name', 'lines.item:id,code,name', 'lines.uom:id,code,name', 'lines.movement', 'lines.allocation.journalEntry.lines.account:id,code,name', 'creator:id,name']);
+        $sourceIssue = Schema::hasColumn('wms_inventory_adjustment_documents', 'source_issue_id')
+            ? $document->load('sourceIssue')->sourceIssue?->load(['lines.item:id,code,name', 'lines.uom:id,code,name', 'lines.allocation:id,value,cost_status,status'])
+            : null;
+        $sourceIssueCostTotal = $sourceIssue?->lines->reduce(
+            fn (BigDecimal $total, $line): BigDecimal => $total->plus($line->allocation ? BigDecimal::of((string) $line->allocation->value)->abs() : BigDecimal::zero()),
+            BigDecimal::zero(),
+        )->toScale(8)->__toString() ?? '0';
+        $totalQuantity = $document->lines->reduce(fn (BigDecimal $total, $line): BigDecimal => $total->plus((string) $line->quantity), BigDecimal::zero())->toScale(8, RoundingMode::HALF_UP);
+        $totalValue = $document->lines->reduce(fn (BigDecimal $total, $line): BigDecimal => $total->plus((string) $line->value), BigDecimal::zero())->toScale(8, RoundingMode::HALF_UP);
+        $averageUnitCost = $totalQuantity->isZero() ? BigDecimal::zero() : $totalValue->dividedBy($totalQuantity, 8, RoundingMode::HALF_UP);
+        $lineUnitCosts = $document->lines->mapWithKeys(function ($line): array {
+            $quantity = BigDecimal::of((string) $line->quantity);
+            $value = BigDecimal::of((string) $line->value);
+
+            return [$line->id => $quantity->isZero() ? '0' : $value->dividedBy($quantity, 8, RoundingMode::HALF_UP)->__toString()];
+        });
         $history = AuditLog::query()->with('user:id,name')->where('subject_type', $document->getMorphClass())->where('subject_id', $document->id)->latest('created_at')->latest('id')->get();
 
         return view('Wms::inventory-adjustments.documents.show', [
             'document' => $document,
             'history' => $history,
             'dateFormat' => (string) ($settings->value('date_format') ?: 'd/m/Y'),
-            'postReadiness' => $posting->documentPostReadiness($document->lines),
+            'postReadiness' => $document->document_context === 'PRODUCTION_RECEIPT'
+                ? $productionPosting->preflight($document->toArray())
+                : $posting->documentPostReadiness($document->lines),
+            'productionMode' => $document->document_context === 'PRODUCTION_RECEIPT',
+            'sourceIssue' => $sourceIssue,
+            'sourceIssueCostTotal' => $sourceIssueCostTotal,
+            'receiptSummary' => ['quantity' => $totalQuantity->__toString(), 'value' => $totalValue->__toString(), 'average_unit_cost' => $averageUnitCost->__toString()],
+            'lineUnitCosts' => $lineUnitCosts,
+            'productionReadiness' => $document->document_context === 'PRODUCTION_RECEIPT'
+                ? $productionPosting->preflight($document->toArray())
+                : null,
         ]);
     }
 
@@ -183,21 +328,34 @@ final class InventoryAdjustmentController extends Controller
             $audit->record('wms.inventory_adjustment.deleted', $document, $before, [], $request->user(), $request);
         });
 
-        return response()->json(['status' => true, 'msg' => 'ลบร่าง Adjustment แล้ว', 'redirect' => route('wms.inventory-adjustments.index')]);
+        return response()->json([
+            'status' => true,
+            'msg' => $document->document_context === 'PRODUCTION_RECEIPT' ? 'ลบร่างใบรับผลิตแล้ว' : 'ลบร่าง Adjustment แล้ว',
+            'redirect' => $document->document_context === 'PRODUCTION_RECEIPT'
+                ? route('wms.production.finished-receipts.index')
+                : route('wms.inventory-adjustments.index'),
+        ]);
     }
 
-    public function postDocument(Request $request, InventoryAdjustmentDocument $document, InventoryAdjustmentPostingService $posting, AuditLogger $audit): JsonResponse
+    public function postDocument(Request $request, InventoryAdjustmentDocument $document, InventoryAdjustmentPostingService $posting, ManualProductionReceiptPostingService $productionPosting, CostPropagationTriggerDispatcher $costPropagation, AuditLogger $audit): JsonResponse
     {
         $this->scopeDocument($request, $document);
+        if ($document->document_context === 'PRODUCTION_RECEIPT') {
+            $warehouse = $request->attributes->get('selectedWarehouse');
+            $productionPosting->post($document, $warehouse, $request->user(), $request);
+
+            return response()->json(['status' => true, 'msg' => 'รับสินค้าผลิตเสร็จลง Stock และบัญชีแล้ว', 'redirect' => route('wms.production.finished-receipts.show', $document)]);
+        }
         abort_unless($document->status === 'APPROVED', 422, 'ลงบัญชีได้เฉพาะเอกสารที่อนุมัติแล้ว');
         $warehouse = $request->attributes->get('selectedWarehouse');
-        DB::transaction(function () use ($document, $posting, $warehouse, $request, $audit): void {
+        DB::transaction(function () use ($document, $posting, $warehouse, $request, $costPropagation, $audit): void {
             $document->load('lines');
             foreach ($document->lines as $line) {
                 $posting->postAdjustment($line, $warehouse, $request->user(), $request);
             } $before = $document->toArray();
             $document->forceFill(['status' => 'POSTED', 'posted_by' => $request->user()->id])->save();
             $audit->record('wms.inventory_adjustment.posted', $document, $before, $document->fresh()->load('lines')->toArray(), $request->user(), $request);
+            $costPropagation->dispatchIfEnabled('INVENTORY_ADJUSTMENT', $document->id, 0, [], $request->user()->id);
         });
 
         return response()->json(['status' => true, 'msg' => 'Adjustment ลงบัญชีแล้ว', 'redirect' => route('wms.inventory-adjustments.documents.show', $document)]);
@@ -311,6 +469,83 @@ final class InventoryAdjustmentController extends Controller
     private function scopeDocument(Request $request, InventoryAdjustmentDocument $document): void
     {
         abort_unless((int) $document->warehouse_id === (int) $request->attributes->get('selectedWarehouse')->id, 404);
+    }
+
+    private function assertProductionReceiptCostMatchesSource(array $values, Request $request): void
+    {
+        if (empty($values['source_issue_id'])) {
+            return;
+        }
+
+        $source = IssueDocument::query()
+            ->with('lines.allocation:id,value,cost_status,status')
+            ->where('warehouse_id', $request->attributes->get('selectedWarehouse')->id)
+            ->where('issue_type', 'PRODUCTION')
+            ->where('status', 'POSTED')
+            ->findOrFail((int) $values['source_issue_id']);
+
+        $sourceTotal = $source->lines->reduce(
+            fn (BigDecimal $total, $line): BigDecimal => $total->plus($line->allocation ? BigDecimal::of((string) $line->allocation->value)->abs() : BigDecimal::zero()),
+            BigDecimal::zero(),
+        )->toScale(8);
+        $receiptTotal = collect($values['lines'])->reduce(
+            fn (BigDecimal $total, array $line): BigDecimal => $total->plus(BigDecimal::of((string) $line['value'])),
+            BigDecimal::zero(),
+        )->toScale(8);
+
+        if (! $sourceTotal->isEqualTo($receiptTotal)) {
+            throw ValidationException::withMessages([
+                'lines' => 'มูลค่ารวมใบรับผลิต ('.$receiptTotal->__toString().') ต้องเท่ากับต้นทุนวัตถุดิบต้นทาง ('.$sourceTotal->__toString().')',
+            ]);
+        }
+    }
+
+    private function normalizeProductionReceiptValues(array $values, Request $request): array
+    {
+        $source = IssueDocument::query()
+            ->with('lines.allocation:id,value,cost_status,status')
+            ->where('warehouse_id', $request->attributes->get('selectedWarehouse')->id)
+            ->where('issue_type', 'PRODUCTION')
+            ->where('status', 'POSTED')
+            ->findOrFail((int) $values['source_issue_id']);
+        $sourceTotal = $source->lines->reduce(
+            fn (BigDecimal $total, $line): BigDecimal => $total->plus($line->allocation ? BigDecimal::of((string) $line->allocation->value)->abs() : BigDecimal::zero()),
+            BigDecimal::zero(),
+        )->toScale(8, RoundingMode::HALF_UP);
+        $places = WmsDecimal::places();
+        $inputTotal = collect($values['lines'])->reduce(
+            fn (BigDecimal $total, array $line): BigDecimal => $total->plus(BigDecimal::of((string) $line['value'])),
+            BigDecimal::zero(),
+        );
+        if (! $inputTotal->toScale($places, RoundingMode::HALF_UP)->isEqualTo($sourceTotal->toScale($places, RoundingMode::HALF_UP))) {
+            throw ValidationException::withMessages([
+                'lines' => 'มูลค่ารวมใบรับผลิต ('.WmsDecimal::format($inputTotal->__toString()).') ต้องเท่ากับต้นทุนวัตถุดิบต้นทาง ('.WmsDecimal::format($sourceTotal->__toString()).') เมื่อปัดตาม Global Setting',
+            ]);
+        }
+
+        $last = array_key_last($values['lines']);
+        $running = BigDecimal::zero();
+        foreach ($values['lines'] as $position => &$line) {
+            if ($position === $last) {
+                $line['value'] = $sourceTotal->minus($running)->toScale(8, RoundingMode::HALF_UP)->__toString();
+                continue;
+            }
+            $line['value'] = BigDecimal::of((string) $line['value'])->toScale(8, RoundingMode::HALF_UP)->__toString();
+            $running = $running->plus($line['value']);
+        }
+        unset($line);
+
+        return $values;
+    }
+
+    private function hasDocumentContextColumn(): bool
+    {
+        return Schema::hasColumn('wms_inventory_adjustment_documents', 'document_context');
+    }
+
+    private function hasDocumentSourceIssueColumn(): bool
+    {
+        return Schema::hasColumn('wms_inventory_adjustment_documents', 'source_issue_id');
     }
 
     private function warehouses(Request $request)

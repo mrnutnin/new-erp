@@ -8,7 +8,7 @@ use InvalidArgumentException;
 
 final class CostingCalculator
 {
-    public static function average(string $openingQuantity, string $openingCost, string $receiptQuantity, string $receiptUnitCost): array
+    public static function average(string $openingQuantity, string $openingCost, string $receiptQuantity, string $receiptUnitCost, ?string $receiptValue = null): array
     {
         // A receipt may close a provisional negative-stock issue. In that
         // case the opening quantity/value is legitimately negative; reject
@@ -21,7 +21,10 @@ final class CostingCalculator
         if ($totalQuantity->isZero()) {
             return ['quantity' => '0.00000000', 'unit_cost' => '0.00000000', 'value' => '0.00000000'];
         }
-        $value = $openingValue->plus($receipt->multipliedBy(self::decimal($receiptUnitCost)));
+        $receiptAmount = $receiptValue === null
+            ? $receipt->multipliedBy(self::decimal($receiptUnitCost))
+            : self::decimal($receiptValue);
+        $value = $openingValue->plus($receiptAmount);
 
         return ['quantity' => self::out($totalQuantity), 'unit_cost' => self::out($value->dividedBy($totalQuantity, 8, RoundingMode::HALF_UP)), 'value' => self::out($value)];
     }

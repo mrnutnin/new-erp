@@ -9,12 +9,13 @@ use App\Modules\Accounting\Models\JournalEntry;
 use App\Modules\Accounting\Models\JournalEntryLine;
 use App\Modules\Accounting\Services\AccountMappingService;
 use App\Modules\Accounting\Services\JournalPostingService;
+use App\Modules\Purchasing\Models\PurchaseDocument;
+use App\Modules\Purchasing\Support\PurchaseThreeWayMatchGate;
 use App\Modules\Wms\Models\CostAllocation;
 use App\Modules\Wms\Models\CostAllocationJournalLine;
-use App\Modules\Purchasing\Models\PurchaseDocument;
 use App\Modules\Wms\Models\StockMovement;
+use App\Modules\Wms\Support\PurchaseInventoryOwnership;
 use App\Modules\Wms\Support\PurchaseLineMovementAdapter;
-use App\Modules\Purchasing\Support\PurchaseThreeWayMatchGate;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
@@ -35,6 +36,7 @@ final class InventoryPurchaseProductionAdapter
         private readonly InventoryCostAllocationService $allocations,
         private readonly InventoryPurchaseAtomicWorkflow $workflow,
         private readonly InventoryReconciliationService $reconciliationService,
+        private readonly CostPropagationTriggerDispatcher $costPropagation,
         private readonly ?PurchaseThreeWayMatchGate $matchGate = null,
     ) {}
 
@@ -156,6 +158,7 @@ final class InventoryPurchaseProductionAdapter
                 'status' => 'POSTED', 'journal_entry_id' => $journal->id,
                 'posting_date' => $journal->entry_date, 'posted_by' => $actor->id, 'posted_at' => now(),
             ])->save();
+            $this->costPropagation->dispatchIfEnabled('PURCHASE_DOCUMENT', $lockedDocument->id, 0, [], $actor->id);
 
             return $lockedDocument->fresh();
         }, 3);
@@ -185,6 +188,17 @@ final class InventoryPurchaseProductionAdapter
             'lines.purchaseOrderLine.purchaseOrder.lines',
             'lines.receiptAllocations.goodsReceiptLine.goodsReceipt.lines',
         ]);
+        $legacyMovementIds = PurchaseInventoryOwnership::legacyGoodsReceiptMovementIds($document);
+        if ($legacyMovementIds !== []) {
+            return [
+                ...$preflight,
+                'production_ready' => false,
+                'blockers' => ['duplicate_purchase_stock_owner'],
+                'errors' => [
+                    'stock_owner' => ['Goods Receipt ของ Invoice นี้เคยลง Stock แล้ว (Movement #'.implode(', #', $legacyMovementIds).') กรุณาตรวจและกลับรายการ owner เดิมก่อน Post Purchase Invoice'],
+                ],
+            ];
+        }
         $match = ($this->matchGate ?? new PurchaseThreeWayMatchGate)->preview($document);
         if ($match === null || ($match['ready'] ?? false) !== true) {
             return [
@@ -228,7 +242,7 @@ final class InventoryPurchaseProductionAdapter
         $journal = JournalEntry::query()->whereKey($document->journal_entry_id)->where('status', 'POSTED')
             ->where('source_type', 'PURCHASING')->where('source_event', 'supplier_invoice.inventory')
             ->where('source_id', (string) $document->id)->where('source_reference', $document->document_number)
-            ->whereDate('entry_date', $document->posting_date?->format('Y-m-d'))->lockForUpdate()->first();
+            ->where('entry_date', $document->posting_date?->format('Y-m-d'))->lockForUpdate()->first();
         if (! $journal) {
             throw ValidationException::withMessages(['journal_entry_id' => 'Inventory Purchase ที่ Post แล้วมี Journal identity ไม่ตรงกัน']);
         }

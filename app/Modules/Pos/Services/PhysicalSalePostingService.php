@@ -19,9 +19,11 @@ use App\Modules\Pos\Support\PhysicalSaleStockPostingIntent;
 use App\Modules\Pos\Support\PhysicalSaleWithholdingSnapshot;
 use App\Modules\Wms\Models\CostAllocation;
 use App\Modules\Wms\Models\Item;
+use App\Modules\Wms\Services\CostPropagationTriggerDispatcher;
 use App\Modules\Wms\Services\InventoryCostAllocationService;
 use App\Modules\Wms\Services\StockMovementService;
 use App\Modules\Wms\Support\InventoryRoundingAllocator;
+use Brick\Math\BigDecimal;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -39,6 +41,7 @@ final class PhysicalSalePostingService
         private readonly CommissionCalculationService $commissions,
         private readonly AuditLogger $audit,
         private readonly AccountMappingService $mappings,
+        private readonly CostPropagationTriggerDispatcher $costPropagation,
     ) {}
 
     /**
@@ -152,6 +155,7 @@ final class PhysicalSalePostingService
             ])->save();
             $this->commissions->calculatePostedSale($sale);
             $this->audit->record('pos.physical-sale.posted', $sale, $before, $sale->only(array_keys($before)), $actor, $request);
+            $this->costPropagation->dispatchIfEnabled('PHYSICAL_SALE', $sale->id, 0, [], $actor->id);
 
             return $sale->fresh();
         }, 3);
@@ -164,16 +168,18 @@ final class PhysicalSalePostingService
             'document_type' => $sale->document_type, 'document_number' => $sale->document_number,
             'source_type' => $sale->source_type, 'source_id' => $sale->source_id,
             'document_date' => $sale->document_date->format('Y-m-d'), 'posting_date' => $postingDate,
-            'business_date' => $postingDate, 'total_amount' => $sale->total_amount, 'tax_amount' => $sale->tax_amount,
+            // Stock movement chronology follows the source document. The
+            // posting date is accounting-only and must never shift inventory.
+            'business_date' => $sale->document_date->format('Y-m-d'), 'total_amount' => $sale->total_amount, 'tax_amount' => $sale->tax_amount,
             'journal_entry_id' => $sale->journal_entry_id, 'cogs_journal_entry_id' => $sale->cogs_journal_entry_id,
-            'lines' => $lines->map(function ($line) use ($postingDate): array {
+            'lines' => $lines->map(function ($line) use ($sale): array {
                 // Older drafts stored only a partial conversion snapshot. The
                 // line's immutable columns remain authoritative for posting.
                 $snapshot = array_replace(is_array($line->conversion_snapshot) ? $line->conversion_snapshot : [], [
                     'purchase_uom_id' => (int) $line->sale_uom_id,
                     'stock_uom_id' => (int) $line->stock_uom_id,
                     'factor' => (string) $line->uom_factor,
-                    'business_date' => $postingDate,
+                    'business_date' => $sale->document_date->format('Y-m-d'),
                 ]);
 
                 return [
@@ -211,7 +217,7 @@ final class PhysicalSalePostingService
             $row['payload']['lines'][0]['debit'] = $amount;
             $row['payload']['lines'][1]['credit'] = $amount;
             $row['payload']['posting_metadata']['inventory_cost']['posted_amount'] = $amount;
-            $difference = \Brick\Math\BigDecimal::of($amount)->minus(\Brick\Math\BigDecimal::of((string) $row['payload']['posting_metadata']['inventory_cost']['exact_amount']));
+            $difference = BigDecimal::of($amount)->minus(BigDecimal::of((string) $row['payload']['posting_metadata']['inventory_cost']['exact_amount']));
             $row['payload']['posting_metadata']['inventory_cost']['rounding_difference'] = $difference->__toString();
             $row['payload']['posting_metadata']['inventory_cost']['rounding_direction'] = $difference->isZero() ? 'NONE' : ($difference->isPositive() ? 'LOSS' : 'GAIN');
         }

@@ -21,6 +21,7 @@ use App\Modules\Pos\Models\SalesReturnInventoryLink;
 use App\Modules\Wms\Models\CostAllocation;
 use App\Modules\Wms\Models\CostAllocationJournalLine;
 use App\Modules\Wms\Models\StockMovement;
+use App\Modules\Wms\Services\CostPropagationTriggerDispatcher;
 use App\Modules\Wms\Services\InventoryCostAllocationService;
 use App\Modules\Wms\Services\StockMovementService;
 use Illuminate\Http\Request;
@@ -40,6 +41,7 @@ final class PhysicalSaleCancellationService
         private readonly JournalPostingService $journals,
         private readonly CommissionCalculationService $commissions,
         private readonly AuditLogger $audit,
+        private readonly CostPropagationTriggerDispatcher $costPropagation,
     ) {}
 
     public function cancel(PhysicalSale $sale, Warehouse $warehouse, string $date, string $reason, User $actor, Request $request): PhysicalSale
@@ -106,6 +108,7 @@ final class PhysicalSaleCancellationService
                 'reversal_revision' => (int) $sale->reversal_revision + 1, 'reversal_key' => "physical-sale-cancel:{$sale->id}",
                 'void_reason' => $reason, 'voided_by' => $actor->id, 'voided_at' => now(), 'updated_by' => $actor->id])->save();
             $this->audit->record('pos.physical-sale.cancelled', $sale, $before, $sale->fresh()->only(array_keys($before)), $actor, $request);
+            $this->costPropagation->dispatchIfEnabled('SALES_RETURN', $return->id, (int) $return->reversal_revision, [], $actor->id);
 
             return $sale->fresh();
         }, 3);
@@ -180,7 +183,7 @@ final class PhysicalSaleCancellationService
             ]);
         }
 
-        return ['contract_version' => 1, 'event_code' => 'sales_credit_note', 'accounts' => $original->all()];
+        return ['contract_version' => 1, 'event_code' => 'sales_credit_note', 'credit_note_mode' => 'RETURN', 'accounts' => $original->all()];
     }
 
     private function assertNoPostedReceipts(PhysicalSale $sale): void

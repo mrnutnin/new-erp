@@ -15,7 +15,7 @@ final class IssueReturnLine extends Model
 
     protected function casts(): array
     {
-        return ['quantity' => 'decimal:8'];
+        return ['quantity' => 'decimal:8', 'reversal_movement_id' => 'integer', 'reversal_allocation_id' => 'integer'];
     }
 
     public function return()

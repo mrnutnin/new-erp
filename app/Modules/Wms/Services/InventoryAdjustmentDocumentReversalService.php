@@ -16,6 +16,7 @@ final class InventoryAdjustmentDocumentReversalService
     public function __construct(
         private readonly InventoryAdjustmentLiveReversalAdapter $lines,
         private readonly AuditLogger $audit,
+        private readonly CostPropagationTriggerDispatcher $costPropagation,
     ) {}
 
     public function reverse(InventoryAdjustmentDocument $document, string $date, string $reason, User $actor, Request $request): InventoryAdjustmentDocument
@@ -63,6 +64,7 @@ final class InventoryAdjustmentDocumentReversalService
                 'reversal_reason' => $reason, 'reversal_revision' => (int) $locked->reversal_revision + 1,
             ])->save();
             $this->audit->record('wms.inventory_adjustment.document_reversed', $locked, $before, $locked->fresh('lines')->toArray(), $actor, $request);
+            $this->costPropagation->dispatchIfEnabled('INVENTORY_ADJUSTMENT', $locked->id, (int) $locked->reversal_revision, [], $actor->id);
 
             return $locked->fresh('lines');
         }, 3);

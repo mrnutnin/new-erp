@@ -19,7 +19,7 @@ final class IssueReturn extends Model
 
     protected function casts(): array
     {
-        return ['document_date' => 'date:Y-m-d'];
+        return ['document_date' => 'date:Y-m-d', 'reversed_by' => 'integer', 'reversed_at' => 'datetime', 'reversal_revision' => 'integer'];
     }
 
     public function warehouse(): BelongsTo

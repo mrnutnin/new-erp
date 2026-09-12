@@ -148,6 +148,9 @@ final class SalesDocumentPostingService
                 $postingMetadata = ['contract_version' => 1, 'event_code' => $event, 'accounts' => $provenance];
                 $sourceOpenItem = null;
             }
+            if ($document->document_type === 'CREDIT_NOTE') {
+                $postingMetadata['credit_note_mode'] = 'NON_RETURN';
+            }
             $journal = $this->journals->post([
                 'source_type' => 'POS',
                 'source_id' => (string) $document->id,
@@ -200,7 +203,10 @@ final class SalesDocumentPostingService
             throw ValidationException::withMessages(['lines' => 'เอกสารต้องมีรายการ']);
         }
         if ($lines->contains(fn (SalesDocumentLine $line): bool => $line->item_id !== null)) {
-            throw ValidationException::withMessages(['lines' => 'รายการสินค้าคงคลังยังรอเปิด Stock Issue/COGS จึงยังลงบัญชีไม่ได้']);
+            $message = $document->document_type === 'CREDIT_NOTE'
+                ? 'ใบลดหนี้ขายหน้านี้เป็นแบบไม่คืนสินค้า หากมีสินค้ารับคืนให้สร้าง Sales Return จากเอกสารขายต้นทาง'
+                : 'รายการสินค้าคงคลังยังรอเปิด Stock Issue/COGS จึงยังลงบัญชีไม่ได้';
+            throw ValidationException::withMessages(['lines' => $message]);
         }
         $this->assertTaxCodes($lines);
         $this->assertWithholding($document, $calculation = SalesDocumentCalculator::calculate($lines->map(fn ($line) => [

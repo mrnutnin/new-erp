@@ -92,16 +92,18 @@ final class StockCostLayerService
 
         if ($movement->direction === 'IN') {
             $unitCost = $this->trustedUnitCost($movement);
-            $receiptValue = $quantity->multipliedBy(BigDecimal::of($unitCost));
+            $receiptValue = $this->trustedReceiptValue($movement, $quantity, $unitCost);
             $layer = StockCostLayer::firstOrCreate(['source_movement_id' => $movement->id], [
                 'warehouse_id' => $movement->warehouse_id, 'item_id' => $movement->item_id, 'uom_id' => $movement->uom_id,
                 'original_quantity' => $this->out($quantity), 'remaining_quantity' => $this->out($quantity),
                 'unit_cost' => $unitCost, 'method' => 'FIFO', 'business_date' => $movement->business_date,
             ]);
-            $this->allocations->record($movement, 'FIFO', [
-                'stock_cost_layer_id' => $layer->id, 'quantity' => $quantity, 'unit_cost' => $unitCost,
-                'value' => $receiptValue, 'idempotency_key' => "movement:{$movement->id}:receipt", ...$this->reversalParent($movement),
-            ]);
+            if ($movement->source_type !== 'WMS_PRODUCTION_RECEIPT') {
+                $this->allocations->record($movement, 'FIFO', [
+                    'stock_cost_layer_id' => $layer->id, 'quantity' => $quantity, 'unit_cost' => $unitCost,
+                    'value' => $receiptValue, 'idempotency_key' => "movement:{$movement->id}:receipt", ...$this->reversalParent($movement),
+                ]);
+            }
             $newOnHand = $onHand->plus($quantity);
             $newValue = $value->plus($receiptValue);
         } else {
@@ -146,6 +148,10 @@ final class StockCostLayerService
         }
 
         $available = $newOnHand->minus($reserved);
+        if ($newOnHand->isZero()) {
+            // Clear rounding residue when the final issue consumes the balance.
+            $newValue = BigDecimal::zero();
+        }
         if (($available->isNegative() || $newValue->isNegative()) && (($resolution['status'] ?? null) !== 'PENDING')) {
             throw ValidationException::withMessages(['stock' => 'ยอดคงเหลือหรือมูลค่าสินค้าติดลบ']);
         }
@@ -191,7 +197,8 @@ final class StockCostLayerService
         $average = BigDecimal::of((string) $balance->average_unit_cost);
 
         if ($movement->direction === 'IN') {
-            $result = CostingCalculator::average((string) $onHand, (string) $average, (string) $quantity, $unitCost);
+            $receiptValue = $this->trustedReceiptValue($movement, $quantity, $unitCost);
+            $result = CostingCalculator::average((string) $onHand, (string) $average, (string) $quantity, $unitCost, $receiptValue->__toString());
             $newOnHand = BigDecimal::of($result['quantity']);
             $newValue = BigDecimal::of($result['value']);
             $newAverage = BigDecimal::of($result['unit_cost']);
@@ -200,10 +207,12 @@ final class StockCostLayerService
                 'original_quantity' => $quantity->__toString(), 'remaining_quantity' => $quantity->__toString(),
                 'unit_cost' => $unitCost, 'method' => 'AVG', 'business_date' => $movement->business_date,
             ]);
-            $this->allocations->record($movement, 'AVG', [
-                'stock_cost_layer_id' => $layer->id, 'quantity' => $quantity, 'unit_cost' => $unitCost,
-                'value' => $quantity->multipliedBy(BigDecimal::of($unitCost)), 'idempotency_key' => "movement:{$movement->id}:receipt", ...$this->reversalParent($movement),
-            ]);
+            if ($movement->source_type !== 'WMS_PRODUCTION_RECEIPT') {
+                $this->allocations->record($movement, 'AVG', [
+                    'stock_cost_layer_id' => $layer->id, 'quantity' => $quantity, 'unit_cost' => $unitCost,
+                    'value' => $receiptValue, 'idempotency_key' => "movement:{$movement->id}:receipt", ...$this->reversalParent($movement),
+                ]);
+            }
         } else {
             if ($quantity->isGreaterThan($onHand) && (($resolution['status'] ?? null) !== 'PENDING')) {
                 throw ValidationException::withMessages(['stock' => 'ยอดคงเหลือไม่พอสำหรับ Movement นี้']);
@@ -235,6 +244,10 @@ final class StockCostLayerService
             $newAverage = $newOnHand->isZero() ? BigDecimal::zero() : $newValue->dividedBy($newOnHand, 8, RoundingMode::HALF_UP);
         }
         $available = $newOnHand->minus($reserved);
+        if ($newOnHand->isZero()) {
+            // Clear rounding residue when the final issue consumes the balance.
+            $newValue = BigDecimal::zero();
+        }
         if (($available->isNegative() || $newValue->isNegative()) && (($resolution['status'] ?? null) !== 'PENDING')) {
             throw ValidationException::withMessages(['stock' => 'ยอดคงเหลือหรือมูลค่าสินค้าติดลบ']);
         }
@@ -253,6 +266,23 @@ final class StockCostLayerService
         }
 
         return BigDecimal::of($value)->toScale(8, RoundingMode::UNNECESSARY)->__toString();
+    }
+
+    private function trustedReceiptValue(StockMovement $movement, BigDecimal $quantity, string $unitCost): BigDecimal
+    {
+        $metadata = is_array($movement->metadata) ? $movement->metadata : [];
+        $value = $metadata['receipt_value'] ?? null;
+        if ($value === null) {
+            return $quantity->multipliedBy(BigDecimal::of($unitCost));
+        }
+        if (! is_string($value) || ! preg_match('/^\d+(?:\.\d{1,8})?$/', $value)) {
+            throw ValidationException::withMessages(['receipt_value' => 'ต้นทุนรวมรับเข้าต้องเป็นทศนิยมไม่ติดลบ สูงสุด 8 ตำแหน่ง']);
+        }
+        $receiptValue = BigDecimal::of($value)->toScale(8, RoundingMode::UNNECESSARY);
+        if ($receiptValue->isZero()) {
+            throw ValidationException::withMessages(['receipt_value' => 'ต้นทุนรวมรับเข้าต้องมากกว่า 0']);
+        }
+        return $receiptValue;
     }
 
     private function reversalParent(StockMovement $movement): array

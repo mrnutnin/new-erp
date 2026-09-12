@@ -1,0 +1,14 @@
+@extends('Wms::layout')
+@section('title', 'Emergency Rebuild | WMS')
+@section('content')
+<div class="container-fluid px-3 px-lg-4 py-4">
+    <div class="d-flex flex-wrap justify-content-between align-items-end gap-3 mb-4">
+        <div><p class="eyebrow mb-2">WMS / COSTING CONTROL</p><h1 class="h3 mb-2">Emergency rebuild</h1><p class="text-secondary mb-0">คำนวณต้นทุนใหม่ทั้งสาขาตั้งแต่รายการแรกที่พบใน Cost Allocation</p></div>
+        <a class="btn btn-outline-secondary" href="{{ route('wms.stock-valuation.revaluation.index') }}">กลับ Revaluation Queue</a>
+    </div>
+    <div class="alert alert-danger border-0"><strong>Advanced Emergency Action</strong><br>การดำเนินการนี้สร้างงานคำนวณใหม่แบบ bounded เท่านั้น ไม่ลบ Stock, Cost Allocation เดิม หรือ Journal และต้องตรวจสอบผลลัพธ์ก่อน Apply ทุกครั้ง</div>
+    @if($errors->any())<div class="alert alert-danger border-0"><ul class="mb-0">@foreach($errors->all() as $error)<li>{{ $error }}</li>@endforeach</ul></div>@endif
+    <div class="row g-3 mb-4"><div class="col-md-3"><div class="card border-0 shadow-sm h-100"><div class="card-body"><div class="small text-secondary">สาขา</div><div class="h5 mb-0">{{ $emergency['branch']['code'] }} · {{ $emergency['branch']['name'] }}</div></div></div></div><div class="col-md-3"><div class="card border-0 shadow-sm h-100"><div class="card-body"><div class="small text-secondary">คลังที่เข้าถึง</div><div class="h4 mb-0">{{ count($emergency['warehouse_ids']) }}</div></div></div></div><div class="col-md-3"><div class="card border-0 shadow-sm h-100"><div class="card-body"><div class="small text-secondary">เริ่มคำนวณตั้งแต่</div><div class="h5 mb-0">{{ $emergency['start_date'] ?: '-' }}</div></div></div></div><div class="col-md-3"><div class="card border-0 shadow-sm h-100"><div class="card-body"><div class="small text-secondary">Partitions</div><div class="h4 mb-0">{{ data_get($emergency, 'preview.summary.partitions', 0) }}</div></div></div></div></div>
+    <div class="card border-0 shadow-sm"><div class="card-body"><h2 class="h5">ยืนยันการดำเนินการ</h2><p>พิมพ์ข้อความต่อไปนี้ให้ตรงทุกตัวอักษร:</p><code class="d-block bg-light rounded p-3 mb-3">{{ $emergency['typed_confirmation'] }}</code><form method="post" action="{{ route('wms.stock-valuation.emergency-rebuild.dispatch') }}" onsubmit="return confirm('ยืนยัน Emergency rebuild ระดับสาขาหรือไม่?')">@csrf<label class="form-label" for="typed-confirmation">ข้อความยืนยัน</label><input class="form-control mb-3" id="typed-confirmation" name="typed_confirmation" required><label class="form-label" for="emergency-reason">เหตุผล <span class="text-danger">*</span></label><textarea class="form-control mb-3" id="emergency-reason" name="reason" rows="4" minlength="20" maxlength="1000" required></textarea><button class="btn btn-danger" type="submit" @disabled(!$emergency['preview'] || !data_get($emergency, 'preview.summary.ready', false))>สร้าง Emergency rebuild</button></form></div></div>
+</div>
+@endsection

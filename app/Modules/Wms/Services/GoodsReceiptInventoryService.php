@@ -5,6 +5,7 @@ namespace App\Modules\Wms\Services;
 use App\Modules\Purchasing\Models\GoodsReceipt;
 use App\Modules\Wms\Models\StockMovement;
 use App\Modules\Wms\Support\GoodsReceiptMovementAdapter;
+use App\Modules\Wms\Support\PurchaseInventoryOwnership;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
@@ -24,6 +25,8 @@ final class GoodsReceiptInventoryService
      */
     public function postApprovedWithinTransaction(GoodsReceipt $receipt, ?int $actorId = null): array
     {
+        PurchaseInventoryOwnership::assertGoodsReceiptWriterDisabled();
+
         return DB::transaction(function () use ($receipt, $actorId): array {
             $locked = GoodsReceipt::query()->with('lines.goodsReceipt')->lockForUpdate()->findOrFail($receipt->id);
             if ($locked->status !== 'APPROVED') {

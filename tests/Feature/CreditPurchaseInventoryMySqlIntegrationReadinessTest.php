@@ -3,22 +3,25 @@
 namespace Tests\Feature;
 
 use App\Models\User;
-use App\Modules\Accounting\Services\JournalPostingService;
-use App\Modules\Purchasing\Models\PurchaseDocument;
-use App\Modules\Purchasing\Services\PurchaseReturnPostingService;
-use App\Modules\Purchasing\Services\PurchaseReturnService;
-use App\Modules\Purchasing\Services\PurchaseReturnCreditNoteService;
-use App\Modules\Wms\Services\PurchaseReturnPartialInventoryAdapter;
-use App\Modules\Finance\Models\PaymentTerm;
-use App\Modules\Finance\Models\DocumentSequence;
-use App\Modules\Finance\Support\PaymentDueDate;
 use App\Modules\Accounting\Models\Account;
 use App\Modules\Accounting\Models\JournalEntryLine;
+use App\Modules\Accounting\Services\JournalPostingService;
+use App\Modules\Finance\Models\DocumentSequence;
+use App\Modules\Finance\Models\PaymentTerm;
 use App\Modules\Finance\Services\OpenItemService;
+use App\Modules\Finance\Support\PaymentDueDate;
+use App\Modules\Purchasing\Models\PurchaseDocument;
+use App\Modules\Purchasing\Services\PurchaseReturnCreditNoteService;
+use App\Modules\Purchasing\Services\PurchaseReturnPostingService;
+use App\Modules\Purchasing\Services\PurchaseReturnService;
+use App\Modules\Settings\Services\GlobalSettings;
+use App\Modules\Wms\Models\CostRevaluationBatch;
 use App\Modules\Wms\Services\CreditPurchaseInventoryReversalAdapter;
 use App\Modules\Wms\Services\InventoryPurchaseProductionAdapter;
 use App\Modules\Wms\Services\InventoryReconciliationService;
 use App\Modules\Wms\Services\PurchaseDocumentPostingService;
+use App\Modules\Wms\Services\PurchaseReturnPartialInventoryAdapter;
+use App\Modules\Wms\Services\StockMovementService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -227,6 +230,7 @@ final class CreditPurchaseInventoryMySqlIntegrationReadinessTest extends TestCas
         }
         InventoryPurchaseIntegrationFixture::assertReady();
         $previous = config('erp.inventory.purchase_posting_enabled');
+        $previousAutoTrigger = config('erp.inventory.revaluation_auto_trigger_enabled');
         DB::beginTransaction();
         try {
             $invoice = InventoryPurchaseIntegrationFixture::createApprovedPurchase($actor);
@@ -248,6 +252,7 @@ final class CreditPurchaseInventoryMySqlIntegrationReadinessTest extends TestCas
             ], $actor, $request);
             $return = app(PurchaseReturnService::class)->approve(app(PurchaseReturnService::class)->submit($return, $actor), $actor);
             $before = $this->counts();
+            config(['erp.inventory.revaluation_auto_trigger_enabled' => true]);
             $posted = app(PurchaseReturnPostingService::class)->post($return, $return->return_date->format('Y-m-d'), $actor, $request, true);
             $after = $this->counts();
             $posted->load('creditNote');
@@ -259,9 +264,12 @@ final class CreditPurchaseInventoryMySqlIntegrationReadinessTest extends TestCas
             self::assertSame(1, DB::table('finance_open_items')->where('document_number', $posted->creditNote->document_number)->where('document_type', 'CREDIT_NOTE')->count());
             $movement = DB::table('wms_stock_movements')->where('id', $posted->creditNote->inventory_reversal_movement_id)->where('direction', 'OUT')->first();
             self::assertNotNull($movement);
+            self::assertSame('FULL', json_decode($movement->metadata, true, flags: JSON_THROW_ON_ERROR)['purchase_return_mode']);
+            self::assertTrue(CostRevaluationBatch::query()->where('source_document_type', 'PURCHASE_CREDIT_RETURN')->where('source_document_id', $posted->creditNote->id)->exists());
         } finally {
             DB::rollBack();
             config(['erp.inventory.purchase_posting_enabled' => $previous]);
+            config(['erp.inventory.revaluation_auto_trigger_enabled' => $previousAutoTrigger]);
         }
     }
 
@@ -306,6 +314,7 @@ final class CreditPurchaseInventoryMySqlIntegrationReadinessTest extends TestCas
             $cost = app(PurchaseReturnPartialInventoryAdapter::class)->linkCostJournal($return->fresh('creditNote'), $movement);
             self::assertSame('POSTED', $credit->status);
             self::assertSame('POSTED', $movement->status);
+            self::assertSame('PARTIAL', data_get($movement->metadata, 'purchase_return_mode'));
             self::assertSame('POSTED', $cost->status);
             self::assertSame(1, DB::table('wms_cost_allocation_journal_lines')->where('allocation_id', $cost->id)->count());
             self::assertSame('APPROVED', $return->fresh()->status);
@@ -326,10 +335,11 @@ final class CreditPurchaseInventoryMySqlIntegrationReadinessTest extends TestCas
         }
         InventoryPurchaseIntegrationFixture::assertReady();
         $settings = DB::table('company_settings')->where('id', 1)->firstOrFail();
+        $previousAutoTrigger = config('erp.inventory.revaluation_auto_trigger_enabled');
         DB::beginTransaction();
         try {
             DB::table('company_settings')->where('id', 1)->update(['inventory_costing_method' => 'FIFO', 'settings_version' => ((int) $settings->settings_version) + 1]);
-            app(\App\Modules\Settings\Services\GlobalSettings::class)->forget((int) $settings->settings_version);
+            app(GlobalSettings::class)->forget((int) $settings->settings_version);
             $invoice = InventoryPurchaseIntegrationFixture::createApprovedPurchase($actor);
             config(['erp.inventory.purchase_posting_enabled' => true]);
             $warehouse = $invoice->warehouse()->firstOrFail();
@@ -340,7 +350,7 @@ final class CreditPurchaseInventoryMySqlIntegrationReadinessTest extends TestCas
             $allocation = $invoice->lines->sole()->receiptAllocations->sole();
             $receipt = $allocation->goodsReceiptLine->goodsReceipt;
             $sourceMovement = DB::table('wms_stock_movements')->where('source_type', 'PURCHASING')->where('source_id', (string) $invoice->id)->where('direction', 'IN')->where('status', 'POSTED')->sole();
-            $movementService = app(\App\Modules\Wms\Services\StockMovementService::class);
+            $movementService = app(StockMovementService::class);
             $secondReceipt = $movementService->recordIntent([
                 'warehouse_id' => $warehouse->id, 'item_id' => $sourceMovement->item_id, 'uom_id' => $sourceMovement->uom_id,
                 'movement_type' => 'RECEIPT', 'direction' => 'IN', 'status' => 'DRAFT', 'quantity' => '20.00000000', 'base_quantity' => '20.00000000',
@@ -361,6 +371,7 @@ final class CreditPurchaseInventoryMySqlIntegrationReadinessTest extends TestCas
             $request->setUserResolver(fn (): User => $actor);
             $return = app(PurchaseReturnService::class)->createDraft(['goods_receipt_id' => $receipt->id, 'purchase_document_id' => $invoice->id, 'return_date' => $receipt->business_date->format('Y-m-d'), 'reason' => 'FIFO multi-layer return', 'idempotency_key' => 'integration:fifo-return:'.strtoupper(Str::random(12)), 'lines' => [['goods_receipt_line_id' => $allocation->goods_receipt_line_id, 'purchase_quantity' => '2.50000000']]], $actor, $request);
             $return = app(PurchaseReturnService::class)->approve(app(PurchaseReturnService::class)->submit($return, $actor), $actor);
+            config(['erp.inventory.revaluation_auto_trigger_enabled' => true]);
             $posted = app(PurchaseReturnPostingService::class)->postPartial($return, $return->return_date->format('Y-m-d'), $actor, $request, true);
             $credit = $posted->creditNote;
             $movement = DB::table('wms_stock_movements')->where('source_type', 'PURCHASING')->where('source_id', (string) $return->id)->where('direction', 'OUT')->latest('id')->first();
@@ -370,8 +381,10 @@ final class CreditPurchaseInventoryMySqlIntegrationReadinessTest extends TestCas
             self::assertSame('POSTED', $posted->status);
             self::assertSame('POSTED', $credit->status);
             self::assertSame('POSTED', $cost->status);
+            self::assertSame('PARTIAL', data_get(json_decode($movement->metadata, true, flags: JSON_THROW_ON_ERROR), 'purchase_return_mode'));
             self::assertSame(2, DB::table('wms_cost_allocation_journal_lines')->whereIn('allocation_id', $allocations->pluck('id'))->count());
             self::assertSame(1, DB::table('journal_entry_lines')->where('journal_entry_id', $credit->journal_entry_id)->where('account_id', $invoice->lines->sole()->account_id)->where('credit', '250.00000000')->count());
+            self::assertTrue(CostRevaluationBatch::query()->where('source_document_type', 'PURCHASE_RETURN')->where('source_document_id', $posted->id)->exists());
             $countsAfterPost = $this->counts();
             $retry = app(PurchaseReturnPostingService::class)->postPartial($posted, $posted->return_date->format('Y-m-d'), $actor, $request, true);
             self::assertSame('POSTED', $retry->status);
@@ -379,7 +392,8 @@ final class CreditPurchaseInventoryMySqlIntegrationReadinessTest extends TestCas
         } finally {
             DB::rollBack();
             DB::table('company_settings')->where('id', 1)->update((array) $settings);
-            app(\App\Modules\Settings\Services\GlobalSettings::class)->forget((int) $settings->settings_version);
+            app(GlobalSettings::class)->forget((int) $settings->settings_version);
+            config(['erp.inventory.revaluation_auto_trigger_enabled' => $previousAutoTrigger]);
         }
     }
 

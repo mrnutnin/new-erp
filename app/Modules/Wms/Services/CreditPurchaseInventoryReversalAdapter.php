@@ -5,9 +5,9 @@ namespace App\Modules\Wms\Services;
 use App\Models\User;
 use App\Modules\Accounting\Models\JournalEntry;
 use App\Modules\Accounting\Models\JournalEntryLine;
+use App\Modules\Purchasing\Models\PurchaseDocument;
 use App\Modules\Wms\Models\CostAllocation;
 use App\Modules\Wms\Models\CostAllocationJournalLine;
-use App\Modules\Purchasing\Models\PurchaseDocument;
 use App\Modules\Wms\Models\StockMovement;
 use App\Modules\Wms\Support\CreditPurchaseInventoryReversalContract;
 use Illuminate\Support\Facades\DB;
@@ -23,6 +23,7 @@ final class CreditPurchaseInventoryReversalAdapter
         private readonly StockMovementService $movements,
         private readonly InventoryReconciliationService $reconciliation,
         private readonly InventoryCostAllocationService $allocations,
+        private readonly CostPropagationTriggerDispatcher $costPropagation,
     ) {}
 
     public function reverse(PurchaseDocument $credit, string $date, string $reason, User $actor, bool $featureEnabled = false): PurchaseDocument
@@ -93,7 +94,11 @@ final class CreditPurchaseInventoryReversalAdapter
                 'credit_receipt_line_id' => $creditAlloc->goods_receipt_line_id, 'original_receipt_line_id' => $originalAlloc->goods_receipt_line_id,
                 'revision' => (int) $credit->reversal_revision,
             ], ['date' => $date, 'reason' => $reason]);
-            $reversalMovement = $this->movements->reverseWithinTransaction($movement, ['idempotency_key' => $plan['idempotency_key'].':movement', 'business_date' => $date, 'created_by' => $actor->id, 'parent_allocation_id' => $sourceAllocation->id]);
+            $reversalMovement = $this->movements->reverseWithinTransaction($movement, [
+                'idempotency_key' => $plan['idempotency_key'].':movement', 'business_date' => $date,
+                'created_by' => $actor->id, 'parent_allocation_id' => $sourceAllocation->id,
+                'metadata' => ['credit_note_mode' => 'RETURN', 'purchase_return_mode' => 'FULL', 'purchase_credit_note_id' => $credit->id],
+            ]);
             $reversalAllocations = CostAllocation::query()->where('stock_movement_id', $reversalMovement->id)->where('status', '!=', 'REVERSED')->lockForUpdate()->get();
             if ($reversalAllocations->count() !== 1) {
                 throw ValidationException::withMessages(['allocation' => 'Reversal Movement ต้องสร้าง Cost Allocation เพียงหนึ่งรายการ (พบ '.$reversalAllocations->count().')']);
@@ -111,6 +116,7 @@ final class CreditPurchaseInventoryReversalAdapter
                 throw ValidationException::withMessages(['reconciliation' => 'Reversal ต้องผ่าน reconciliation ก่อนบันทึก']);
             }
             $credit->forceFill(['reversal_status' => 'REVERSED', 'reversed_by' => $actor->id, 'reversed_at' => now(), 'reversal_reason' => $reason, 'reversal_revision' => $plan['revision'], 'inventory_reversal_movement_id' => $reversalMovement->id, 'inventory_reversal_allocation_id' => $reversalAllocation->id])->save();
+            $this->costPropagation->dispatchIfEnabled('PURCHASE_CREDIT_RETURN', $credit->id, (int) $plan['revision'], [], $actor->id);
 
             return $credit->fresh();
         }, 3);

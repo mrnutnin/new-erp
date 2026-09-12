@@ -15,9 +15,11 @@
         <div class="col-md-2"><button id="stock-load" class="btn btn-dark w-100" type="button">แสดงข้อมูล</button></div>
     </div></div>
     <div class="row g-3 mb-4">
-        <div class="col-md-4"><div class="card border-0 shadow-sm"><div class="card-body"><div class="text-secondary small">On-hand</div><div class="h4 mb-0" id="stock-on-hand">-</div></div></div></div>
-        <div class="col-md-4"><div class="card border-0 shadow-sm"><div class="card-body"><div class="text-secondary small">Reserved</div><div class="h4 mb-0" id="stock-reserved">-</div></div></div></div>
-        <div class="col-md-4"><div class="card border-0 shadow-sm"><div class="card-body"><div class="text-secondary small">Available</div><div class="h4 mb-0" id="stock-available">-</div></div></div></div>
+        <div class="col-6 col-lg"><div class="card border-0 shadow-sm h-100"><div class="card-body"><div class="text-secondary small">On-hand</div><div class="h4 mb-0" id="stock-on-hand">-</div></div></div></div>
+        <div class="col-6 col-lg"><div class="card border-0 shadow-sm h-100"><div class="card-body"><div class="text-secondary small">Reserved</div><div class="h4 mb-0" id="stock-reserved">-</div></div></div></div>
+        <div class="col-6 col-lg"><div class="card border-0 shadow-sm h-100"><div class="card-body"><div class="text-secondary small">Available</div><div class="h4 mb-0" id="stock-available">-</div></div></div></div>
+        <div class="col-6 col-lg"><div class="card border-0 shadow-sm h-100"><div class="card-body"><div class="text-secondary small">ต้นทุนเฉลี่ย</div><div class="h4 mb-0" id="stock-average-unit-cost">-</div></div></div></div>
+        <div class="col-6 col-lg"><div class="card border-0 shadow-sm h-100"><div class="card-body"><div class="text-secondary small">มูลค่าคงเหลือ</div><div class="h4 mb-0" id="stock-inventory-value">-</div></div></div></div>
     </div>
     <div class="card border-0 shadow-sm"><div class="card-body p-3 p-lg-4"><div class="table-responsive"><table id="stock-table" class="table table-hover w-100" data-url="{{ route('wms.stock.summary') }}" data-movement-url="{{ route('wms.stock.data') }}"><thead><tr><th>สินค้า</th><th>หน่วย</th><th>คงเหลือ ณ วันที่</th><th>ต้นทุนเฉลี่ย</th><th>มูลค่า</th><th>จัดการ</th></tr></thead></table></div></div></div>
 </div>
@@ -44,6 +46,8 @@ $(function () {
             $('#stock-on-hand').text(balance.on_hand || '-');
             $('#stock-reserved').text(balance.reserved || '-');
             $('#stock-available').text(balance.available || '-');
+            $('#stock-average-unit-cost').text(balance.average_unit_cost || '-');
+            $('#stock-inventory-value').text(balance.inventory_value || '-');
         }
     }));
     window.erpInitSelect2('#stock-item', {ajax: {url: '{{ route('wms.stock.item-options') }}', delay: 250, data: function (params) { return {q: params.term || '', page: params.page || 1}; }, processResults: function (data) { return data; }}});

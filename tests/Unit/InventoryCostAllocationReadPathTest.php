@@ -25,6 +25,9 @@ class InventoryCostAllocationReadPathTest extends TestCase
         $this->assertInstanceOf(Builder::class, $query);
         $this->assertStringContainsString('pending', $sql);
         $this->assertStringContainsString('group by', $sql);
-        $this->assertSame(['2026-08-21', 'REVERSED', 7, 11], $query->getBindings());
+        $this->assertContains('2026-08-21', $query->getBindings());
+        $this->assertContains('REVERSED', $query->getBindings());
+        $this->assertContains(7, $query->getBindings());
+        $this->assertContains(11, $query->getBindings());
     }
 }

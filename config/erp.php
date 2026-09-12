@@ -6,9 +6,22 @@ return [
         'token' => (string) env('ERP_SETUP_TOKEN', ''),
     ],
     'inventory' => [
-        // Closed by default until production integration/reconciliation QA is approved.
+        // Manual WMS Finished Receipt is a supported MVP flow. Set the env
+        // value to false to close the posting gate for a customer.
         'purchase_posting_enabled' => (bool) env('ERP_INVENTORY_PURCHASE_POSTING_ENABLED', false),
         'adjustment_posting_enabled' => (bool) env('ERP_INVENTORY_ADJUSTMENT_POSTING_ENABLED', false),
+        'manual_production_receipt_posting_enabled' => (bool) env('ERP_MANUAL_PRODUCTION_RECEIPT_POSTING_ENABLED', true),
+        // Phase 3 Apply remains closed until approval, stock and GL reconciliation gates are complete.
+        'revaluation_apply_enabled' => (bool) env('ERP_REVALUATION_APPLY_ENABLED', false),
+        'revaluation_gl_posting_enabled' => (bool) env('ERP_REVALUATION_GL_POSTING_ENABLED', false),
+        'revaluation_auto_trigger_enabled' => (bool) env('ERP_REVALUATION_AUTO_TRIGGER_ENABLED', false),
+        'revaluation_queue' => (string) env('ERP_REVALUATION_QUEUE', 'cost-propagation'),
+        'revaluation_scope_partition_chunk' => (int) env('ERP_REVALUATION_SCOPE_PARTITION_CHUNK', 50),
+        'revaluation_chunk_size' => (int) env('ERP_REVALUATION_CHUNK_SIZE', 250),
+        'revaluation_chunk_seconds' => (int) env('ERP_REVALUATION_CHUNK_SECONDS', 20),
+        'revaluation_calculation_lease_seconds' => (int) env('ERP_REVALUATION_CALCULATION_LEASE_SECONDS', 120),
+        'revaluation_calculation_node_budget' => (int) env('ERP_REVALUATION_CALCULATION_NODE_BUDGET', 1000),
+        'revaluation_memory_budget_mb' => (int) env('ERP_REVALUATION_MEMORY_BUDGET_MB', 128),
     ],
     'pdf' => [
         'profiles' => [

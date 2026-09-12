@@ -5,6 +5,7 @@ namespace App\Modules\Wms\Controllers;
 use App\Http\Controllers\Controller;
 use App\Modules\Platform\Services\AuditLogger;
 use App\Modules\Wms\Models\IssueType;
+use App\Modules\Wms\Models\IssueDocument;
 use App\Modules\Wms\Models\Item;
 use App\Modules\Wms\Models\StockPolicy;
 use App\Modules\Wms\Requests\SaveIssueTypeRequest;
@@ -130,20 +131,25 @@ class StockPolicyController extends Controller
 
     public function issueTypeData(Request $request): JsonResponse
     {
-        $warehouse = $request->attributes->get('selectedWarehouse');
-
-        return DataTables::eloquent(IssueType::query()->with('warehouse')->where('warehouse_id', $warehouse->id)->latest('id'))->addColumn('warehouse_label', fn (IssueType $row) => $row->warehouse?->code.' · '.$row->warehouse?->name)->addColumn('status_label', fn (IssueType $row) => $row->is_active ? 'ใช้งาน' : 'ปิดใช้งาน')->addColumn('edit_url', fn (IssueType $row) => auth()->user()->hasPermission('wms.issue-types.update') ? route('wms.issue-types.edit', $row) : null)->addColumn('delete_url', fn (IssueType $row) => auth()->user()->hasPermission('wms.issue-types.delete') ? route('wms.issue-types.destroy', $row) : null)->toJson();
+        return DataTables::eloquent(IssueType::query()->whereNull('warehouse_id')->latest('id'))
+            ->addColumn('warehouse_label', fn (IssueType $row) => 'ทั้งองค์กร')
+            ->addColumn('status_label', fn (IssueType $row) => $row->is_active ? 'ใช้งาน' : 'ปิดใช้งาน')
+            ->addColumn('in_use', fn (IssueType $row) => IssueDocument::withTrashed()
+                ->where('issue_type', $row->code)
+                ->exists())
+            ->addColumn('edit_url', fn (IssueType $row) => auth()->user()->hasPermission('wms.issue-types.update') ? route('wms.issue-types.edit', $row) : null)
+            ->addColumn('delete_url', fn (IssueType $row) => auth()->user()->hasPermission('wms.issue-types.delete') ? route('wms.issue-types.destroy', $row) : null)
+            ->toJson();
     }
 
     public function issueTypeCreate(Request $request): View
     {
-        return view('Wms::issue-types.form', ['issueType' => new IssueType(['is_active' => true]), 'warehouse' => $request->attributes->get('selectedWarehouse')]);
+        return view('Wms::issue-types.form', ['issueType' => new IssueType(['is_active' => true])]);
     }
 
     public function issueTypeStore(SaveIssueTypeRequest $request, AuditLogger $audit): JsonResponse
     {
-        $warehouse = $request->attributes->get('selectedWarehouse');
-        $type = IssueType::create([...$request->validated(), 'warehouse_id' => $warehouse->id, 'created_by' => $request->user()->id]);
+        $type = IssueType::create([...$request->validated(), 'warehouse_id' => null, 'created_by' => $request->user()->id]);
         $audit->record('wms.issue_type.created', $type, [], $type->toArray(), $request->user(), $request);
 
         return response()->json(['status' => true, 'msg' => 'เพิ่มประเภทการเบิกแล้ว', 'redirect' => route('wms.issue-types.index')]);
@@ -151,14 +157,14 @@ class StockPolicyController extends Controller
 
     public function issueTypeEdit(Request $request, IssueType $issueType): View
     {
-        $this->assertWarehouse($request, $issueType->warehouse_id);
+        abort_unless($issueType->warehouse_id === null, 404);
 
-        return view('Wms::issue-types.form', ['issueType' => $issueType, 'warehouse' => $request->attributes->get('selectedWarehouse')]);
+        return view('Wms::issue-types.form', ['issueType' => $issueType]);
     }
 
     public function issueTypeUpdate(SaveIssueTypeRequest $request, IssueType $issueType, AuditLogger $audit): JsonResponse
     {
-        $this->assertWarehouse($request, $issueType->warehouse_id);
+        abort_unless($issueType->warehouse_id === null, 404);
         $before = $issueType->toArray();
         $issueType->update($request->validated());
         $audit->record('wms.issue_type.updated', $issueType, $before, $issueType->fresh()->toArray(), $request->user(), $request);
@@ -168,7 +174,14 @@ class StockPolicyController extends Controller
 
     public function issueTypeDestroy(Request $request, IssueType $issueType, AuditLogger $audit): JsonResponse
     {
-        $this->assertWarehouse($request, $issueType->warehouse_id);
+        abort_unless($issueType->warehouse_id === null, 404);
+        abort_if(
+            IssueDocument::withTrashed()
+                ->where('issue_type', $issueType->code)
+                ->exists(),
+            422,
+            'ลบประเภทการเบิกไม่ได้ เนื่องจากมีเอกสารใบเบิกใช้งานแล้ว กรุณาปิดใช้งานแทน',
+        );
         $before = $issueType->toArray();
         $issueType->delete();
         $audit->record('wms.issue_type.deleted', $issueType, $before, ['deleted_at' => $issueType->deleted_at], $request->user(), $request);

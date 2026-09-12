@@ -39,6 +39,8 @@ class DatabasePreparationService
                 throw new \RuntimeException($output !== '' ? $output : 'Migration did not complete successfully.');
             }
 
+            $this->assertRequiredSchemaReady();
+
             $session = DB::transaction(function () use ($output): InstallationSession {
                 $session = InstallationSession::query()->latest('id')->first();
 
@@ -117,6 +119,56 @@ class DatabasePreparationService
             return Schema::hasTable('installation_sessions') && Schema::hasTable('installation_logs');
         } catch (Throwable) {
             return false;
+        }
+    }
+
+    private function assertRequiredSchemaReady(): void
+    {
+        $requiredColumns = [
+            'wms_inventory_adjustment_documents' => ['document_context'],
+            'wms_production_receipt_sources' => ['receipt_document_id', 'issue_document_id', 'issue_line_id', 'source_allocation_id', 'source_allocation_revision', 'consumed_quantity', 'consumed_value'],
+        ];
+        $requiredTables = ['wms_cost_revaluation_batches', 'wms_cost_revaluation_runs', 'wms_cost_revaluation_deltas', 'wms_production_receipt_sources'];
+
+        foreach ($requiredTables as $table) {
+            if (! Schema::hasTable($table)) {
+                throw new \RuntimeException("Required table is missing after Prepare Database: {$table}");
+            }
+        }
+        foreach (['applied_cost_allocation_id', 'applied_at', 'impact_bucket', 'target_event', 'target_warehouse_id', 'target_branch_id', 'stock_projection_delta_value'] as $column) {
+            if (! Schema::hasColumn('wms_cost_revaluation_deltas', $column)) {
+                throw new \RuntimeException("Required column is missing after Prepare Database: wms_cost_revaluation_deltas.{$column}");
+            }
+        }
+        foreach (['runtime_checkpoint', 'nodes_scanned', 'heartbeat_at', 'expected_partitions', 'completed_partitions', 'failed_partitions'] as $column) {
+            if (! Schema::hasColumn('wms_cost_revaluation_runs', $column)) {
+                throw new \RuntimeException("Required column is missing after Prepare Database: wms_cost_revaluation_runs.{$column}");
+            }
+        }
+        foreach (['batch_id', 'partition_key'] as $column) {
+            if (! Schema::hasColumn('wms_cost_revaluation_runs', $column)) {
+                throw new \RuntimeException("Required column is missing after Prepare Database: wms_cost_revaluation_runs.{$column}");
+            }
+        }
+        foreach (['source_document_type', 'source_document_id', 'document_date', 'source_revision', 'expected_root_lines', 'resolved_root_lines', 'expected_partitions', 'completed_partitions', 'failed_partitions', 'trigger_snapshot'] as $column) {
+            if (! Schema::hasColumn('wms_cost_revaluation_batches', $column)) {
+                throw new \RuntimeException("Required column is missing after Prepare Database: wms_cost_revaluation_batches.{$column}");
+            }
+        }
+        if (! collect(Schema::getIndexes('wms_cost_allocations'))->contains('name', 'wms_ca_timeline_partition_idx')) {
+            throw new \RuntimeException('Required index is missing after Prepare Database: wms_ca_timeline_partition_idx');
+        }
+
+        foreach ($requiredColumns as $table => $columns) {
+            if (! Schema::hasTable($table)) {
+                throw new \RuntimeException("Required table is missing after Prepare Database: {$table}");
+            }
+
+            foreach ($columns as $column) {
+                if (! Schema::hasColumn($table, $column)) {
+                    throw new \RuntimeException("Required column is missing after Prepare Database: {$table}.{$column}");
+                }
+            }
         }
     }
 }

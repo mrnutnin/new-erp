@@ -30,6 +30,19 @@ final class LegacyAllocationReviewUiContractTest extends TestCase
         $this->assertStringContainsString('window.erpDataTableDefaults', $view);
         $this->assertStringContainsString('window.erpExcelButton(table)', $view);
         $this->assertStringContainsString('serverSide: true', $view);
-        $this->assertStringContainsString('รายการ Cost Allocation', $view);
+        $this->assertStringContainsString('ตรวจสอบ Legacy Allocation', $view);
+    }
+
+    public function test_review_decision_endpoints_require_approve_permission_separate_from_view(): void
+    {
+        $routes = file_get_contents(__DIR__.'/../../app/Modules/Wms/Routes/web.php');
+
+        $this->assertStringContainsString("Route::get('/legacy-allocation-reviews/{review}', [LegacyAllocationReviewController::class, 'show'])->middleware('permission:wms.cost-allocation-reviews.view')", $routes);
+        $this->assertStringContainsString("Route::post('/legacy-allocation-reviews/{review}/resolve', [LegacyAllocationReviewController::class, 'resolve'])->middleware('permission:wms.cost-allocation-reviews.approve')", $routes);
+        $this->assertStringContainsString("Route::post('/legacy-allocation-reviews/{review}/approve-no-action', [LegacyAllocationReviewController::class, 'approveNoAction'])->middleware('permission:wms.cost-allocation-reviews.approve')", $routes);
+
+        $view = file_get_contents(__DIR__.'/../../app/Modules/Wms/Views/legacy-allocation-reviews/show.blade.php');
+        $this->assertStringContainsString("hasPermission('wms.cost-allocation-reviews.approve')", $view);
+        $this->assertStringContainsString('ไม่มีสิทธิ์ตัดสินใจ', $view);
     }
 }

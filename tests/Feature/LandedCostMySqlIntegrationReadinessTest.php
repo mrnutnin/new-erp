@@ -2,26 +2,30 @@
 
 namespace Tests\Feature;
 
-use App\Modules\Purchasing\Services\LandedCostService;
-use App\Modules\Purchasing\Services\LandedCostPostingService;
+use App\Models\User;
+use App\Modules\Accounting\Models\Account;
 use App\Modules\Purchasing\Models\GoodsReceipt;
+use App\Modules\Purchasing\Services\LandedCostPostingService;
+use App\Modules\Purchasing\Services\LandedCostService;
 use App\Modules\Wms\Models\CostAllocation;
 use App\Modules\Wms\Models\CostRecalculationRequest;
-use App\Modules\Wms\Services\GoodsReceiptInventoryService;
-use App\Modules\Accounting\Models\Account;
+use App\Modules\Wms\Models\CostRevaluationBatch;
+use App\Modules\Wms\Models\StockMovement;
+use App\Modules\Wms\Services\InventoryPurchaseProductionAdapter;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 use Tests\Support\InventoryPurchaseIntegrationFixture;
 use Tests\TestCase;
 
 final class LandedCostMySqlIntegrationReadinessTest extends TestCase
 {
-    public function test_multiple_posted_receipts_allocate_landed_cost_per_receipt(): void
+    public function test_landed_cost_rejects_receipts_without_a_posted_purchase_invoice_owner(): void
     {
         if (config('database.default') !== 'mysql' || env('ERP_RUN_MYSQL_INTEGRATION') !== '1') {
             $this->markTestSkipped('ต้องรันใน dedicated MySQL integration process ด้วย ERP_RUN_MYSQL_INTEGRATION=1 เท่านั้น');
         }
 
-        $actor = \App\Models\User::query()->findOrFail(1);
+        $actor = User::query()->findOrFail(1);
         $expense = Account::query()->whereHas('type', fn ($query) => $query->where('code', 'EXPENSE'))->where('is_active', true)->where('is_postable', true)->firstOrFail();
         DB::beginTransaction();
         try {
@@ -51,11 +55,8 @@ final class LandedCostMySqlIntegrationReadinessTest extends TestCase
                 ],
             ]);
 
-            $inventory = app(GoodsReceiptInventoryService::class);
-            $inventory->postApprovedWithinTransaction($chain['receipt']->fresh('lines'), $actor->id);
-            $inventory->postApprovedWithinTransaction($second->fresh('lines'), $actor->id);
-
-            $document = app(LandedCostService::class)->createDraft([
+            $this->expectException(ValidationException::class);
+            app(LandedCostService::class)->createDraft([
                 'warehouse_id' => $chain['foundation']['warehouse']->id, 'document_number' => 'LC-INT-'.strtoupper(bin2hex(random_bytes(5))),
                 'business_date' => $chain['receipt']->business_date->format('Y-m-d'), 'allocation_basis' => 'VALUE',
                 'receipt_ids' => [$chain['receipt']->id, $second->id],
@@ -63,10 +64,6 @@ final class LandedCostMySqlIntegrationReadinessTest extends TestCase
                 'idempotency_key' => 'landed-cost-multi-integration:'.bin2hex(random_bytes(8)),
             ], $actor);
 
-            self::assertCount(2, $document->receipts);
-            self::assertCount(2, $document->allocations);
-            self::assertSame(['50.00000000', '50.00000000'], $document->allocations->sortBy('goods_receipt_line_id')->pluck('allocated_amount')->values()->all());
-            self::assertSame(['50.00000000', '50.00000000'], $document->receipts->sortBy('goods_receipt_id')->pluck('allocated_amount')->values()->all());
         } finally {
             DB::rollBack();
         }
@@ -78,27 +75,24 @@ final class LandedCostMySqlIntegrationReadinessTest extends TestCase
             $this->markTestSkipped('ต้องรันใน dedicated MySQL integration process ด้วย ERP_RUN_MYSQL_INTEGRATION=1 เท่านั้น');
         }
 
-        $actor = \App\Models\User::query()->findOrFail(1);
+        $actor = User::query()->findOrFail(1);
         $expense = Account::query()->whereHas('type', fn ($query) => $query->where('code', 'EXPENSE'))->where('is_active', true)->where('is_postable', true)->firstOrFail();
         DB::beginTransaction();
+        $previousAutoTrigger = config('erp.inventory.revaluation_auto_trigger_enabled');
         try {
-            $chain = InventoryPurchaseIntegrationFixture::createProcurementChain($actor);
-            $receiptLine = $chain['receipt']->lines()->firstOrFail();
-            $receiptLine->update(['conversion_snapshot' => [
-                'purchase_uom_id' => $receiptLine->purchase_uom_id,
-                'stock_uom_id' => $receiptLine->stock_uom_id,
-                'factor' => (string) $receiptLine->factor,
-                'business_date' => $chain['receipt']->business_date->format('Y-m-d'),
-            ]]);
-            $movements = app(GoodsReceiptInventoryService::class)->postApprovedWithinTransaction($chain['receipt'], $actor->id);
-            self::assertCount(1, $movements);
+            $invoice = InventoryPurchaseIntegrationFixture::createApprovedPurchase($actor);
+            $receipt = $invoice->lines->firstOrFail()->receiptAllocations->firstOrFail()->goodsReceiptLine->goodsReceipt;
+            $warehouse = $invoice->warehouse()->firstOrFail();
+            $invoice = app(InventoryPurchaseProductionAdapter::class)->post($invoice, $warehouse, $actor, null, true);
+            $movement = StockMovement::query()
+                ->where('source_type', 'PURCHASING')->where('source_id', (string) $invoice->id)->where('status', 'POSTED')->sole();
 
             $document = app(LandedCostService::class)->createDraft([
-                'warehouse_id' => $chain['foundation']['warehouse']->id,
+                'warehouse_id' => $warehouse->id,
                 'document_number' => 'LC-INT-'.strtoupper(bin2hex(random_bytes(5))),
-                'business_date' => $chain['receipt']->business_date->format('Y-m-d'),
+                'business_date' => $receipt->business_date->format('Y-m-d'),
                 'allocation_basis' => 'VALUE',
-                'receipt_ids' => [$chain['receipt']->id],
+                'receipt_ids' => [$receipt->id],
                 'lines' => [['account_id' => $expense->id, 'amount' => '37.50', 'description' => 'Integration freight']],
                 'idempotency_key' => 'landed-cost-integration:'.bin2hex(random_bytes(8)),
             ], $actor);
@@ -114,6 +108,7 @@ final class LandedCostMySqlIntegrationReadinessTest extends TestCase
             $document = app(LandedCostService::class)->approve($document, $actor);
             self::assertSame('APPROVED', $document->status);
 
+            config(['erp.inventory.revaluation_auto_trigger_enabled' => true]);
             $posted = app(LandedCostPostingService::class)->postApproved($document, ['period_open' => true, 'reconciliation_ready' => true], $actor);
             self::assertSame('POSTED', $posted->status);
             $landedAllocation = $posted->allocations()->with('wmsCostAllocation')->sole();
@@ -122,7 +117,10 @@ final class LandedCostMySqlIntegrationReadinessTest extends TestCase
             self::assertSame('RECOST', $landedAllocation->wmsCostAllocation->allocation_type);
             self::assertSame('POSTED', $landedAllocation->wmsCostAllocation->status);
             self::assertNotNull($landedAllocation->wmsCostAllocation->journal_entry_id);
-            self::assertTrue(CostRecalculationRequest::query()->where('idempotency_key', "landed-cost:{$posted->id}:movement:{$movements[0]->id}")->exists());
+            self::assertTrue(CostRecalculationRequest::query()->where('idempotency_key', "landed-cost:{$posted->id}:movement:{$movement->id}")->exists());
+            $batch = CostRevaluationBatch::query()->where('source_document_type', 'LANDED_COST')->where('source_document_id', $posted->id)->sole();
+            self::assertSame($posted->business_date->format('Y-m-d'), $batch->document_date->format('Y-m-d'));
+            self::assertNotEmpty(data_get($batch->trigger_snapshot, 'proposed_unit_costs'));
 
             $retry = app(LandedCostPostingService::class)->postApproved($posted, ['period_open' => true, 'reconciliation_ready' => true], $actor);
             self::assertSame('POSTED', $retry->status);
@@ -130,6 +128,7 @@ final class LandedCostMySqlIntegrationReadinessTest extends TestCase
             self::assertSame(1, CostAllocation::query()->where('allocation_type', 'RECOST')->where('parent_allocation_id', $landedAllocation->wmsCostAllocation->parent_allocation_id)->count());
         } finally {
             DB::rollBack();
+            config(['erp.inventory.revaluation_auto_trigger_enabled' => $previousAutoTrigger]);
         }
     }
 }

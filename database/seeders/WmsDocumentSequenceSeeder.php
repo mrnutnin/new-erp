@@ -13,6 +13,27 @@ final class WmsDocumentSequenceSeeder extends Seeder
     {
         $userId = User::query()->value('id');
 
+        foreach ([
+            ['INVENTORY_ISSUE', 'ใบเบิกสินค้า', 'ISSUE'],
+            ['INVENTORY_RETURN', 'ใบรับคืนจากการเบิก', 'IRTN'],
+            ['PURCHASE_RETURN', 'ใบคืนซื้อ', 'PRT'],
+            ['PURCHASE_CREDIT_NOTE', 'ใบลดหนี้ซื้อ', 'PCN'],
+        ] as [$type, $name, $prefix]) {
+            DocumentSequence::query()->firstOrCreate(
+                ['warehouse_id' => null, 'document_type' => $type],
+                [
+                    'name' => $name,
+                    'prefix' => $prefix,
+                    'number_format' => '{PREFIX}-{YYYY}-{NUMBER:6}',
+                    'reset_rule' => 'YEARLY',
+                    'next_number' => 1,
+                    'is_active' => true,
+                    'number_reuse_policy' => 'NEVER_REUSE',
+                    'created_by' => $userId,
+                ],
+            );
+        }
+
         Warehouse::query()->whereNull('deleted_at')->each(function (Warehouse $warehouse) use ($userId): void {
             foreach ([
                 ['INVENTORY_ISSUE', 'ใบเบิกสินค้า', 'ISSUE'],

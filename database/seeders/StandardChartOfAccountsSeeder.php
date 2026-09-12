@@ -108,6 +108,8 @@ class StandardChartOfAccountsSeeder extends Seeder
             ['code' => '52400', 'name' => 'ขาดทุนจากการปัดเศษต้นทุน', 'type' => 'EXPENSE', 'parent' => '50000', 'level' => 2, 'normal' => 'DEBIT', 'control' => null, 'postable' => true],
             ['code' => '52500', 'name' => 'ขาดทุนจากการจำหน่ายสินทรัพย์', 'type' => 'EXPENSE', 'parent' => '50000', 'level' => 2, 'normal' => 'DEBIT', 'control' => null, 'postable' => true],
             ['code' => '52600', 'name' => 'ผลต่างการผลิต', 'type' => 'EXPENSE', 'parent' => '50000', 'level' => 2, 'normal' => 'DEBIT', 'control' => null, 'postable' => true],
+            ['code' => '52700', 'name' => 'ค่าใช้จ่ายจากการเบิกสินค้า', 'type' => 'EXPENSE', 'parent' => '50000', 'level' => 2, 'normal' => 'DEBIT', 'control' => null, 'postable' => true],
+            ['code' => '52800', 'name' => 'ผลต่างต้นทุนคืนซื้อ', 'type' => 'EXPENSE', 'parent' => '50000', 'level' => 2, 'normal' => 'DEBIT', 'control' => null, 'postable' => true],
             ['code' => '54000', 'name' => 'ค่าเสื่อมราคา', 'type' => 'EXPENSE', 'parent' => '50000', 'level' => 2, 'normal' => 'DEBIT', 'control' => null, 'postable' => true],
             ['code' => '54100', 'name' => 'ขาดทุนจากการด้อยค่าสินทรัพย์', 'type' => 'EXPENSE', 'parent' => '50000', 'level' => 2, 'normal' => 'DEBIT', 'control' => null, 'postable' => true],
         ];
@@ -129,6 +131,7 @@ class StandardChartOfAccountsSeeder extends Seeder
             'ACCUMULATED_DEPRECIATION' => '14100', 'IMPAIRMENT_LOSS' => '54100', 'ACCUMULATED_IMPAIRMENT' => '14200',
             'DISPOSAL_CLEARING' => '15150', 'DISPOSAL_GAIN' => '42500', 'DISPOSAL_LOSS' => '52500',
             'WIP' => '13500', 'FINISHED_GOODS' => '14500', 'PRODUCTION_VARIANCE' => '52600',
+            'ISSUE_EXPENSE' => '52700', 'PURCHASE_RETURN_VARIANCE' => '52800',
         ];
 
         foreach ($roles as $role => $code) {

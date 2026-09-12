@@ -8,9 +8,11 @@ use App\Models\Role;
 use App\Modules\Installer\Models\InstallationSession;
 use App\Modules\Installer\Models\SystemSeedVersion;
 use Database\Seeders\JournalBookSeeder;
+use Database\Seeders\ProductionFinishedReceiptAccountMappingSeeder;
 use Database\Seeders\RbacSeeder;
 use Database\Seeders\StandardChartOfAccountsSeeder;
 use Database\Seeders\SystemDocumentSequenceSeeder;
+use Database\Seeders\WmsIssueTypeSeeder;
 use Illuminate\Support\Facades\DB;
 use Throwable;
 
@@ -18,12 +20,14 @@ class SystemDefaultOrchestrator
 {
     /** @var array<string, string> */
     private const SEED_VERSIONS = [
-        'core.rbac' => '1.0',
+        'core.rbac' => '1.3',
         'core.programs' => '1.0',
         'accounting.journal_books' => '1.0',
-        'accounting.chart_of_accounts' => '1.1',
-        'core.document_sequences' => '1.0',
+        'accounting.chart_of_accounts' => '1.5',
+        'wms.production_finished_receipt_mapping' => '1.0',
+        'core.document_sequences' => '1.1',
         'core.role_templates' => '1.0',
+        'wms.issue_types' => '1.2',
     ];
 
     public function __construct(private readonly InstallerStateStore $stateStore) {}
@@ -70,20 +74,32 @@ class SystemDefaultOrchestrator
                 app(StandardChartOfAccountsSeeder::class)->run();
                 $chartOfAccounts = $this->version('accounting.chart_of_accounts');
 
+                $productionReceiptMapping = null;
+                if (Program::query()->where('code', 'wms')->where('is_enabled', true)->exists()) {
+                    app(ProductionFinishedReceiptAccountMappingSeeder::class)->run();
+                    $productionReceiptMapping = $this->version('wms.production_finished_receipt_mapping');
+                }
+
                 app(SystemDocumentSequenceSeeder::class)->run();
                 $documentSequences = $this->version('core.document_sequences');
+
+                $issueTypes = null;
+                if (Program::query()->where('code', 'wms')->where('is_enabled', true)->exists()) {
+                    app(WmsIssueTypeSeeder::class)->run();
+                    $issueTypes = $this->version('wms.issue_types');
+                }
 
                 $roles = $this->seedRoleTemplates();
                 $roleTemplates = $this->version('core.role_templates');
 
                 $this->markStep($session, 'system-defaults', 'COMPLETED', [
-                    'seed_versions' => [$rbac, $programs, $journalBooks, $chartOfAccounts, $documentSequences, $roleTemplates],
+                    'seed_versions' => [$rbac, $programs, $journalBooks, $chartOfAccounts, $productionReceiptMapping, $documentSequences, $roleTemplates, $issueTypes],
                     'role_templates' => $roles,
                 ]);
 
                 $session->forceFill(['status' => 'DEFAULTS_READY', 'progress' => max(30, (int) $session->progress)])->save();
 
-                return ['seed_count' => 6];
+                return ['seed_count' => 6 + ($productionReceiptMapping === null ? 0 : 1) + ($issueTypes === null ? 0 : 1)];
             });
 
             $this->stateStore->write([

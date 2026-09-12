@@ -5,6 +5,8 @@ namespace App\Modules\Wms\Controllers;
 use App\Http\Controllers\Controller;
 use App\Models\AuditLog;
 use App\Modules\Wms\Models\CostAllocationReview;
+use App\Modules\Wms\Services\LegacyAllocationReviewCorrectionService;
+use App\Modules\Wms\Services\LegacyAllocationReviewDecisionService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
@@ -35,9 +37,9 @@ final class LegacyAllocationReviewController extends Controller
             ->addColumn('movement_label', fn ($row) => $row->allocation?->movement
                 ? trim($row->allocation->movement->movement_type.' / '.$row->allocation->movement->direction)
                 : '-')
-            ->addColumn('status_label', fn () => 'เปิดรอตรวจสอบ')
-            ->addColumn('action', fn ($row) => '<a class="btn btn-sm btn-outline-primary" title="ดูหลักฐาน" aria-label="ดูหลักฐาน" href="'.e(route('wms.legacy-allocation-reviews.show', $row)).'"><i class="bx bx-search-alt-2" aria-hidden="true"></i></a>')
-            ->rawColumns(['action'])
+            ->addColumn('status_label', fn () => '<span class="badge app-status-warning">เปิดรอตรวจสอบ</span>')
+            ->addColumn('action', fn ($row) => '<a class="btn btn-sm btn-app-soft" href="'.e(route('wms.legacy-allocation-reviews.show', $row)).'"><i class="bx bx-search-alt-2 me-1" aria-hidden="true"></i>เปิดตรวจหลักฐาน</a>')
+            ->rawColumns(['status_label', 'action'])
             ->toJson();
     }
 
@@ -58,6 +60,37 @@ final class LegacyAllocationReviewController extends Controller
             ->latest('created_at')
             ->get();
 
-        return view('Wms::legacy-allocation-reviews.show', compact('review', 'audit'));
+        $movement = $review->allocation?->movement;
+        $sourceDocument = null;
+        if ($movement?->source_type === 'ISSUE_RETURN') {
+            $sourceDocument = \App\Modules\Wms\Models\IssueReturn::query()->find((int) $movement->source_id);
+            if (! $sourceDocument && $movement->source_reference) {
+                $sourceDocument = \App\Modules\Wms\Models\IssueReturn::query()
+                    ->where('document_number', $movement->source_reference)
+                    ->first();
+            }
+        }
+
+        return view('Wms::legacy-allocation-reviews.show', compact('review', 'audit', 'sourceDocument'));
+    }
+
+    public function resolve(Request $request, CostAllocationReview $review, LegacyAllocationReviewCorrectionService $corrections)
+    {
+        $request->validate(['reason' => ['required', 'string', 'min:10', 'max:500']]);
+        $warehouseId = (int) $request->attributes->get('selectedWarehouse')?->id;
+        abort_unless((int) $review->allocation()->value('warehouse_id') === $warehouseId, 404);
+        $result = $corrections->resolve($review, $request->user(), $request, (string) $request->string('reason'));
+
+        return redirect()->route('wms.legacy-allocation-reviews.show', $review)->with('success', 'แก้ไข Legacy Review และบังคับวันที่ Movement ให้เท่ากับ Document date แล้ว');
+    }
+
+    public function approveNoAction(Request $request, CostAllocationReview $review, LegacyAllocationReviewDecisionService $decisions)
+    {
+        $request->validate(['reason' => ['required', 'string', 'min:10', 'max:500']]);
+        $warehouseId = (int) $request->attributes->get('selectedWarehouse')?->id;
+        abort_unless((int) $review->allocation()->value('warehouse_id') === $warehouseId, 404);
+        $decisions->approveNoAction($review, $request->user(), $request, (string) $request->string('reason'));
+
+        return redirect()->route('wms.legacy-allocation-reviews.show', $review)->with('success', 'Accounting ยืนยันแล้ว: Review นี้ไม่ต้องแก้ไข');
     }
 }

@@ -28,6 +28,14 @@ final class PhysicalSaleStockPostingIntent
             throw ValidationException::withMessages(['document_number' => 'ต้องมีเลขที่เอกสารขายจริง']);
         }
         $preview = PhysicalSalePostingContract::preview($document);
+        $documentDate = trim((string) ($document['document_date'] ?? ''));
+        $businessDate = trim((string) ($document['business_date'] ?? ''));
+        if ($documentDate !== '') {
+            if ($businessDate !== '' && $businessDate !== $documentDate) {
+                throw ValidationException::withMessages(['business_date' => 'วันที่ Movement ต้องตรงกับวันที่เอกสาร']);
+            }
+            $businessDate = $documentDate;
+        }
         $lines = collect(array_values($document['lines']))->keyBy(fn (array $line, int $index): int => (int) ($line['line_number'] ?? ($index + 1)));
         $intents = [];
 
@@ -47,7 +55,7 @@ final class PhysicalSaleStockPostingIntent
                 'status' => 'DRAFT',
                 'quantity' => $line['stock_quantity'],
                 'base_quantity' => $line['stock_quantity'],
-                'business_date' => $document['business_date'],
+                'business_date' => $businessDate,
                 'source_type' => 'POS',
                 'source_id' => (string) $saleId,
                 'source_reference' => $number,

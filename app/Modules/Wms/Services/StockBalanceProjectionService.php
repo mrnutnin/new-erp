@@ -20,8 +20,49 @@ final class StockBalanceProjectionService
      */
     public function rebuild(int $warehouseId, int $itemId, int $uomId): StockBalance
     {
-        return DB::transaction(function () use ($warehouseId, $itemId, $uomId): StockBalance {
-            $key = ['warehouse_id' => $warehouseId, 'item_id' => $itemId, 'uom_id' => $uomId];
+        $key = ['warehouse_id' => $warehouseId, 'item_id' => $itemId, 'uom_id' => $uomId];
+        $allocationValues = DB::table('wms_cost_allocations')
+            ->where($key)
+            ->where('status', '!=', 'REVERSED')
+            ->selectRaw('stock_movement_id, SUM(value) AS movement_value')
+            ->groupBy('stock_movement_id');
+
+        // Replay one bounded stock scope in document-date order. A plain
+        // SUM(value) is wrong after an OUT movement consumes the whole pool:
+        // the next receipt must start from zero, not inherit historical value.
+        $onHand = BigDecimal::zero();
+        $inventoryValue = BigDecimal::zero();
+        StockMovement::query()
+            ->leftJoinSub($allocationValues, 'allocation_values', fn ($join) => $join->on('allocation_values.stock_movement_id', '=', 'wms_stock_movements.id'))
+            ->where($key)
+            ->where('status', 'POSTED')
+            ->orderBy('business_date')
+            ->orderBy('id')
+            ->select(['wms_stock_movements.direction', 'wms_stock_movements.base_quantity'])
+            ->selectRaw('COALESCE(allocation_values.movement_value, 0) AS movement_value')
+            ->cursor()
+            ->each(function (object $movement) use (&$onHand, &$inventoryValue): void {
+                $quantity = BigDecimal::of((string) $movement->base_quantity);
+                $onHand = $movement->direction === 'IN' ? $onHand->plus($quantity) : $onHand->minus($quantity);
+                $inventoryValue = $inventoryValue->plus(BigDecimal::of((string) $movement->movement_value));
+
+                if ($onHand->isZero()) {
+                    $inventoryValue = BigDecimal::zero();
+                }
+            });
+
+        $reserved = DB::table('wms_stock_reservations')
+            ->where($key)->where('status', 'OPEN')->sum('quantity');
+        $onHand = $onHand->toScale(8, RoundingMode::UNNECESSARY);
+        $reserved = BigDecimal::of((string) $reserved)->toScale(8, RoundingMode::UNNECESSARY);
+        $inventoryValue = $onHand->isZero()
+            ? BigDecimal::zero()
+            : $inventoryValue->toScale(2, RoundingMode::HALF_UP);
+        $averageUnitCost = $onHand->isPositive()
+            ? $inventoryValue->dividedBy($onHand, 8, RoundingMode::HALF_UP)
+            : BigDecimal::zero();
+
+        return DB::transaction(function () use ($key, $onHand, $reserved, $inventoryValue, $averageUnitCost): StockBalance {
             StockBalance::query()->insertOrIgnore([
                 ...$key,
                 'on_hand' => '0', 'reserved' => '0', 'available' => '0',
@@ -29,21 +70,6 @@ final class StockBalanceProjectionService
                 'created_at' => now(), 'updated_at' => now(),
             ]);
             $balance = StockBalance::query()->where($key)->lockForUpdate()->firstOrFail();
-            $onHand = StockMovement::query()
-                ->where($key)->where('status', 'POSTED')
-                ->selectRaw("COALESCE(SUM(CASE WHEN direction = 'IN' THEN base_quantity ELSE -base_quantity END), 0) AS quantity")
-                ->value('quantity');
-            $reserved = DB::table('wms_stock_reservations')
-                ->where($key)->where('status', 'OPEN')->sum('quantity');
-            $inventoryValue = DB::table('wms_cost_allocations')
-                ->where($key)->where('status', '!=', 'REVERSED')
-                ->sum('value');
-            $onHand = BigDecimal::of((string) $onHand)->toScale(8, RoundingMode::UNNECESSARY);
-            $reserved = BigDecimal::of((string) $reserved)->toScale(8, RoundingMode::UNNECESSARY);
-            $inventoryValue = BigDecimal::of((string) $inventoryValue)->toScale(2, RoundingMode::HALF_UP);
-            $averageUnitCost = $onHand->isPositive()
-                ? $inventoryValue->dividedBy($onHand, 8, RoundingMode::HALF_UP)
-                : BigDecimal::zero();
             $balance->update([
                 'on_hand' => $onHand->__toString(),
                 'reserved' => $reserved->__toString(),

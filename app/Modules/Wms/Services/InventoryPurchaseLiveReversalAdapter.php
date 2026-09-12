@@ -6,9 +6,9 @@ use App\Models\User;
 use App\Modules\Accounting\Models\JournalEntry;
 use App\Modules\Accounting\Models\JournalEntryLine;
 use App\Modules\Accounting\Services\JournalPostingService;
+use App\Modules\Purchasing\Models\PurchaseDocument;
 use App\Modules\Wms\Models\CostAllocation;
 use App\Modules\Wms\Models\CostAllocationJournalLine;
-use App\Modules\Purchasing\Models\PurchaseDocument;
 use App\Modules\Wms\Models\StockMovement;
 use App\Modules\Wms\Support\InventoryPurchaseReversalContract;
 use Illuminate\Support\Facades\DB;
@@ -26,6 +26,7 @@ final class InventoryPurchaseLiveReversalAdapter
         private readonly StockMovementService $movements,
         private readonly InventoryCostAllocationService $allocations,
         private readonly InventoryReconciliationService $reconciliation,
+        private readonly CostPropagationTriggerDispatcher $costPropagation,
     ) {}
 
     public function reverse(PurchaseDocument $document, string $date, string $reason, User $actor, bool $featureEnabled = false): PurchaseDocument
@@ -140,6 +141,7 @@ final class InventoryPurchaseLiveReversalAdapter
                 'reversed_by' => $actor->id, 'reversed_at' => now(), 'reversal_reason' => $reason,
                 'reversal_revision' => $plan['revision'],
             ])->save();
+            $this->costPropagation->dispatchIfEnabled('PURCHASE_DOCUMENT', $locked->id, (int) $plan['revision'], [], $actor->id);
 
             return $locked->fresh();
         }, 3);

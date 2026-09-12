@@ -30,6 +30,7 @@ class DocumentSequenceController extends Controller
         'INVENTORY_ADJUSTMENT' => 'ปรับปรุงสินค้าคงเหลือ',
         'INVENTORY_ISSUE' => 'ใบเบิกสินค้า',
         'INVENTORY_RETURN' => 'ใบรับคืนจากการเบิก',
+        'PRODUCTION_FINISHED_RECEIPT' => 'ใบรับสินค้าผลิตเสร็จ',
         'PHYSICAL_SALE_HS' => 'ใบขายสด/ใบกำกับภาษี',
         'PHYSICAL_SALE_IV' => 'ใบส่งสินค้า/ใบกำกับภาษี',
         'SALES_RETURN' => 'ใบรับคืนสินค้า',

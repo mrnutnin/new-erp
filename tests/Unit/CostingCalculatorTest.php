@@ -36,4 +36,13 @@ class CostingCalculatorTest extends TestCase
         $this->assertSame('60.00000000', $result['value']);
         $this->assertSame('6.00000000', $result['unit_cost']);
     }
+
+    public function test_final_average_issue_clears_quantity_value_and_unit_cost(): void
+    {
+        $result = CostingCalculator::averageIssue('1', '78.35', '1');
+
+        $this->assertSame('0.00000000', $result['quantity']);
+        $this->assertSame('0.00000000', $result['value']);
+        $this->assertSame('0.00000000', $result['unit_cost']);
+    }
 }

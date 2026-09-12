@@ -12,6 +12,7 @@ final class SalesReturnPostingContractTest extends TestCase
         self::assertStringContainsString('lockForUpdate()', $source);
         self::assertStringContainsString('whereKeyNot($return->id)', $source);
         self::assertStringContainsString("'event_code' => 'sales_credit_note'", $source);
+        self::assertStringContainsString("'credit_note_mode' => 'RETURN'", $source);
         self::assertStringContainsString('recordFromJournalLine', $source);
         self::assertStringContainsString('openItems->allocate', $source);
         self::assertStringContainsString('postCashRefund', $source);

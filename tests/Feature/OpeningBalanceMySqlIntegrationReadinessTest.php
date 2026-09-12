@@ -5,9 +5,11 @@ namespace Tests\Feature;
 use App\Models\User;
 use App\Models\Warehouse;
 use App\Modules\Wms\Models\Item;
+use App\Modules\Wms\Jobs\CalculateCostRevaluation;
 use App\Modules\Wms\Services\InventoryReconciliationService;
 use App\Modules\Wms\Services\OpeningBalanceService;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Queue;
 use Illuminate\Validation\ValidationException;
 use Tests\TestCase;
 
@@ -37,7 +39,11 @@ final class OpeningBalanceMySqlIntegrationReadinessTest extends TestCase
             'movements' => DB::table('wms_stock_movements')->count(),
             'layers' => DB::table('wms_stock_cost_layers')->count(),
             'allocations' => DB::table('wms_cost_allocations')->count(),
+            'revaluation_batches' => DB::table('wms_cost_revaluation_batches')->count(),
+            'revaluation_runs' => DB::table('wms_cost_revaluation_runs')->count(),
         ];
+        Queue::fake();
+        config()->set('erp.inventory.revaluation_auto_trigger_enabled', true);
         $beforeOnHand = (float) (DB::table('wms_stock_balances')->where('warehouse_id', $warehouse->id)->where('item_id', $item->id)->value('on_hand') ?? 0);
         DB::beginTransaction();
         try {
@@ -66,6 +72,10 @@ final class OpeningBalanceMySqlIntegrationReadinessTest extends TestCase
             $this->assertSame('DRAFT', $batch->status);
             $posted = app(OpeningBalanceService::class)->post($batch, $actor);
             $this->assertSame('POSTED', $posted->status);
+            $trigger = DB::table('wms_cost_revaluation_batches')->where('source_document_type', 'OPENING_BALANCE')->where('source_document_id', $posted->id)->sole();
+            $this->assertSame('CALCULATING', $trigger->status);
+            $this->assertSame($posted->lines->count(), DB::table('wms_cost_revaluation_runs')->where('batch_id', $trigger->id)->count());
+            Queue::assertPushed(CalculateCostRevaluation::class, $posted->lines->count());
             $line = $posted->lines->sole();
             $this->assertNotNull($line->stock_movement_id);
             $this->assertNotNull($line->cost_layer_id);
@@ -80,6 +90,7 @@ final class OpeningBalanceMySqlIntegrationReadinessTest extends TestCase
             }
         } finally {
             DB::rollBack();
+            config()->set('erp.inventory.revaluation_auto_trigger_enabled', false);
         }
 
         $this->assertSame($before, [
@@ -87,6 +98,8 @@ final class OpeningBalanceMySqlIntegrationReadinessTest extends TestCase
             'movements' => DB::table('wms_stock_movements')->count(),
             'layers' => DB::table('wms_stock_cost_layers')->count(),
             'allocations' => DB::table('wms_cost_allocations')->count(),
+            'revaluation_batches' => DB::table('wms_cost_revaluation_batches')->count(),
+            'revaluation_runs' => DB::table('wms_cost_revaluation_runs')->count(),
         ]);
     }
 }

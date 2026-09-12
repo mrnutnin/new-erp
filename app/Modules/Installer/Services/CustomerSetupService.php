@@ -8,6 +8,7 @@ use App\Models\Program;
 use App\Models\Role;
 use App\Models\User;
 use App\Models\Warehouse;
+use Database\Seeders\WmsIssueTypeSeeder;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 
@@ -70,6 +71,8 @@ class CustomerSetupService
                     'deleted_at' => null,
                 ])->save();
             });
+
+            $this->seedWmsIssueTypesIfEnabled();
         });
     }
 
@@ -90,6 +93,13 @@ class CustomerSetupService
 
             return compact('branch', 'warehouse');
         });
+    }
+
+    private function seedWmsIssueTypesIfEnabled(): void
+    {
+        if (Program::query()->where('code', 'wms')->where('is_enabled', true)->exists()) {
+            app(WmsIssueTypeSeeder::class)->run();
+        }
     }
 
     public function createAdministrator(array $values): User

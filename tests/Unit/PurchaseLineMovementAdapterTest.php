@@ -4,10 +4,10 @@ namespace Tests\Unit;
 
 use App\Modules\Purchasing\Models\GoodsReceipt;
 use App\Modules\Purchasing\Models\GoodsReceiptLine;
-use App\Modules\Wms\Models\Item;
 use App\Modules\Purchasing\Models\PurchaseDocument;
 use App\Modules\Purchasing\Models\PurchaseDocumentLine;
 use App\Modules\Purchasing\Models\PurchaseDocumentReceiptAllocation;
+use App\Modules\Wms\Models\Item;
 use App\Modules\Wms\Models\Uom;
 use App\Modules\Wms\Models\UomConversion;
 use App\Modules\Wms\Support\PurchaseLineMovementAdapter;
@@ -40,7 +40,7 @@ class PurchaseLineMovementAdapterTest extends TestCase
         $receipt = (new GoodsReceipt(['status' => 'APPROVED']))->forceFill(['id' => 31]);
         $receiptLine = (new GoodsReceiptLine([
             'item_id' => 4, 'purchase_uom_id' => 2, 'stock_uom_id' => 2,
-            'purchase_quantity' => '2.00000000', 'stock_quantity' => '2.00000000',
+            'purchase_quantity' => '2.00000000', 'factor' => '1.00000000', 'stock_quantity' => '2.00000000',
             'total_cost' => '100.00', 'conversion_snapshot' => ['factor' => '1.00000000'],
         ]))->forceFill(['id' => 32])->setRelation('goodsReceipt', $receipt);
         $allocation = (new PurchaseDocumentReceiptAllocation([
@@ -55,6 +55,8 @@ class PurchaseLineMovementAdapterTest extends TestCase
         $payload = PurchaseLineMovementAdapter::map($document, 10);
 
         $this->assertSame('2.00000000', $payload['base_quantity']);
+        $this->assertSame(2, $payload['uom_id']);
+        $this->assertSame('100.00000000', $payload['metadata']['receipt_value']);
         $this->assertSame('100.00', $payload['metadata']['allocated_amount']);
         $this->assertSame([33], $payload['metadata']['receipt_allocation_ids']);
         $this->assertSame([32], $payload['metadata']['goods_receipt_line_ids']);

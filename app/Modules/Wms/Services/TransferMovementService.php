@@ -28,7 +28,7 @@ use Illuminate\Validation\ValidationException;
  */
 final class TransferMovementService
 {
-    public function __construct(private readonly StockMovementService $movements, private readonly GlobalSettings $settings, private readonly FifoTransferCostLineageService $fifoLineage, private readonly AvgTransferCostLineageService $avgLineage) {}
+    public function __construct(private readonly StockMovementService $movements, private readonly GlobalSettings $settings, private readonly FifoTransferCostLineageService $fifoLineage, private readonly AvgTransferCostLineageService $avgLineage, private readonly CostPropagationTriggerDispatcher $costPropagation) {}
 
     public function createDraft(array $attributes, array $lines, int $actorId): Transfer
     {
@@ -118,7 +118,8 @@ final class TransferMovementService
                     'metadata' => ['transfer_id' => $transfer->id, 'transfer_line_id' => $line->id, 'transfer_event' => 'DISPATCH'],
                     'created_by' => $actor->id,
                 ]);
-                $this->movements->postWithinTransaction($movement);
+                $movement = $this->movements->postWithinTransaction($movement);
+                $this->completeNoGlAllocations($movement);
                 TransferEvent::query()->create([
                     'transfer_id' => $transfer->id, 'transfer_line_id' => $line->id, 'event_type' => 'DISPATCH',
                     'quantity' => $line->planned_quantity, 'base_quantity' => $line->planned_base_quantity,
@@ -129,6 +130,7 @@ final class TransferMovementService
             }
 
             $transfer->forceFill(['status' => 'DISPATCHED', 'dispatch_reason' => $reason, 'dispatched_by' => $actor->id, 'dispatched_at' => now()])->save();
+            $this->costPropagation->dispatchIfEnabled('WMS_TRANSFER', $transfer->id, $transfer->events()->count(), [], $actor->id);
 
             return $transfer->fresh(['lines', 'events']);
         }, 3);
@@ -245,6 +247,7 @@ final class TransferMovementService
                 'completed_by' => in_array($status, ['ACCEPTED', 'REJECTED'], true) ? $actor->id : null,
                 'completed_at' => in_array($status, ['ACCEPTED', 'REJECTED'], true) ? now() : null,
             ])->save();
+            $this->costPropagation->dispatchIfEnabled('WMS_TRANSFER', $transfer->id, $transfer->events()->count(), [], $actor->id);
 
             return $transfer->fresh(['lines', 'events']);
         }, 3);
@@ -289,6 +292,7 @@ final class TransferMovementService
                 ],
             ])->save();
         }
+        $this->completeNoGlAllocations($movement);
 
         return $movement;
     }
@@ -301,7 +305,10 @@ final class TransferMovementService
             throw ValidationException::withMessages(['quantity' => 'จำนวน reject มากกว่ายอด dispatch']);
         }
         if (BigDecimal::of($baseQuantity)->isEqualTo($sourceQuantity)) {
-            return $this->movements->reverseWithinTransaction($source, ['idempotency_key' => $key.':movement', 'business_date' => $businessDate ?: $source->business_date, 'created_by' => $actor->id]);
+            $movement = $this->movements->reverseWithinTransaction($source, ['idempotency_key' => $key.':movement', 'business_date' => $businessDate ?: $source->business_date, 'created_by' => $actor->id]);
+            $this->completeNoGlAllocations($movement);
+
+            return $movement;
         }
         $unitCost = $this->trustedDispatchUnitCost($source, $quantity);
         $movement = $this->movements->recordIntent([
@@ -313,7 +320,17 @@ final class TransferMovementService
             'created_by' => $actor->id,
         ]);
 
-        return $this->movements->postWithinTransaction($movement);
+        $movement = $this->movements->postWithinTransaction($movement);
+        $this->completeNoGlAllocations($movement);
+
+        return $movement;
+    }
+
+    private function completeNoGlAllocations(StockMovement $movement): void
+    {
+        foreach (CostAllocation::query()->where('stock_movement_id', $movement->id)->where('status', 'PENDING')->lockForUpdate()->get() as $allocation) {
+            $allocation->forceFill(['status' => 'POSTED'])->save();
+        }
     }
 
     private function dispatchMovement(TransferLine $line): StockMovement

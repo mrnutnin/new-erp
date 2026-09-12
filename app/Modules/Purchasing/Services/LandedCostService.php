@@ -3,9 +3,11 @@
 namespace App\Modules\Purchasing\Services;
 
 use App\Models\User;
-use App\Modules\Purchasing\Models\LandedCost;
 use App\Modules\Purchasing\Models\GoodsReceipt;
+use App\Modules\Purchasing\Models\LandedCost;
+use App\Modules\Purchasing\Models\PurchaseDocumentReceiptAllocation;
 use App\Modules\Purchasing\Support\LandedCostAllocationCalculator;
+use App\Modules\Wms\Models\StockMovement;
 use Brick\Math\BigDecimal;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -130,10 +132,26 @@ final class LandedCostService
         if ($receipts->count() !== $ids->count()) {
             throw ValidationException::withMessages(['receipts' => 'Goods Receipt ต้องอยู่ในคลังเดียวกันและมีสถานะ Approved']);
         }
-        foreach ($receipts as $receipt) {
-            if (! DB::table('wms_stock_movements')->where('source_type', 'GOODS_RECEIPT')->where('source_id', $receipt->id)->where('status', 'POSTED')->exists()) {
-                throw ValidationException::withMessages(['receipts' => "Goods Receipt {$receipt->receipt_number} ยังไม่ถูก Post เข้า Stock"]);
+        $receiptLines = $receipts->flatMap->lines->keyBy('id');
+        $owners = PurchaseDocumentReceiptAllocation::query()
+            ->whereIn('goods_receipt_line_id', $receiptLines->keys()->all())
+            ->whereHas('purchaseDocumentLine.document', fn ($query) => $query->where('document_type', 'INVOICE')->where('status', 'POSTED'))
+            ->with('purchaseDocumentLine.document:id,status,document_type')
+            ->get(['id', 'purchase_document_line_id', 'goods_receipt_line_id'])
+            ->groupBy('goods_receipt_line_id');
+        $movementKeys = collect();
+        foreach ($receiptLines as $receiptLine) {
+            $lineOwners = $owners->get($receiptLine->id, collect());
+            if ($lineOwners->count() !== 1) {
+                throw ValidationException::withMessages(['receipts' => "Goods Receipt line #{$receiptLine->id} ต้องมี Posted Purchase Invoice stock owner เพียงหนึ่งรายการ"]);
             }
+            $owner = $lineOwners->sole()->purchaseDocumentLine;
+            $movementKeys->push("purchase:{$owner->document->id}:line:{$owner->id}:receipt:0");
+        }
+        $postedKeys = StockMovement::query()->whereIn('idempotency_key', $movementKeys->unique()->all())
+            ->where('source_type', 'PURCHASING')->where('status', 'POSTED')->pluck('idempotency_key');
+        if ($postedKeys->unique()->count() !== $movementKeys->unique()->count()) {
+            throw ValidationException::withMessages(['receipts' => 'Goods Receipt ที่เลือกยังไม่มี Posted Purchase Invoice Stock Movement ครบทุก line']);
         }
 
         return $receipts->all();
@@ -145,11 +163,13 @@ final class LandedCostService
         if (! is_array($input) || $input === []) {
             throw ValidationException::withMessages(['lines' => 'ต้องมีรายการค่าใช้จ่ายอย่างน้อยหนึ่งรายการ']);
         }
+
         return collect($input)->values()->map(function (array $line, int $index): array {
             $amount = BigDecimal::of((string) ($line['amount'] ?? '0'));
             if ((int) ($line['account_id'] ?? 0) < 1 || $amount->isLessThanOrEqualTo(0)) {
                 throw ValidationException::withMessages(["lines.{$index}" => 'รายการค่าใช้จ่ายต้องมีบัญชีและจำนวนเงินมากกว่าศูนย์']);
             }
+
             return ['id' => $index + 1, 'source_type' => strtoupper((string) ($line['source_type'] ?? 'MANUAL')), 'source_id' => ($line['source_id'] ?? null) ? (int) $line['source_id'] : null, 'account_id' => (int) $line['account_id'], 'amount' => $amount->toScale(8)->__toString(), 'tax_code_id' => ($line['tax_code_id'] ?? null) ? (int) $line['tax_code_id'] : null, 'description' => $line['description'] ?? null];
         })->all();
     }
@@ -169,6 +189,7 @@ final class LandedCostService
                 $targets[] = ['id' => (int) $line->id, 'receipt_id' => (int) $receipt->id, 'item_id' => (int) $line->item_id, 'uom_id' => (int) $line->stock_uom_id, 'value' => $value, 'quantity' => $quantity, 'weight' => $weight];
             }
         }
+
         return $targets;
     }
 }

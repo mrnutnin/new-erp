@@ -39,4 +39,35 @@ class PhysicalSaleStockPostingIntentTest extends TestCase
             'lines' => [['line_number' => 1, 'item_id' => 1, 'uom_id' => 1, 'stock_uom_id' => 1, 'quantity' => '1', 'factor' => '1']],
         ]);
     }
+
+    public function test_stock_movement_date_is_document_date_not_accounting_posting_date(): void
+    {
+        $intents = PhysicalSaleStockPostingIntent::build([
+            'physical_sale_id' => 21, 'document_type' => 'IV', 'source_type' => 'SALES_ORDER',
+            'source_id' => 8, 'warehouse_id' => 2, 'document_date' => '2026-08-28',
+            'posting_date' => '2026-08-29', 'business_date' => '2026-08-28',
+            'document_number' => 'IV-000021',
+            'lines' => [[
+                'line_id' => 1, 'line_number' => 1, 'item_id' => 9, 'uom_id' => 1, 'stock_uom_id' => 1,
+                'quantity' => '1', 'factor' => '1', 'conversion_snapshot' => [],
+            ]],
+        ]);
+
+        $this->assertSame('2026-08-28', $intents[0]['business_date']);
+    }
+
+    public function test_rejects_a_business_date_that_does_not_match_the_document_date(): void
+    {
+        $this->expectException(ValidationException::class);
+
+        PhysicalSaleStockPostingIntent::build([
+            'physical_sale_id' => 21, 'document_type' => 'IV', 'source_type' => 'SALES_ORDER',
+            'source_id' => 8, 'warehouse_id' => 2, 'document_date' => '2026-08-28',
+            'business_date' => '2026-08-29', 'document_number' => 'IV-000021',
+            'lines' => [[
+                'line_id' => 1, 'line_number' => 1, 'item_id' => 9, 'uom_id' => 1, 'stock_uom_id' => 1,
+                'quantity' => '1', 'factor' => '1', 'conversion_snapshot' => [],
+            ]],
+        ]);
+    }
 }

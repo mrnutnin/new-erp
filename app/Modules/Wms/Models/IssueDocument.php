@@ -35,4 +35,19 @@ final class IssueDocument extends Model
     {
         return $this->belongsTo(User::class, 'created_by');
     }
+
+    public function finishedReceipts()
+    {
+        return $this->hasMany(InventoryAdjustmentDocument::class, 'source_issue_id')->orderBy('id');
+    }
+
+    public function productionReceiptSources()
+    {
+        return $this->hasMany(ProductionReceiptSource::class, 'issue_document_id')->orderBy('position');
+    }
+
+    public function issueReturns()
+    {
+        return $this->hasMany(IssueReturn::class, 'issue_document_id')->orderBy('id');
+    }
 }

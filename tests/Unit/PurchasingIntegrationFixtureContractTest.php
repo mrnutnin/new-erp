@@ -56,6 +56,7 @@ final class PurchasingIntegrationFixtureContractTest extends TestCase
         foreach (['receipt_allocation_ids', 'goods_receipt_line_ids', 'conversion_snapshots', 'allocated_amount'] as $contract) {
             $this->assertStringContainsString($contract, $movementAdapter);
         }
+        $this->assertStringContainsString('$allocationQty->multipliedBy($factor)', $movementAdapter);
         foreach (['PurchaseThreeWayMatchGate', 'lines.receiptAllocations.goodsReceiptLine.goodsReceipt.lines'] as $contract) {
             $this->assertStringContainsString($contract, $productionAdapter);
         }

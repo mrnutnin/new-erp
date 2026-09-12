@@ -41,7 +41,8 @@ final class TransferController extends Controller
         $warehouseId = (int) $request->attributes->get('selectedWarehouse')->id;
         $direction = (string) ($request->route('direction') ?: $request->query('direction', 'all'));
         $query = Transfer::query()
-            ->with(['sourceWarehouse:id,branch_id,name', 'sourceWarehouse.branch:id,code,name', 'destinationWarehouse:id,branch_id,name', 'destinationWarehouse.branch:id,code,name'])
+            ->with(['sourceWarehouse:id,branch_id,name', 'sourceWarehouse.branch:id,code,name', 'destinationWarehouse:id,branch_id,name', 'destinationWarehouse.branch:id,code,name', 'events:id,transfer_id,event_type,base_quantity'])
+            ->withSum('lines as planned_base_quantity_total', 'planned_base_quantity')
             ->orderByDesc('document_date')
             ->orderByDesc('id');
         if ($request->filled('status') && in_array($request->string('status')->toString(), ['DRAFT', 'DISPATCHED', 'PARTIALLY_ACCEPTED', 'ACCEPTED', 'REJECTED', 'VOID'], true)) $query->where('status', $request->string('status')->toString());
@@ -66,6 +67,14 @@ final class TransferController extends Controller
             ->addColumn('source_label', fn (Transfer $r) => $this->warehouseLabel($r->sourceWarehouse))
             ->addColumn('destination_label', fn (Transfer $r) => $this->warehouseLabel($r->destinationWarehouse))
             ->addColumn('status_label', fn (Transfer $r) => $labels[$r->status] ?? $r->status)
+            ->addColumn('destination_receipt_status', fn (Transfer $r) => $this->receiptStatusLabel($r->status))
+            ->addColumn('destination_receipt_summary', function (Transfer $r): string {
+                $accepted = $r->events->where('event_type', 'ACCEPT')->sum('base_quantity');
+                $rejected = $r->events->where('event_type', 'REJECT')->sum('base_quantity');
+                $planned = (string) ($r->planned_base_quantity_total ?? '0');
+
+                return WmsDecimal::format($accepted).' / '.WmsDecimal::format($planned).' รับแล้ว · ปฏิเสธ '.WmsDecimal::format($rejected);
+            })
             ->editColumn('document_date', fn (Transfer $r) => $r->document_date?->format((string) $settings->value('date_format')) ?: '-')
             ->addColumn('can_dispatch', fn (Transfer $r) => $request->user()->hasPermission('wms.transfers.dispatch') && $r->status === 'DRAFT' && (int) $r->source_warehouse_id === $warehouseId)
             ->addColumn('can_complete', fn (Transfer $r) => $request->user()->hasPermission('wms.transfers.complete') && in_array($r->status, ['DISPATCHED', 'PARTIALLY_ACCEPTED'], true) && (int) $r->destination_warehouse_id === $warehouseId)
@@ -84,13 +93,17 @@ final class TransferController extends Controller
         $transfer->load([
             'sourceWarehouse:id,name',
             'destinationWarehouse:id,name',
+            'lines:id,transfer_id,planned_base_quantity',
             'events:id,transfer_id,transfer_line_id,event_type,base_quantity,business_date,reason,created_by,created_at',
             'events.creator:id,name',
         ]);
 
+        $receiptSummary = $this->receiptSummary($transfer);
+
         return view('Wms::transfers.show', [
             'transfer' => $transfer,
             'lines' => $this->linePayloads($transfer, $settings),
+            'receiptSummary' => $receiptSummary,
             'dateFormat' => (string) $settings->value('date_format'),
         ]);
     }
@@ -284,5 +297,26 @@ final class TransferController extends Controller
         return collect([$warehouse->code, $warehouse->name, $warehouse->branch?->code ?: $warehouse->branch?->name])
             ->filter()
             ->implode(' · ');
+    }
+
+    private function receiptSummary(Transfer $transfer): array
+    {
+        $sum = static fn ($events): BigDecimal => $events->reduce(static fn (BigDecimal $total, $event): BigDecimal => $total->plus((string) $event->base_quantity), BigDecimal::zero());
+        $accepted = $sum($transfer->events->where('event_type', 'ACCEPT'));
+        $rejected = $sum($transfer->events->where('event_type', 'REJECT'));
+        $planned = $transfer->lines->reduce(static fn (BigDecimal $total, $line): BigDecimal => $total->plus((string) $line->planned_base_quantity), BigDecimal::zero());
+        $remaining = $planned->minus($accepted)->minus($rejected);
+        if ($remaining->isNegative()) {
+            $remaining = BigDecimal::zero();
+        }
+
+        return collect(['planned' => $planned, 'accepted' => $accepted, 'rejected' => $rejected, 'remaining' => $remaining])
+            ->map(fn (BigDecimal $value): string => WmsDecimal::format($value->__toString()))
+            ->all();
+    }
+
+    private function receiptStatusLabel(string $status): string
+    {
+        return ['DRAFT' => 'ยังไม่ส่งออก', 'DISPATCHED' => 'รอรับเข้าปลายทาง', 'PARTIALLY_ACCEPTED' => 'รับเข้าบางส่วน', 'ACCEPTED' => 'รับเข้าครบแล้ว', 'REJECTED' => 'ปลายทางปฏิเสธ', 'VOID' => 'ยกเลิก'][$status] ?? $status;
     }
 }

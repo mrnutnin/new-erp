@@ -22,6 +22,8 @@ final class PostingEvent
         'WHT_PAYABLE' => ['label' => 'บัญชีภาษีหัก ณ ที่จ่ายรอจ่าย', 'control' => 'WITHHOLDING_TAX'],
         'INVENTORY' => ['label' => 'บัญชีสินค้าคงเหลือ', 'control' => 'INVENTORY'],
         'COGS' => ['label' => 'บัญชีต้นทุนขาย', 'types' => ['EXPENSE']],
+        'ISSUE_EXPENSE' => ['label' => 'บัญชีค่าใช้จ่ายจากการเบิกสินค้า', 'types' => ['EXPENSE']],
+        'PURCHASE_RETURN_VARIANCE' => ['label' => 'บัญชีผลต่างต้นทุนคืนซื้อ', 'types' => ['EXPENSE']],
         'COMMISSION_EXPENSE' => ['label' => 'บัญชีค่าใช้จ่ายคอมมิชชั่น', 'types' => ['EXPENSE']],
         'ADJUSTMENT_GAIN' => ['label' => 'บัญชีกำไรจากปรับปรุงสินค้าคงเหลือ', 'types' => ['REVENUE']],
         'ADJUSTMENT_LOSS' => ['label' => 'บัญชีขาดทุนจากปรับปรุงสินค้าคงเหลือ', 'types' => ['EXPENSE']],
@@ -43,7 +45,7 @@ final class PostingEvent
         'DISPOSAL_CLEARING' => ['label' => 'บัญชีพักเงินรับจากการจำหน่าย', 'types' => ['ASSET']],
         'DISPOSAL_GAIN' => ['label' => 'บัญชีกำไรจากการจำหน่าย', 'types' => ['REVENUE']],
         'DISPOSAL_LOSS' => ['label' => 'บัญชีขาดทุนจากการจำหน่าย', 'types' => ['EXPENSE']],
-        'WIP' => ['label' => 'บัญชีงานระหว่างทำ', 'types' => ['ASSET']],
+        'WIP' => ['label' => 'บัญชีงานระหว่างทำ', 'control' => 'WIP'],
         'FINISHED_GOODS' => ['label' => 'บัญชีสินค้าสำเร็จรูป', 'control' => 'INVENTORY'],
         'PRODUCTION_VARIANCE' => ['label' => 'บัญชีผลต่างการผลิต', 'types' => ['EXPENSE', 'REVENUE']],
     ];
@@ -67,12 +69,27 @@ final class PostingEvent
         'sales_commission_payout' => ['module' => 'Finance', 'document' => 'จ่ายคอมมิชชั่น', 'book' => 'PAYMENT', 'status' => 'LIVE', 'roles' => ['COMMISSION_EXPENSE'], 'reversal' => 'ORIGINAL_JOURNAL'],
         'inventory_adjustment' => ['module' => 'WMS', 'document' => 'ปรับปรุงสินค้าคงเหลือ', 'book' => 'GENERAL', 'status' => 'LIVE', 'roles' => ['INVENTORY', 'ADJUSTMENT_GAIN', 'ADJUSTMENT_LOSS'], 'reversal' => 'ORIGINAL_JOURNAL'],
         'inventory.recost' => ['module' => 'WMS', 'document' => 'ปรับต้นทุนสินค้า', 'book' => 'GENERAL', 'status' => 'LIVE', 'roles' => ['INVENTORY', 'RECOST_GAIN', 'RECOST_LOSS'], 'reversal' => 'DELTA_OR_REVERSAL'],
+        'inventory.revaluation.cogs' => ['module' => 'WMS', 'document' => 'ปรับต้นทุนขายย้อนหลัง', 'book' => 'GENERAL', 'status' => 'LIVE', 'roles' => ['COGS', 'INVENTORY'], 'reversal' => 'DELTA_OR_REVERSAL'],
+        'inventory.revaluation.issue_expense' => ['module' => 'WMS', 'document' => 'ปรับต้นทุนเบิกใช้ย้อนหลัง', 'book' => 'GENERAL', 'status' => 'LIVE', 'roles' => ['ISSUE_EXPENSE', 'INVENTORY'], 'reversal' => 'DELTA_OR_REVERSAL'],
+        'inventory.revaluation.sales_return' => ['module' => 'WMS', 'document' => 'ปรับต้นทุนรับคืนจากการขาย', 'book' => 'GENERAL', 'status' => 'LIVE', 'roles' => ['INVENTORY', 'COGS'], 'reversal' => 'DELTA_OR_REVERSAL'],
+        'inventory.revaluation.issue_return' => ['module' => 'WMS', 'document' => 'ปรับต้นทุนรับคืนจากการเบิก', 'book' => 'GENERAL', 'status' => 'LIVE', 'roles' => ['INVENTORY', 'ISSUE_EXPENSE'], 'reversal' => 'DELTA_OR_REVERSAL'],
+        'inventory.revaluation.rounding' => ['module' => 'WMS', 'document' => 'ปรับผลต่างการปัดเศษต้นทุน', 'book' => 'GENERAL', 'status' => 'LIVE', 'roles' => ['INVENTORY', 'ROUNDING_GAIN', 'ROUNDING_LOSS'], 'reversal' => 'DELTA_OR_REVERSAL'],
+        'production.revaluation.wip' => ['module' => 'WMS', 'document' => 'ปรับต้นทุนงานระหว่างทำย้อนหลัง', 'book' => 'GENERAL', 'status' => 'LIVE', 'roles' => ['WIP', 'INVENTORY'], 'reversal' => 'DELTA_OR_REVERSAL'],
+        'production.revaluation.finished_goods' => ['module' => 'WMS', 'document' => 'ปรับต้นทุนสินค้าผลิตเสร็จย้อนหลัง', 'book' => 'GENERAL', 'status' => 'LIVE', 'roles' => ['FINISHED_GOODS', 'WIP'], 'reversal' => 'DELTA_OR_REVERSAL'],
+        'production.revaluation.material_return' => ['module' => 'WMS', 'document' => 'ปรับต้นทุนรับคืนวัตถุดิบผลิต', 'book' => 'GENERAL', 'status' => 'LIVE', 'roles' => ['INVENTORY', 'WIP'], 'reversal' => 'DELTA_OR_REVERSAL'],
+        'purchasing.revaluation.return_cost' => ['module' => 'Purchasing', 'document' => 'ปรับผลต่างต้นทุนคืนซื้อย้อนหลัง', 'book' => 'GENERAL', 'status' => 'LIVE', 'roles' => ['PURCHASE_RETURN_VARIANCE', 'INVENTORY'], 'reversal' => 'DELTA_OR_REVERSAL'],
         // Goods Receipt is operational/source-only in this ERP flow. The
         // Inventory and AP Journal is created by supplier_invoice.inventory;
         // posting another Journal at receipt would duplicate inventory value.
         'inventory.receipt' => ['module' => 'WMS', 'document' => 'รับสินค้า (ไม่ลงบัญชีซ้ำ)', 'book' => 'PURCHASE', 'status' => 'NO_GL', 'roles' => [], 'reversal' => 'ORIGINAL_JOURNAL'],
-        'production.material_issue' => ['module' => 'Production', 'document' => 'เบิกวัตถุดิบผลิต', 'book' => 'GENERAL', 'status' => 'DEFERRED', 'roles' => ['WIP', 'INVENTORY'], 'reversal' => 'ORIGINAL_JOURNAL'],
-        'production.finished_receipt' => ['module' => 'Production', 'document' => 'รับสินค้าสำเร็จรูป', 'book' => 'GENERAL', 'status' => 'DEFERRED', 'roles' => ['FINISHED_GOODS', 'WIP', 'PRODUCTION_VARIANCE'], 'reversal' => 'ORIGINAL_JOURNAL'],
+        'inventory.issue' => ['module' => 'WMS', 'document' => 'เบิกสินค้า', 'book' => 'GENERAL', 'status' => 'LIVE', 'roles' => ['ISSUE_EXPENSE', 'INVENTORY'], 'reversal' => 'ORIGINAL_JOURNAL'],
+        'inventory.issue_return' => ['module' => 'WMS', 'document' => 'รับคืนจากการเบิกสินค้า', 'book' => 'GENERAL', 'status' => 'LIVE', 'roles' => ['INVENTORY', 'ISSUE_EXPENSE'], 'reversal' => 'ORIGINAL_JOURNAL'],
+        'production.material_issue' => ['module' => 'WMS', 'document' => 'เบิกวัตถุดิบผลิต', 'book' => 'GENERAL', 'status' => 'LIVE', 'roles' => ['WIP', 'INVENTORY'], 'reversal' => 'ORIGINAL_JOURNAL'],
+        'production.material_return' => ['module' => 'WMS', 'document' => 'รับคืนวัตถุดิบผลิต', 'book' => 'GENERAL', 'status' => 'LIVE', 'roles' => ['INVENTORY', 'WIP'], 'reversal' => 'ORIGINAL_JOURNAL'],
+        // Manual WMS production receipt is supported without enabling the
+        // Production module.  The receipt still uses its own accounting
+        // contract so it cannot fall through to inventory_adjustment.
+        'production.finished_receipt' => ['module' => 'WMS', 'document' => 'รับสินค้าผลิตเสร็จ', 'book' => 'GENERAL', 'status' => 'LIVE', 'roles' => ['FINISHED_GOODS', 'WIP', 'PRODUCTION_VARIANCE'], 'reversal' => 'ORIGINAL_JOURNAL'],
         'asset.depreciation' => ['module' => 'Asset', 'document' => 'ค่าเสื่อมราคา', 'book' => 'GENERAL', 'status' => 'LIVE', 'roles' => ['DEPRECIATION_EXPENSE', 'ACCUMULATED_DEPRECIATION'], 'reversal' => 'ORIGINAL_JOURNAL'],
         'asset.capitalization' => ['module' => 'Asset', 'document' => 'รับรู้สินทรัพย์', 'book' => 'GENERAL', 'status' => 'LIVE', 'roles' => ['ASSET_COST', 'CAPITALIZATION_CLEARING'], 'reversal' => 'ORIGINAL_JOURNAL'],
         'asset.addition' => ['module' => 'Asset', 'document' => 'เพิ่มมูลค่าสินทรัพย์', 'book' => 'GENERAL', 'status' => 'LIVE', 'roles' => ['ASSET_COST', 'CAPITALIZATION_CLEARING'], 'reversal' => 'ORIGINAL_JOURNAL'],

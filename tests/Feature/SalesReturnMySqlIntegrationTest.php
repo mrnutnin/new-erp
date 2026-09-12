@@ -17,6 +17,7 @@ use App\Modules\Pos\Services\PhysicalSalePostingService;
 use App\Modules\Pos\Services\SalesReturnPostingService;
 use App\Modules\Pos\Support\PhysicalSaleWithholdingSnapshot;
 use App\Modules\Pos\Support\SalesDocumentCalculator;
+use App\Modules\Wms\Models\CostRevaluationBatch;
 use App\Modules\Wms\Models\Item;
 use App\Modules\Wms\Models\StockBalance;
 use App\Modules\Wms\Models\StockMovement;
@@ -39,7 +40,9 @@ final class SalesReturnMySqlIntegrationTest extends TestCase
         }
 
         DB::beginTransaction();
+        $previousAutoTrigger = config('erp.inventory.revaluation_auto_trigger_enabled');
         try {
+            config(['erp.inventory.revaluation_auto_trigger_enabled' => true]);
             [$bank, $party, $item, $balance, $vat, $wht] = $this->fixture();
             if (! $bank || ! $party || ! $item || ! $balance || ! $vat || ! $wht) {
                 $this->markTestSkipped('ต้องมีบัญชีรับเงิน ลูกค้า Stock, VAT OUT และ WHT สำหรับ HS return fixture');
@@ -59,14 +62,18 @@ final class SalesReturnMySqlIntegrationTest extends TestCase
             self::assertBalanced($cogs->lines);
             self::assertSame($expectedRefund, (string) $refund->lines->where('account_id', $bank->account_id)->sole()->credit);
             self::assertSame('sales_credit_note', data_get($refund->posting_metadata, 'event_code'));
+            self::assertSame('RETURN', data_get($refund->posting_metadata, 'credit_note_mode'));
             self::assertTrue(collect(data_get($refund->posting_metadata, 'accounts', []))->contains(fn (array $account): bool => $account['account_id'] === $bank->account_id && $account['source'] === 'DOCUMENT'));
 
             $movement = StockMovement::query()->where('source_id', "sales-return:{$posted->id}:line:{$posted->lines()->sole()->id}")->sole();
             self::assertSame('IN', $movement->direction);
             self::assertSame('0.50000000', (string) $movement->base_quantity);
             self::assertSame(1, SalesReturnInventoryLink::query()->where('sales_return_line_id', $posted->lines()->sole()->id)->count());
+            self::assertTrue(CostRevaluationBatch::query()->where('source_document_type', 'PHYSICAL_SALE')->where('source_document_id', $sale->id)->exists());
+            self::assertTrue(CostRevaluationBatch::query()->where('source_document_type', 'SALES_RETURN')->where('source_document_id', $posted->id)->exists());
         } finally {
             DB::rollBack();
+            config(['erp.inventory.revaluation_auto_trigger_enabled' => $previousAutoTrigger]);
         }
     }
 
@@ -100,6 +107,7 @@ final class SalesReturnMySqlIntegrationTest extends TestCase
             self::assertSame($expectedCredit, (string) $creditNote->lines->where('subledger_type', 'CUSTOMER')->where('credit', $expectedCredit)->sole()->credit);
             self::assertSame($expectedCredit, app(OpenItemService::class)->remainingAt($invoice->fresh(), today()->toDateString()));
             self::assertSame('sales_credit_note', data_get($creditNote->posting_metadata, 'event_code'));
+            self::assertSame('RETURN', data_get($creditNote->posting_metadata, 'credit_note_mode'));
             self::assertTrue(collect(data_get($creditNote->posting_metadata, 'accounts', []))->every(fn (array $account): bool => $account['source'] === 'ORIGINAL'));
 
             $movement = StockMovement::query()->where('source_id', "sales-return:{$posted->id}:line:{$posted->lines()->sole()->id}")->sole();

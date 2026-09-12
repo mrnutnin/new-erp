@@ -62,13 +62,19 @@ final class GoodsReceiptInventoryPostAuditTest extends TestCase
         $this->assertStringContainsString('production_ready', $source);
     }
 
-    public function test_goods_receipt_inventory_writer_is_closed_without_journal_or_route(): void
+    public function test_purchase_invoice_is_the_only_purchase_stock_owner(): void
     {
         $source = file_get_contents(base_path('app/Modules/Wms/Services/GoodsReceiptInventoryService.php'));
+        $ownership = file_get_contents(base_path('app/Modules/Wms/Support/PurchaseInventoryOwnership.php'));
+        $purchase = file_get_contents(base_path('app/Modules/Wms/Services/InventoryPurchaseProductionAdapter.php'));
+        $landedCost = file_get_contents(base_path('app/Modules/Purchasing/Services/LandedCostPostingService.php'));
 
-        $this->assertStringContainsString('DB::transaction', $source);
-        $this->assertStringContainsString('GoodsReceiptMovementAdapter::map', $source);
-        $this->assertStringContainsString('postWithinTransaction', $source);
+        $this->assertStringContainsString("public const OWNER = 'PURCHASING'", $ownership);
+        $this->assertStringContainsString('assertGoodsReceiptWriterDisabled', $source);
+        $this->assertStringContainsString('legacyGoodsReceiptMovementIds', $purchase);
+        $this->assertStringContainsString('duplicate_purchase_stock_owner', $purchase);
+        $this->assertStringContainsString("where('source_type', 'PURCHASING')", $landedCost);
+        $this->assertStringContainsString('purchaseDocumentLine.document', $landedCost);
         $this->assertStringNotContainsString('JournalPostingService', $source);
         $this->assertStringNotContainsString('journal_entries', $source);
 

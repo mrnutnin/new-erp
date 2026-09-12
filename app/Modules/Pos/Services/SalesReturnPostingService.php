@@ -14,6 +14,7 @@ use App\Modules\Finance\Services\OpenItemService;
 use App\Modules\Platform\Services\AuditLogger;
 use App\Modules\Pos\Models\PhysicalSale;
 use App\Modules\Pos\Models\SalesReturn;
+use App\Modules\Wms\Services\CostPropagationTriggerDispatcher;
 use Brick\Math\BigDecimal;
 use Brick\Math\RoundingMode;
 use Illuminate\Http\Request;
@@ -23,7 +24,7 @@ use Illuminate\Validation\ValidationException;
 /** Financial-only Sales Return posting. Inventory/COGS is deliberately owned by the next contract. */
 final class SalesReturnPostingService
 {
-    public function __construct(private readonly JournalPostingService $journals, private readonly OpenItemService $openItems, private readonly SalesReturnInventoryPostingService $inventory, private readonly CommissionCalculationService $commissions, private readonly AuditLogger $audit) {}
+    public function __construct(private readonly JournalPostingService $journals, private readonly OpenItemService $openItems, private readonly SalesReturnInventoryPostingService $inventory, private readonly CommissionCalculationService $commissions, private readonly AuditLogger $audit, private readonly CostPropagationTriggerDispatcher $costPropagation) {}
 
     public function post(SalesReturn $return, string $date, Warehouse $warehouse, User $actor, Request $request, ?int $refundBankAccountId = null): SalesReturn
     {
@@ -64,6 +65,7 @@ final class SalesReturnPostingService
             $return->update(['status' => 'POSTED', 'posting_date' => $date, 'journal_entry_id' => $posted->id, 'cogs_journal_entry_id' => $cogs->id, 'refund_bank_account_id' => $cashRefund['bank_account_id'] ?? null, 'refund_amount' => $cashRefund['amount'] ?? '0.00', 'posted_by' => $actor->id, 'posted_at' => now(), 'updated_by' => $actor->id]);
             $this->commissions->reverseForPostedReturn($return->fresh(), $actor, "Sales Return {$return->document_number}");
             $this->audit->record('pos.sales-return.posted.financial', $return, $before, $return->fresh()->only(array_keys($before)), $actor, $request);
+            $this->costPropagation->dispatchIfEnabled('SALES_RETURN', $return->id, (int) $return->reversal_revision, [], $actor->id);
 
             return $return->fresh();
         }, 3);
@@ -181,6 +183,6 @@ final class SalesReturnPostingService
             ]);
         }
 
-        return ['contract_version' => 1, 'event_code' => 'sales_credit_note', 'accounts' => $original->unique('account_role')->values()->all()];
+        return ['contract_version' => 1, 'event_code' => 'sales_credit_note', 'credit_note_mode' => 'RETURN', 'accounts' => $original->unique('account_role')->values()->all()];
     }
 }

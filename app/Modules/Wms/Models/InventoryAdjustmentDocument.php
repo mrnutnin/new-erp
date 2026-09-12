@@ -13,7 +13,7 @@ final class InventoryAdjustmentDocument extends Model
 
     protected $table = 'wms_inventory_adjustment_documents';
 
-    protected $fillable = ['warehouse_id', 'branch_id', 'document_number', 'document_date', 'direction', 'status', 'reversal_status', 'reason', 'idempotency_key', 'created_by', 'approved_by', 'posted_by', 'reversed_by', 'reversed_at', 'reversal_reason', 'reversal_revision'];
+    protected $fillable = ['warehouse_id', 'branch_id', 'document_number', 'document_date', 'direction', 'document_context', 'source_issue_id', 'status', 'reversal_status', 'reason', 'idempotency_key', 'created_by', 'approved_by', 'posted_by', 'reversed_by', 'reversed_at', 'reversal_reason', 'reversal_revision'];
 
     protected function casts(): array
     {
@@ -33,6 +33,16 @@ final class InventoryAdjustmentDocument extends Model
     public function creator()
     {
         return $this->belongsTo(User::class, 'created_by');
+    }
+
+    public function sourceIssue()
+    {
+        return $this->belongsTo(IssueDocument::class, 'source_issue_id');
+    }
+
+    public function productionSources()
+    {
+        return $this->hasMany(ProductionReceiptSource::class, 'receipt_document_id')->orderBy('position');
     }
 
     public function approver()

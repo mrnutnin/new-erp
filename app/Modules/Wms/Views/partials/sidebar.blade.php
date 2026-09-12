@@ -14,6 +14,7 @@
 @if ($isInventory && (auth()->user()->hasPermission('wms.transfers.view') || auth()->user()->hasPermission('wms.issues.view') || auth()->user()->hasPermission('wms.issue-returns.view') || auth()->user()->hasPermission('wms.inventory-adjustments.view') || auth()->user()->hasPermission('wms.stock-counts.view')))
     @php($transferActive = request()->routeIs('wms.transfers.*'))
     @php($issueActive = request()->routeIs('wms.issues.*') || request()->routeIs('wms.issue-returns.*'))
+    @php($manualProductionActive = request()->routeIs('wms.production.*'))
     @php($countActive = request()->routeIs('wms.stock-counts.*') || request()->routeIs('wms.inventory-adjustments.*'))
     <p class="eyebrow px-3 mb-2">การปฏิบัติงานคลัง</p>
     <div class="list-group mb-4">
@@ -31,6 +32,14 @@
                     @if (auth()->user()->hasPermission('wms.issue-returns.view'))<a class="list-group-item list-group-item-action ps-5 {{ request()->routeIs('wms.issue-returns.*') ? 'active' : '' }}" href="{{ route('wms.issue-returns.index') }}">รับคืนสินค้าจากการเบิก</a>@endif
                 </div>
             @endif
+            @if (auth()->user()->hasPermission('wms.issues.view') || auth()->user()->hasPermission('wms.inventory-adjustments.view'))
+                <button class="list-group-item list-group-item-action d-flex align-items-center justify-content-between ps-4 {{ $manualProductionActive ? 'active' : '' }}" type="button" data-bs-toggle="collapse" data-bs-target="#wms-manual-production-menu" aria-expanded="{{ $manualProductionActive ? 'true' : 'false' }}" aria-controls="wms-manual-production-menu"><span><i class="bx bx-cog me-2" aria-hidden="true"></i>ผลิตแบบ Manual</span><i class="bx bx-chevron-down" aria-hidden="true"></i></button>
+                <div id="wms-manual-production-menu" class="collapse {{ $manualProductionActive ? 'show' : '' }}">
+                    @if (auth()->user()->hasPermission('wms.issues.view'))<a class="list-group-item list-group-item-action ps-5 {{ request()->routeIs('wms.production.material-issues.*') ? 'active' : '' }}" href="{{ route('wms.production.material-issues.index') }}">เบิกวัตถุดิบผลิต</a>@endif
+                    @if (auth()->user()->hasPermission('wms.issue-returns.view'))<a class="list-group-item list-group-item-action ps-5 {{ request()->routeIs('wms.production.issue-returns.*') ? 'active' : '' }}" href="{{ route('wms.production.issue-returns.index') }}">รับคืนวัตถุดิบผลิต</a>@endif
+                    @if (auth()->user()->hasPermission('wms.inventory-adjustments.view'))<a class="list-group-item list-group-item-action ps-5 {{ request()->routeIs('wms.production.finished-receipts.*') ? 'active' : '' }}" href="{{ route('wms.production.finished-receipts.index') }}">รับสินค้าผลิตเสร็จ</a>@endif
+                </div>
+            @endif
             @if (auth()->user()->hasPermission('wms.stock-counts.view') || auth()->user()->hasPermission('wms.inventory-adjustments.view'))
                 <button class="list-group-item list-group-item-action d-flex align-items-center justify-content-between ps-4 {{ $countActive ? 'active' : '' }}" type="button" data-bs-toggle="collapse" data-bs-target="#wms-count-menu" aria-expanded="{{ $countActive ? 'true' : 'false' }}" aria-controls="wms-count-menu"><span><i class="bx bx-clipboard me-2" aria-hidden="true"></i>นับ–ปรับปรุงสินค้า</span><i class="bx bx-chevron-down" aria-hidden="true"></i></button>
                 <div id="wms-count-menu" class="collapse {{ $countActive ? 'show' : '' }}">
@@ -41,13 +50,22 @@
     </div>
 @endif
 
-@if ($isInventory && (auth()->user()->hasPermission('wms.opening-balances.view') || auth()->user()->hasPermission('wms.stock.view') || auth()->user()->hasPermission('wms.stock-valuation.view') || auth()->user()->hasPermission('wms.cost-allocation-reviews.view')))
+@if ($isInventory && (auth()->user()->hasPermission('wms.opening-balances.view') || auth()->user()->hasPermission('wms.stock.view') || auth()->user()->hasPermission('wms.stock-valuation.view') || auth()->user()->hasPermission('wms.cost-revaluation.trigger') || auth()->user()->hasPermission('wms.cost-allocation-reviews.view')))
     <p class="eyebrow px-3 mb-2">สต็อกและรายงาน</p>
     <div class="list-group mb-4">
         @if (auth()->user()->hasPermission('wms.opening-balances.view'))<a class="list-group-item list-group-item-action {{ request()->routeIs('wms.opening-balances.*') ? 'active' : '' }}" href="{{ route('wms.opening-balances.index') }}"><i class="bx bx-import me-2" aria-hidden="true"></i>ยอดยกมาสินค้า</a>@endif
         @if (auth()->user()->hasPermission('wms.stock.view'))<a class="list-group-item list-group-item-action {{ request()->routeIs('wms.stock.*') ? 'active' : '' }}" href="{{ route('wms.stock.index') }}"><i class="bx bx-line-chart me-2" aria-hidden="true"></i>Stock Card</a>@endif
-        @if (auth()->user()->hasPermission('wms.stock-valuation.view'))<a class="list-group-item list-group-item-action {{ request()->routeIs('wms.stock-valuation.*') ? 'active' : '' }}" href="{{ route('wms.stock-valuation.index') }}"><i class="bx bx-bar-chart-alt-2 me-2" aria-hidden="true"></i>มูลค่าสินค้าคงเหลือ</a>@endif
-        @if (auth()->user()->hasPermission('wms.cost-allocation-reviews.view'))<a class="list-group-item list-group-item-action {{ request()->routeIs('wms.legacy-allocation-reviews.*') ? 'active' : '' }}" href="{{ route('wms.legacy-allocation-reviews.index') }}"><i class="bx bx-shield-quarter me-2" aria-hidden="true"></i>ตรวจสอบ Legacy Allocation</a>@endif
+        @if (auth()->user()->hasPermission('wms.stock-valuation.view'))<a class="list-group-item list-group-item-action {{ request()->routeIs('wms.stock-valuation.index') ? 'active' : '' }}" href="{{ route('wms.stock-valuation.index') }}"><i class="bx bx-bar-chart-alt-2 me-2" aria-hidden="true"></i>มูลค่าสินค้าคงเหลือ</a>@endif
+        @php($costingActive = request()->routeIs('wms.stock-valuation.revaluation.*') || request()->routeIs('wms.stock-valuation.manual-trigger.*') || request()->routeIs('wms.stock-valuation.emergency-rebuild.*') || request()->routeIs('wms.legacy-allocation-reviews.*'))
+        @if (auth()->user()->hasPermission('wms.stock-valuation.view') || auth()->user()->hasPermission('wms.cost-revaluation.trigger') || auth()->user()->hasPermission('wms.cost-revaluation.emergency-rebuild') || auth()->user()->hasPermission('wms.cost-allocation-reviews.view'))
+            <button class="list-group-item list-group-item-action d-flex align-items-center justify-content-between {{ $costingActive ? 'active' : '' }}" type="button" data-bs-toggle="collapse" data-bs-target="#wms-costing-menu" aria-expanded="{{ $costingActive ? 'true' : 'false' }}" aria-controls="wms-costing-menu"><span><i class="bx bx-calculator me-2" aria-hidden="true"></i>คำนวณต้นทุน</span><i class="bx bx-chevron-down" aria-hidden="true"></i></button>
+            <div id="wms-costing-menu" class="collapse {{ $costingActive ? 'show' : '' }}">
+                @if (auth()->user()->hasPermission('wms.stock-valuation.view'))<a class="list-group-item list-group-item-action ps-5 {{ request()->routeIs('wms.stock-valuation.revaluation.*') ? 'active' : '' }}" href="{{ route('wms.stock-valuation.revaluation.index') }}">อนุมัติ Revaluation</a>@endif
+                @if (auth()->user()->hasPermission('wms.cost-revaluation.trigger'))<a class="list-group-item list-group-item-action ps-5 {{ request()->routeIs('wms.stock-valuation.manual-trigger.*') ? 'active' : '' }}" href="{{ route('wms.stock-valuation.manual-trigger.index') }}">สั่งคำนวณต้นทุน</a>@endif
+                @if (auth()->user()->hasPermission('wms.cost-revaluation.emergency-rebuild'))<a class="list-group-item list-group-item-action ps-5 {{ request()->routeIs('wms.stock-valuation.emergency-rebuild.*') ? 'active' : '' }}" href="{{ route('wms.stock-valuation.emergency-rebuild.index') }}">Emergency rebuild</a>@endif
+                @if (auth()->user()->hasPermission('wms.cost-allocation-reviews.view'))<a class="list-group-item list-group-item-action ps-5 {{ request()->routeIs('wms.legacy-allocation-reviews.*') ? 'active' : '' }}" href="{{ route('wms.legacy-allocation-reviews.index') }}">ตรวจสอบ Legacy Allocation</a>@endif
+            </div>
+        @endif
     </div>
 @endif
 

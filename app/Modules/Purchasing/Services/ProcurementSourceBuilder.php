@@ -21,7 +21,7 @@ use App\Modules\Wms\Models\StockMovement;
 use App\Modules\Wms\Models\Uom;
 use App\Modules\Wms\Models\UomConversion;
 use App\Modules\Purchasing\Support\PurchaseThreeWayMatchGate;
-use App\Modules\Wms\Support\InventoryOpsSmokeContract;
+use App\Modules\Wms\Services\InventoryOpsSmokeContract;
 use Closure;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;

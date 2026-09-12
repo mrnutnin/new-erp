@@ -11,6 +11,7 @@ final class PhysicalSaleCancellationServiceContractTest extends TestCase
         $service = file_get_contents(dirname(__DIR__, 2).'/app/Modules/Pos/Services/PhysicalSaleCancellationService.php');
         self::assertStringContainsString('return DB::transaction(', $service);
         self::assertStringContainsString("'event_code' => 'sales_credit_note'", $service);
+        self::assertStringContainsString("'credit_note_mode' => 'RETURN'", $service);
         self::assertStringContainsString("'document_type' => 'CREDIT_NOTE'", $service);
         self::assertStringContainsString('$this->openItems->allocate(', $service);
         self::assertStringContainsString('assertNoPostedReceipts', $service);
