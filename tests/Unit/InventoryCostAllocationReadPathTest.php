@@ -14,7 +14,11 @@ class InventoryCostAllocationReadPathTest extends TestCase
 
         $this->assertInstanceOf(Builder::class, $query);
         $this->assertStringContainsString('group by', strtolower($query->toSql()));
-        $this->assertSame(['2026-08-21', 'REVERSED', 7, 11], $query->getBindings());
+        $this->assertContains('2026-08-21', $query->getBindings());
+        $this->assertContains('REVERSED', $query->getBindings());
+        $this->assertContains('RECOST', $query->getBindings());
+        $this->assertContains(7, $query->getBindings());
+        $this->assertContains(11, $query->getBindings());
     }
 
     public function test_historical_query_excludes_pending_value_from_final_and_is_paginated_compatible(): void

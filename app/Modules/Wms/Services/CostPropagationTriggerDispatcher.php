@@ -53,7 +53,12 @@ final class CostPropagationTriggerDispatcher
 
         return DB::transaction(function () use ($plan, $snapshot, $resolvedCosts, $actorId): CostRevaluationBatch {
             $source = $plan['source'];
-            $batch = CostRevaluationBatch::query()->firstOrCreate(['idempotency_key' => $source['trigger_identity']], [
+            $identity = (string) $source['trigger_identity'];
+            $existing = CostRevaluationBatch::query()->where('idempotency_key', $identity)->first();
+            if ($existing && $existing->runs()->where('status', '!=', 'CANCELLED')->doesntExist()) {
+                $identity = hash('sha256', json_encode(['retry-after-cancel', $identity, (string) \Illuminate\Support\Str::uuid()], JSON_THROW_ON_ERROR));
+            }
+            $batch = CostRevaluationBatch::query()->firstOrCreate(['idempotency_key' => $identity], [
                 'source_document_type' => $source['document_type'], 'source_document_id' => $source['document_id'],
                 'source_document_reference' => $source['document_reference'], 'document_date' => $source['document_date'],
                 'source_revision' => $source['revision'], 'status' => $plan['summary']['ready'] ? 'QUEUED' : 'REQUIRES_REVIEW',

@@ -125,6 +125,10 @@ final class CostPropagationScopeTriggerService
         }
         $scope = $preview['scope'];
         $identity = hash('sha256', json_encode(['manual-scope-v1', $scope], JSON_THROW_ON_ERROR));
+        $existing = CostRevaluationBatch::query()->where('idempotency_key', $identity)->first();
+        if ($existing && $existing->runs()->where('status', '!=', 'CANCELLED')->doesntExist()) {
+            $identity = hash('sha256', json_encode(['retry-after-cancel', $identity, (string) \Illuminate\Support\Str::uuid()], JSON_THROW_ON_ERROR));
+        }
 
         $batch = DB::transaction(function () use ($actor, $reason, $ipAddress, $userAgent, $preview, $scope, $identity): CostRevaluationBatch {
             $snapshot = [

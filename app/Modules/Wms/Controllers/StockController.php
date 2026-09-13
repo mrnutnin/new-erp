@@ -4,7 +4,6 @@ namespace App\Modules\Wms\Controllers;
 
 use App\Http\Controllers\Controller;
 use App\Modules\Settings\Services\GlobalSettings;
-use App\Modules\Wms\Models\CostAllocation;
 use App\Modules\Wms\Models\Item;
 use App\Modules\Wms\Models\StockCostLayer;
 use App\Modules\Wms\Models\StockBalance;
@@ -136,17 +135,17 @@ class StockController extends Controller
         // allocations without creating a layer.  The Stock Card must read
         // both sources or adjustment rows show quantity but no value/cost.
         $costs = StockCostLayer::query()->selectRaw('source_movement_id, MAX(unit_cost) AS unit_cost')->groupBy('source_movement_id');
-        $allocationCosts = CostAllocation::query()
-            ->whereIn('status', ['POSTED', 'PENDING'])
-            ->where('cost_status', 'FINAL')
-            ->whereNotExists(fn ($correction) => $correction
-                ->selectRaw('1')
-                ->from('wms_cost_allocation_corrections')
-                ->whereColumn('wms_cost_allocation_corrections.allocation_id', 'wms_cost_allocations.id'))
-            ->selectRaw('stock_movement_id, SUM(value) AS total_value')
+        $allocationCosts = $costing->canonicalAsOf($dateTo)
+            ->join('wms_stock_movements AS allocation_movements', 'allocation_movements.id', '=', 'wms_cost_allocations.stock_movement_id')
+            ->whereIn('wms_cost_allocations.status', ['POSTED', 'PENDING'])
+            ->where('wms_cost_allocations.cost_status', 'FINAL')
+            // RECOST value is absolute and its direction is the inventory
+            // correction direction.  Convert it back to the movement-value
+            // sign before combining it with the original allocation.
+            ->selectRaw('stock_movement_id, SUM(CASE WHEN allocation_type = "RECOST" THEN CASE WHEN allocation_movements.direction = wms_cost_allocations.direction THEN ABS(wms_cost_allocations.value) ELSE -ABS(wms_cost_allocations.value) END WHEN wms_cost_allocations.direction = "IN" THEN ABS(wms_cost_allocations.value) ELSE -ABS(wms_cost_allocations.value) END) AS total_value')
             ->groupBy('stock_movement_id');
-        // Prefer the signed allocation total when it exists. This preserves a
-        // legitimate zero-cost movement and avoids averaging duplicate/zero
+        // Prefer the effective allocation total when it exists. This preserves
+        // a legitimate zero-cost movement and avoids averaging duplicate/zero
         // allocations into an incorrect unit cost. Layer cost is fallback for
         // movements whose cost allocation has not been written yet. Transfer
         // bridges and reversed Issue Returns can be PENDING without Journal

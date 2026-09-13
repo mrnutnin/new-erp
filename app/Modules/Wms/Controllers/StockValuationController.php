@@ -10,6 +10,7 @@ use App\Modules\Platform\Services\AuditLogger;
 use App\Modules\Settings\Services\GlobalSettings;
 use App\Modules\Wms\Models\CostRevaluationRun;
 use App\Modules\Wms\Models\CostRevaluationBatch;
+use App\Modules\Wms\Models\CostRevaluationDelta;
 use App\Modules\Wms\Models\IssueDocument;
 use App\Modules\Wms\Models\IssueReturn;
 use App\Modules\Wms\Models\Item;
@@ -35,6 +36,7 @@ use App\Modules\Wms\Support\WmsDecimal;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\View\View;
 use Yajra\DataTables\Facades\DataTables;
 
@@ -251,9 +253,9 @@ class StockValuationController extends Controller
             $request->ip(),
             $request->userAgent(),
         );
-        $run = $batch->runs->first();
+        $run = $batch->runs()->latest('id')->first();
 
-        return $batch->runs->count() === 1
+        return (int) $batch->expected_partitions === 1 && $run
             ? redirect()->route('wms.stock-valuation.revaluation.show', $run)->with('success', 'ส่งเอกสารเข้าคิว Revaluation แล้ว')
             : redirect()->route('wms.stock-valuation.revaluation.index')->with('success', "ส่งเอกสารเข้าคิว {$batch->expected_partitions} partitions แล้ว");
     }
@@ -285,6 +287,46 @@ class StockValuationController extends Controller
             ->get(['id', 'status', 'expected_partitions', 'resolved_root_lines', 'completed_partitions', 'failed_partitions', 'created_at']);
 
         return view('Wms::stock-valuation.revaluation-queue', compact('scopeBatches'));
+    }
+
+    public function revaluationHealth(Request $request): JsonResponse
+    {
+        $warehouseId = (int) $request->attributes->get('selectedWarehouse')->id;
+        $runs = CostRevaluationRun::query()->whereHas('rootAllocation', fn ($allocation) => $allocation->where('warehouse_id', $warehouseId));
+        $counts = (clone $runs)->selectRaw('status, COUNT(*) AS total')->groupBy('status')->pluck('total', 'status')->map(fn ($count): int => (int) $count)->all();
+        $attentionStatuses = ['FAILED_RETRYABLE', 'REQUIRES_REVIEW', 'LIMIT_REACHED'];
+        $activeStatuses = ['QUEUED', 'CALCULATING', 'WAITING_CONTINUATION', 'PENDING_APPROVAL', 'APPROVED', 'APPLYING', 'STOCK_PROJECTED'];
+        $queuePending = Schema::hasTable('jobs') ? DB::table('jobs')->where('queue', 'cost-propagation')->count() : 0;
+        $queueFailed = Schema::hasTable('failed_jobs') ? DB::table('failed_jobs')->where('queue', 'cost-propagation')->count() : 0;
+        $invalidPostedIds = (clone $runs)->whereIn('status', ['GL_POSTED', 'COMPLETED'])->whereNotExists(fn ($query) => $query->selectRaw('1')->from('wms_cost_revaluation_deltas as deltas')->whereColumn('deltas.run_id', 'wms_cost_revaluation_runs.id'))->pluck('id');
+        $recent = (clone $runs)->with('rootAllocation.movement:id,source_reference,source_type')->latest('id')->limit(8)->get(['id', 'root_allocation_id', 'status', 'nodes_scanned', 'nodes_affected', 'failed_partitions', 'last_error', 'created_at'])->map(function (CostRevaluationRun $run): array {
+            return [
+                'id' => $run->id,
+                'source' => $run->rootAllocation?->movement?->source_reference ?: $run->rootAllocation?->movement?->source_type ?: '-',
+                'status' => $run->status,
+                'nodes_scanned' => (int) $run->nodes_scanned,
+                'nodes_affected' => (int) $run->nodes_affected,
+                'failed_partitions' => (int) $run->failed_partitions,
+                'last_error' => $run->last_error ?: '-',
+                'created_at' => $run->created_at?->timezone('Asia/Bangkok')->format('d/m/Y H:i').' · '.$run->created_at?->timezone('Asia/Bangkok')->locale('th')->diffForHumans().' (UTC+7)',
+            ];
+        })->values();
+
+        return response()->json([
+            'healthy' => $queueFailed === 0 && $invalidPostedIds->isEmpty() && collect($attentionStatuses)->sum(fn ($status): int => $counts[$status] ?? 0) === 0,
+            'summary' => [
+                'total_runs' => array_sum($counts),
+                'active_runs' => collect($activeStatuses)->sum(fn ($status): int => $counts[$status] ?? 0),
+                'attention_runs' => collect($attentionStatuses)->sum(fn ($status): int => $counts[$status] ?? 0),
+                'completed_runs' => (int) ($counts['COMPLETED'] ?? 0),
+                'queue_pending' => $queuePending,
+                'queue_failed' => $queueFailed,
+                'invalid_posted_runs' => $invalidPostedIds->count(),
+            ],
+            'status_counts' => $counts,
+            'invalid_posted_ids' => $invalidPostedIds->values(),
+            'recent' => $recent,
+        ]);
     }
 
     public function revaluationQueueData(Request $request): JsonResponse
@@ -343,15 +385,37 @@ class StockValuationController extends Controller
 
     public function revaluationShow(Request $request, CostRevaluationRun $run, CostRevaluationPreflightService $preflight, CostRevaluationReconciliationService $reconciliation): View
     {
-        $warehouseId = (int) $request->attributes->get('selectedWarehouse')->id;
-        abort_unless((int) $run->rootAllocation?->warehouse_id === $warehouseId, 404);
+        $this->assertRevaluationScope($request, $run);
 
         return view('Wms::stock-valuation.revaluation-show', [
-            'run' => $run->load(['batch', 'rootAllocation.movement', 'deltas.allocation']),
+            'run' => $run->load(['batch', 'rootAllocation.movement']),
             'preflight' => $preflight->check($run),
             'reconciliation' => $reconciliation->check($run),
+            'deltaCount' => $run->deltas()->count(),
+            'hasAppliedDelta' => $run->deltas()->where('status', 'APPLIED')->exists(),
             'history' => AuditLog::query()->with('user:id,name')->where('subject_type', $run->getMorphClass())->where('subject_id', $run->id)->latest('created_at')->latest('id')->get(),
         ]);
+    }
+
+    public function revaluationPreflightData(Request $request, CostRevaluationRun $run, CostRevaluationPreflightService $preflight): JsonResponse
+    {
+        $this->assertRevaluationScope($request, $run);
+        $checks = collect($preflight->check($run)['checks'] ?? [])->values();
+
+        return DataTables::collection($checks)->toJson();
+    }
+
+    public function revaluationDeltasData(Request $request, CostRevaluationRun $run): JsonResponse
+    {
+        $this->assertRevaluationScope($request, $run);
+        $query = CostRevaluationDelta::query()
+            ->where('run_id', $run->id)
+            ->select(['id', 'allocation_id', 'status', 'old_unit_cost', 'new_unit_cost', 'delta_value', 'applied_cost_allocation_id']);
+
+        return DataTables::eloquent($query)
+            ->addColumn('allocation_label', fn ($delta) => '#'.$delta->allocation_id)
+            ->addColumn('applied_allocation_label', fn ($delta) => $delta->applied_cost_allocation_id ? '#'.$delta->applied_cost_allocation_id : '-')
+            ->toJson();
     }
 
     public function revaluationApprove(Request $request, CostRevaluationRun $run, CostRevaluationApprovalService $approval)

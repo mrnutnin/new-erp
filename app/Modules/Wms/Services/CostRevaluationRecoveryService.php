@@ -51,7 +51,10 @@ final class CostRevaluationRecoveryService
         $this->reason($reason);
         $run = DB::transaction(function () use ($run, $actor, $reason): CostRevaluationRun {
             $locked = CostRevaluationRun::query()->lockForUpdate()->findOrFail($run->id);
-            if (! in_array($locked->status, ['QUEUED', 'CALCULATING', 'WAITING_CONTINUATION', 'FAILED_RETRYABLE', 'REQUIRES_REVIEW', 'LIMIT_REACHED', 'PENDING_APPROVAL', 'APPROVED', 'APPLYING'], true)) {
+            $legacyPostedNoop = in_array($locked->status, ['GL_POSTED', 'COMPLETED'], true)
+                && ! $locked->deltas()->exists()
+                && ! DB::table('journal_entries')->where('source_type', 'WMS_REVALUATION')->where('source_id', 'like', 'run:'.$locked->id.':%')->exists();
+            if (! in_array($locked->status, ['QUEUED', 'CALCULATING', 'WAITING_CONTINUATION', 'FAILED_RETRYABLE', 'REQUIRES_REVIEW', 'LIMIT_REACHED', 'PENDING_APPROVAL', 'APPROVED', 'APPLYING'], true) && ! $legacyPostedNoop) {
                 throw ValidationException::withMessages(['status' => 'สถานะปัจจุบันไม่สามารถยกเลิก Run ได้']);
             }
             if ($locked->deltas()->where('status', 'APPLIED')->exists()) {

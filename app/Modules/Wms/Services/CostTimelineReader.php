@@ -9,7 +9,6 @@ use Brick\Math\RoundingMode;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
-use Illuminate\Support\Facades\Schema;
 use InvalidArgumentException;
 use Throwable;
 
@@ -19,6 +18,7 @@ final class CostTimelineReader
     public function __construct(
         private readonly EffectiveDocumentDateResolver $dates,
         private readonly CostImpactClassifier $impacts,
+        private readonly InventoryCostAllocationService $allocations,
     ) {}
 
     /**
@@ -278,19 +278,20 @@ final class CostTimelineReader
     /** @param array<string, mixed> $scope */
     private function partitionQuery(array $scope): Builder
     {
-        $query = CostAllocation::query()
+        $query = $this->allocations->canonicalAsOf('9999-12-31')
             ->where('warehouse_id', $scope['warehouse_id'])
             ->where('item_id', $scope['item_id'])
             ->where('uom_id', $scope['uom_id'])
             ->where('method', $scope['method'])
-            ->where('status', '!=', 'REVERSED');
-
-        if (Schema::hasTable('wms_cost_allocation_corrections')) {
-            $query->whereNotExists(fn ($correction) => $correction
-                ->selectRaw('1')
-                ->from('wms_cost_allocation_corrections')
-                ->whereColumn('wms_cost_allocation_corrections.allocation_id', 'wms_cost_allocations.id'));
-        }
+            ->where('status', '!=', 'REVERSED')
+            // Revaluation RECOST rows are outputs of an earlier replay. They
+            // must not become input events for the next replay, otherwise a
+            // retry compounds the same correction and AVG never returns to
+            // the movement-date average.
+            ->where(function (Builder $query): void {
+                $query->where('allocation_type', '!=', 'RECOST')
+                    ->orWhereRaw("JSON_EXTRACT(metadata, '$.revaluation_run_id') IS NULL");
+            });
 
         return $query;
     }

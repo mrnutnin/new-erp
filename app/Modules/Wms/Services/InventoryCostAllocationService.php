@@ -202,7 +202,33 @@ final class InventoryCostAllocationService
 
     public function asOf(string $date): Builder
     {
-        return CostAllocation::query()->where('business_date', '<=', $date)->where('status', '!=', 'REVERSED');
+        return CostAllocation::query()->where('wms_cost_allocations.business_date', '<=', $date)->where('wms_cost_allocations.status', '!=', 'REVERSED');
+    }
+
+    /**
+     * Return the effective allocation ledger for read/replay paths.
+     *
+     * RECOST rows are immutable corrections, not additional movement value.
+     * Older runs can leave more than one correction for the same movement;
+     * only the latest active correction is canonical.  Keeping this rule in
+     * one query prevents Stock Card, valuation and the replay engine from
+     * multiplying a movement by every historical RECOST revision.
+     */
+    public function canonicalAsOf(string $date): Builder
+    {
+        return $this->asOf($date)->where(function (Builder $query) use ($date): void {
+            $query->where('wms_cost_allocations.allocation_type', '!=', 'RECOST')
+                ->orWhere(function (Builder $query) use ($date): void {
+                    $query->where('wms_cost_allocations.allocation_type', 'RECOST')
+                        ->whereRaw(
+                            'wms_cost_allocations.id = (SELECT MAX(latest.id) FROM wms_cost_allocations AS latest WHERE latest.stock_movement_id = wms_cost_allocations.stock_movement_id AND latest.allocation_type = "RECOST" AND latest.business_date <= ? AND latest.status != "REVERSED" AND NOT EXISTS (SELECT 1 FROM wms_cost_allocation_corrections AS latest_correction WHERE latest_correction.allocation_id = latest.id))',
+                            [$date],
+                        );
+                });
+        })->whereNotExists(fn ($correction) => $correction
+            ->selectRaw('1')
+            ->from('wms_cost_allocation_corrections')
+            ->whereColumn('wms_cost_allocation_corrections.allocation_id', 'wms_cost_allocations.id'));
     }
 
     public function valuation(string $date, ?int $warehouseId = null, ?int $itemId = null): array
@@ -212,12 +238,15 @@ final class InventoryCostAllocationService
 
     public function valuationQuery(string $date, ?int $warehouseId = null, ?int $itemId = null): Builder
     {
-        $query = $this->asOf($date)->selectRaw('item_id, warehouse_id, SUM(CASE WHEN allocation_type = "RECOST" THEN 0 WHEN direction = "IN" THEN quantity ELSE -quantity END) quantity, SUM(value) value')->groupBy('item_id', 'warehouse_id');
+        $query = $this->canonicalAsOf($date)
+            ->join('wms_stock_movements AS valuation_movements', 'valuation_movements.id', '=', 'wms_cost_allocations.stock_movement_id')
+            ->selectRaw('wms_cost_allocations.item_id, wms_cost_allocations.warehouse_id, SUM(CASE WHEN wms_cost_allocations.allocation_type = "RECOST" THEN 0 WHEN wms_cost_allocations.direction = "IN" THEN wms_cost_allocations.quantity ELSE -wms_cost_allocations.quantity END) quantity, SUM(CASE WHEN wms_cost_allocations.allocation_type = "RECOST" THEN CASE WHEN valuation_movements.direction = wms_cost_allocations.direction THEN ABS(wms_cost_allocations.value) ELSE -ABS(wms_cost_allocations.value) END WHEN wms_cost_allocations.direction = "IN" THEN ABS(wms_cost_allocations.value) ELSE -ABS(wms_cost_allocations.value) END) value')
+            ->groupBy('wms_cost_allocations.item_id', 'wms_cost_allocations.warehouse_id');
         if ($warehouseId) {
-            $query->where('warehouse_id', $warehouseId);
+            $query->where('wms_cost_allocations.warehouse_id', $warehouseId);
         }
         if ($itemId) {
-            $query->where('item_id', $itemId);
+            $query->where('wms_cost_allocations.item_id', $itemId);
         }
 
         return $query;
@@ -237,14 +266,9 @@ final class InventoryCostAllocationService
      */
     public function historicalValuationQuery(string $date, ?int $warehouseId = null, ?int $itemId = null): Builder
     {
-        $allocationValues = DB::table('wms_cost_allocations')
-            ->where('wms_cost_allocations.business_date', '<=', $date)
-            ->where('wms_cost_allocations.status', '!=', 'REVERSED')
-            ->whereNotExists(fn ($correction) => $correction
-                ->selectRaw('1')
-                ->from('wms_cost_allocation_corrections')
-                ->whereColumn('wms_cost_allocation_corrections.allocation_id', 'wms_cost_allocations.id'))
-            ->selectRaw('stock_movement_id, SUM(CASE WHEN cost_status = "PENDING" THEN 0 ELSE value END) AS movement_value')
+        $allocationValues = $this->canonicalAsOf($date)
+            ->join('wms_stock_movements AS cost_movements', 'cost_movements.id', '=', 'wms_cost_allocations.stock_movement_id')
+            ->selectRaw('stock_movement_id, SUM(CASE WHEN cost_status = "PENDING" THEN 0 WHEN allocation_type = "RECOST" THEN CASE WHEN cost_movements.direction = wms_cost_allocations.direction THEN ABS(wms_cost_allocations.value) ELSE -ABS(wms_cost_allocations.value) END WHEN wms_cost_allocations.direction = "IN" THEN ABS(wms_cost_allocations.value) ELSE -ABS(wms_cost_allocations.value) END) AS movement_value')
             ->groupBy('stock_movement_id');
         $movementRows = StockMovement::query()
             ->leftJoinSub($allocationValues, 'allocation_values', fn ($join) => $join->on('allocation_values.stock_movement_id', '=', 'wms_stock_movements.id'))
@@ -282,13 +306,7 @@ final class InventoryCostAllocationService
         $final = DB::query()->fromSub($valueStates, 'value_states')
             ->joinSub($latestKeys, 'latest_keys', fn ($join) => $join->on('latest_keys.item_id', '=', 'value_states.item_id')->on('latest_keys.warehouse_id', '=', 'value_states.warehouse_id')->on('latest_keys.latest_id', '=', 'value_states.id'))
             ->selectRaw('value_states.item_id, value_states.warehouse_id, value_states.running_quantity AS final_quantity, value_states.running_value AS final_value');
-        $stats = DB::table('wms_cost_allocations')
-            ->where('wms_cost_allocations.business_date', '<=', $date)
-            ->where('wms_cost_allocations.status', '!=', 'REVERSED')
-            ->whereNotExists(fn ($correction) => $correction
-                ->selectRaw('1')
-                ->from('wms_cost_allocation_corrections')
-                ->whereColumn('wms_cost_allocation_corrections.allocation_id', 'wms_cost_allocations.id'))
+        $stats = $this->canonicalAsOf($date)
             ->when($warehouseId, fn ($query) => $query->where('wms_cost_allocations.warehouse_id', $warehouseId))
             ->when($itemId, fn ($query) => $query->where('wms_cost_allocations.item_id', $itemId))
             ->selectRaw('item_id, warehouse_id')

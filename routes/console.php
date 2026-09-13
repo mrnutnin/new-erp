@@ -253,6 +253,10 @@ Artisan::command('wms:cost-health {--json}', function (): void {
     $failedJobs = DB::table('failed_jobs')->where('queue', $queueName)->count();
     $pendingApproval = DB::table('wms_cost_revaluation_runs')->where('status', 'PENDING_APPROVAL')->count();
     $reviewRuns = $runs->whereIn('status', ['REQUIRES_REVIEW', 'LIMIT_REACHED', 'FAILED_RETRYABLE']);
+    $invalidPostedRuns = DB::table('wms_cost_revaluation_runs as runs')
+        ->whereIn('runs.status', ['GL_POSTED', 'COMPLETED'])
+        ->whereNotExists(fn ($query) => $query->selectRaw('1')->from('wms_cost_revaluation_deltas as deltas')->whereColumn('deltas.run_id', 'runs.id'))
+        ->pluck('runs.id');
     $alerts = [];
     if ($staleRuns->isNotEmpty()) {
         $alerts[] = 'STALE_RUN_LEASE';
@@ -262,6 +266,9 @@ Artisan::command('wms:cost-health {--json}', function (): void {
     }
     if ($reviewRuns->isNotEmpty()) {
         $alerts[] = 'RUN_REQUIRES_REVIEW';
+    }
+    if ($invalidPostedRuns->isNotEmpty()) {
+        $alerts[] = 'POSTED_RUN_WITHOUT_DELTA';
     }
     $result = [
         'healthy' => $alerts === [],
@@ -277,6 +284,7 @@ Artisan::command('wms:cost-health {--json}', function (): void {
             'oldest_open_created_at' => $runs->first()?->created_at,
             'stale_ids' => $staleRuns->pluck('id')->values()->all(),
             'review_ids' => $reviewRuns->pluck('id')->values()->all(),
+            'invalid_posted_ids' => $invalidPostedRuns->values()->all(),
         ],
         'feature_gates' => [
             'auto_trigger' => (bool) config('erp.inventory.revaluation_auto_trigger_enabled', false),
@@ -338,6 +346,10 @@ Artisan::command('wms:cost-gate-readiness {--json}', function (): void {
     $queueName = (string) config('erp.inventory.revaluation_queue', 'cost-propagation');
     $leaseSeconds = max(90, min((int) config('erp.inventory.revaluation_calculation_lease_seconds', 120), 600));
     $reviewCount = DB::table('wms_cost_revaluation_runs')->whereIn('status', ['REQUIRES_REVIEW', 'LIMIT_REACHED', 'FAILED_RETRYABLE'])->count();
+    $invalidPostedCount = DB::table('wms_cost_revaluation_runs as runs')
+        ->whereIn('runs.status', ['GL_POSTED', 'COMPLETED'])
+        ->whereNotExists(fn ($query) => $query->selectRaw('1')->from('wms_cost_revaluation_deltas as deltas')->whereColumn('deltas.run_id', 'runs.id'))
+        ->count();
     $pendingJobs = DB::table('jobs')->where('queue', $queueName)->count();
     $failedJobs = DB::table('failed_jobs')->where('queue', $queueName)->count();
     $staleRuns = DB::table('wms_cost_revaluation_runs')->whereIn('status', ['CALCULATING', 'WAITING_CONTINUATION'])->whereNotNull('heartbeat_at')->where('heartbeat_at', '<', now()->subSeconds($leaseSeconds))->count();
@@ -351,10 +363,13 @@ Artisan::command('wms:cost-gate-readiness {--json}', function (): void {
     if ($staleRuns > 0) {
         $commonBlockers[] = 'STALE_RUN_LEASE';
     }
+    if ($invalidPostedCount > 0) {
+        $commonBlockers[] = 'POSTED_RUN_WITHOUT_DELTA';
+    }
     $result = [
         'read_only' => true,
         'checked_at' => now()->toIso8601String(),
-        'evidence' => ['queue' => $queueName, 'pending_jobs' => $pendingJobs, 'failed_jobs' => $failedJobs, 'review_runs' => $reviewCount, 'stale_runs' => $staleRuns],
+        'evidence' => ['queue' => $queueName, 'pending_jobs' => $pendingJobs, 'failed_jobs' => $failedJobs, 'review_runs' => $reviewCount, 'stale_runs' => $staleRuns, 'invalid_posted_runs' => $invalidPostedCount],
         'gates' => [
             'auto_trigger' => ['ready' => $commonBlockers === [], 'blockers' => $commonBlockers],
             'apply' => ['ready' => $commonBlockers === [], 'blockers' => $commonBlockers],

@@ -46,6 +46,12 @@ final class CostRevaluationApplyService
         $allocationId = (int) array_key_first($proposedUnitCosts);
         $proposedUnitCost = (string) $proposedUnitCosts[$allocationId];
         $key = $idempotencyKey ?: hash('sha256', json_encode(['cost-shadow-v2', $sourceRevisions, $proposedUnitCosts], JSON_THROW_ON_ERROR));
+        // A cancelled run is a deliberate terminal decision, not a reusable
+        // idempotency result. A new trigger must get a new Run while active
+        // and completed runs continue to be reused safely on retries.
+        if (CostRevaluationRun::query()->where('idempotency_key', $key)->where('status', 'CANCELLED')->exists()) {
+            $key = hash('sha256', json_encode(['retry-after-cancel', $key, (string) Str::uuid()], JSON_THROW_ON_ERROR));
+        }
         $rootOverrides = collect($proposedUnitCosts)->map(fn (string $cost, int $id): array => ['allocation_id' => $id, 'proposed_unit_cost' => $cost])->values()->all();
         $run = CostRevaluationRun::query()->firstOrCreate(['idempotency_key' => $key], [
             'batch_id' => $batchId,
