@@ -28,6 +28,9 @@
 <!-- invoice-closing -->
 <div class="pdf-tax-invoice">
     <table class="pdf-footer"><tr><td width="55%" class="pdf-footer-payment"><div class="pdf-footer-heading">ข้อมูลการรับสินค้า</div><p class="muted">กรุณาตรวจสอบจำนวน หน่วยนับ และสภาพสินค้าก่อนลงนามรับ</p>@if($receipt->description)<p class="pdf-note"><b>หมายเหตุ:</b> {{ $receipt->description }}</p>@endif @if($receipt->void_reason)<p class="pdf-note"><b>เหตุผลยกเลิก:</b> {{ $receipt->void_reason }}</p>@endif</td><td width="45%" class="pdf-footer-total"><table class="pdf-total-summary"><tr class="total"><td>ต้นทุนรวม</td><td class="right">{{ \App\Modules\Wms\Support\WmsDecimal::format($totalCost, 2) }}</td></tr></table></td></tr></table>
-    <table class="pdf-signatures"><tr><td width="45%"><div class="invoice-sign-space">&nbsp;</div><div>........................................................</div><div>ผู้รับสินค้า{{ $receipt->createdBy?->name ? ' · '.$receipt->createdBy->name : '' }}</div><div class="invoice-sign-date">วันที่ .......... / .......... / ..........</div></td><td width="10%" class="invoice-sign-gap"></td><td width="45%"><div class="invoice-sign-space">&nbsp;</div><div>........................................................</div><div>ผู้อนุมัติ{{ $receipt->approvedBy?->name ? ' · '.$receipt->approvedBy->name : '' }}</div><div class="invoice-sign-date">{{ $receipt->approved_at ? 'อนุมัติ '.$receipt->approved_at->format('d/m/Y H:i') : 'วันที่ .......... / .......... / ..........' }}</div></td></tr></table>
+    <x-platform::pdf-signatures :document="$receipt" :slots="[
+        ['role' => 'prepared', 'label' => 'ผู้รับสินค้า', 'name' => $receipt->createdBy?->name],
+        ['role' => 'approved', 'label' => 'ผู้อนุมัติ', 'name' => $receipt->approvedBy?->name],
+    ]" />
     <p class="pdf-control">{{ $receipt->receipt_number }} · ใบรับสินค้า / GOODS RECEIPT</p>
 </div>

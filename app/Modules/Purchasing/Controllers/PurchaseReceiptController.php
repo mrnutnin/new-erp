@@ -135,11 +135,12 @@ class PurchaseReceiptController extends Controller
         })->filter(fn (array $line): bool => (float) $line['remaining_quantity'] > 0)->values()]);
     }
 
-    public function store(Request $request, GoodsReceiptService $receipts): JsonResponse
+    public function store(Request $request, GoodsReceiptService $receipts, AuditLogger $audit): JsonResponse
     {
         $values = $request->validate($this->rules());
         $order = PurchaseOrder::query()->where($this->purchasingScopeColumn(), $this->purchasingScopeId($request))->whereIn('warehouse_id', $this->authorizedWarehouseIds($request))->where('status', 'APPROVED')->findOrFail($values['purchase_order_id']);
         $receipt = $receipts->createDraft([...$values, 'warehouse_id' => $order->warehouse_id], $request->user());
+        $audit->record('purchasing.goods_receipt.created', $receipt, [], $receipt->fresh('lines')->toArray(), $request->user(), $request);
 
         return response()->json(['status' => true, 'msg' => "สร้างร่าง Receipt {$receipt->receipt_number} แล้ว", 'redirect' => route($this->moduleRoutePrefix().'.purchase-receipts.show', $receipt)]);
     }
@@ -169,10 +170,11 @@ class PurchaseReceiptController extends Controller
         return response()->json(['status' => true, 'msg' => 'ลบร่างใบรับสินค้าแล้ว']);
     }
 
-    public function approve(Request $request, GoodsReceipt $purchaseReceipt, GoodsReceiptService $receipts): JsonResponse
+    public function approve(Request $request, GoodsReceipt $purchaseReceipt, GoodsReceiptService $receipts, AuditLogger $audit): JsonResponse
     {
         $this->assertWarehouse($request, $purchaseReceipt);
         $receipt = $receipts->approve($purchaseReceipt, $request->user());
+        $audit->record('purchasing.goods_receipt.approved', $receipt, ['status' => 'DRAFT'], $receipt->toArray(), $request->user(), $request);
 
         return response()->json(['status' => true, 'msg' => "อนุมัติ Receipt {$receipt->receipt_number} แล้ว"]);
     }

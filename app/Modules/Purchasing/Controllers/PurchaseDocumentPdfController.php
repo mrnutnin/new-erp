@@ -12,7 +12,6 @@ use App\Modules\Purchasing\Models\PurchaseRequisition;
 use App\Modules\Settings\Services\GlobalSettings;
 use Brick\Math\BigDecimal;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Storage;
 use Symfony\Component\HttpFoundation\Response;
 
 /**
@@ -29,10 +28,9 @@ class PurchaseDocumentPdfController extends Controller
             'warehouse.branch', 'supplier', 'purchaseOrder',
             'lines.item', 'lines.uom', 'createdBy', 'submittedBy', 'approvedBy',
         ]);
-        $logoPath = $settings->value('logo_path');
         $bytes = $renderer->renderView('Purchasing::pdf.purchase-requisition', [
             'requisition' => $document,
-            'logo' => $logoPath && Storage::disk('public')->exists($logoPath) ? Storage::disk('public')->path($logoPath) : null,
+            'logo' => $settings->logoDataUri(),
             'companyName' => (string) ($settings->value('company_name') ?: config('app.name')),
             'companyAddress' => (string) ($document->warehouse?->branch?->tax_address ?: $settings->value('company_address')),
             'companyTaxId' => (string) ($settings->value('tax_id') ?: ''),
@@ -53,10 +51,9 @@ class PurchaseDocumentPdfController extends Controller
             'warehouse.branch', 'supplier', 'paymentTerm', 'purchaseRequisition',
             'lines.item', 'lines.uom', 'lines.taxCode', 'createdBy', 'approvedBy',
         ]);
-        $logoPath = $settings->value('logo_path');
         $bytes = $renderer->renderView('Purchasing::pdf.purchase-order', [
             'order' => $document,
-            'logo' => $logoPath && Storage::disk('public')->exists($logoPath) ? Storage::disk('public')->path($logoPath) : null,
+            'logo' => $settings->logoDataUri(),
             'companyName' => (string) ($settings->value('company_name') ?: config('app.name')),
             'companyAddress' => (string) ($document->warehouse?->branch?->tax_address ?: $settings->value('company_address')),
             'companyTaxId' => (string) ($settings->value('tax_id') ?: ''),
@@ -78,10 +75,9 @@ class PurchaseDocumentPdfController extends Controller
             'lines.item', 'lines.purchaseUom', 'lines.stockUom',
             'createdBy', 'approvedBy',
         ]);
-        $logoPath = $settings->value('logo_path');
         $bytes = $renderer->renderView('Purchasing::pdf.goods-receipt', [
             'receipt' => $document,
-            'logo' => $logoPath && Storage::disk('public')->exists($logoPath) ? Storage::disk('public')->path($logoPath) : null,
+            'logo' => $settings->logoDataUri(),
             'companyName' => (string) ($settings->value('company_name') ?: config('app.name')),
             'companyAddress' => (string) ($document->warehouse?->branch?->tax_address ?: $settings->value('company_address')),
             'companyTaxId' => (string) ($settings->value('tax_id') ?: ''),
@@ -105,13 +101,12 @@ class PurchaseDocumentPdfController extends Controller
             'lines.receiptAllocations.goodsReceiptLine.goodsReceipt',
             'createdBy', 'approvedBy', 'postedBy',
         ]);
-        $logoPath = $settings->value('logo_path');
         $sourceLines = $document->lines->flatMap(fn ($line) => $line->receiptAllocations->map(fn ($allocation) => $allocation->goodsReceiptLine))->filter();
         $bytes = $renderer->renderView('Purchasing::pdf.purchase-document', [
             'document' => $document,
             'referencePos' => $document->lines->map(fn ($line) => $line->purchaseOrderLine?->purchaseOrder)->filter()->unique('id')->values(),
             'referenceGrs' => $sourceLines->map(fn ($line) => $line->goodsReceipt)->filter()->unique('id')->values(),
-            'logo' => $logoPath && Storage::disk('public')->exists($logoPath) ? Storage::disk('public')->path($logoPath) : null,
+            'logo' => $settings->logoDataUri(),
             'companyName' => (string) ($settings->value('company_name') ?: config('app.name')),
             'companyAddress' => (string) ($document->warehouse?->branch?->tax_address ?: $settings->value('company_address')),
             'companyTaxId' => (string) ($settings->value('tax_id') ?: ''),
@@ -154,11 +149,10 @@ class PurchaseDocumentPdfController extends Controller
                 'after' => $before->plus($added)->__toString(),
             ];
         })->values();
-        $logoPath = $settings->value('logo_path');
         $bytes = $renderer->renderView('Purchasing::pdf.landed-cost', [
             'document' => $document,
             'targets' => $targets,
-            'logo' => $logoPath && Storage::disk('public')->exists($logoPath) ? Storage::disk('public')->path($logoPath) : null,
+            'logo' => $settings->logoDataUri(),
             'companyName' => (string) ($settings->value('company_name') ?: config('app.name')),
             'companyAddress' => (string) ($document->warehouse?->branch?->tax_address ?: $settings->value('company_address')),
             'companyTaxId' => (string) ($settings->value('tax_id') ?: ''),

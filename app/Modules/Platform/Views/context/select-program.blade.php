@@ -1,12 +1,22 @@
 @extends('layouts.app')
 
-@section('title', 'เลือกโปรแกรม | New ERP')
+@section('title', 'เลือกโปรแกรม | '.($companySetting->company_name ?: config('app.name')))
 
 @section('content')
     <div class="selection-shell container py-5">
         <div class="page-heading mb-4">
             <p class="eyebrow mb-2">STEP 1 OF 2</p>
-            <h1 class="h3 mb-2">เลือกโปรแกรม</h1>
+            <div class="program-selection-brand mb-2">
+                @if ($companyLogoDataUri)
+                    <span class="program-selection-brand__logo-wrap">
+                        <img class="program-selection-brand__logo" src="{{ $companyLogoDataUri }}" alt="โลโก้ {{ $companySetting->company_name }}">
+                    </span>
+                @endif
+                <div class="program-selection-brand__content">
+                    <p class="program-selection-brand__name mb-1">{{ $companySetting->company_name ?: config('app.name') }}</p>
+                    <h1 class="h3 mb-0">เลือกโปรแกรม</h1>
+                </div>
+            </div>
             <p class="text-secondary mb-0">เลือกส่วนงานที่ต้องการเข้าใช้งาน</p>
         </div>
 

@@ -37,7 +37,6 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
 use Yajra\DataTables\Facades\DataTables;
@@ -396,8 +395,7 @@ final class PhysicalSaleController extends Controller
         $source = $sale->source_type === 'SALES_ORDER'
             ? SalesOrder::query()->with(['lines.item', 'lines.uom', 'sourceIntake.preparedBy', 'quotation.sourceIntake.preparedBy', 'quotation.rfq.sourceIntake.preparedBy', 'rfq.sourceIntake.preparedBy'])->whereKey($sale->source_id)->where('warehouse_id', $sale->warehouse_id)->first()
             : null;
-        $logoPath = $settings->value('logo_path');
-        $logo = $logoPath && Storage::disk('public')->exists($logoPath) ? Storage::disk('public')->path($logoPath) : null;
+        $logo = $settings->logoDataUri();
         $bytes = $renderer->renderView('Pos::pdf.physical-sale', [
             'paymentSummary' => PhysicalSalePdfSummary::build($sale),
             'sale' => $sale,

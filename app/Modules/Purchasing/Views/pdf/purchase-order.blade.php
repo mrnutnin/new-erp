@@ -27,6 +27,9 @@
 <!-- invoice-closing -->
 <div class="pdf-tax-invoice">
     <table class="pdf-footer"><tr><td width="55%" class="pdf-footer-payment"><div class="pdf-footer-heading">เงื่อนไขการสั่งซื้อ</div><p class="muted">เอกสารนี้เป็นใบสั่งซื้อ ไม่ใช่ใบกำกับภาษีหรือหลักฐานการชำระเงิน</p>@if($order->description)<p class="pdf-note"><b>หมายเหตุ:</b> {{ $order->description }}</p>@endif</td><td width="45%" class="pdf-footer-total"><table class="pdf-total-summary"><tr><td>มูลค่าก่อน VAT</td><td class="right">{{ $money($order->subtotal) }}</td></tr>@if($hasVat)<tr><td>ภาษีมูลค่าเพิ่ม</td><td class="right">{{ $money($order->tax_amount) }}</td></tr>@endif<tr class="total"><td>รวมทั้งสิ้น</td><td class="right">{{ $money($order->total_amount) }}</td></tr></table></td></tr></table>
-    <table class="pdf-signatures"><tr><td width="45%"><div class="invoice-sign-space">&nbsp;</div><div>........................................................</div><div>ผู้จัดทำ{{ $order->createdBy?->name ? ' · '.$order->createdBy->name : '' }}</div><div class="invoice-sign-date">วันที่ .......... / .......... / ..........</div></td><td width="10%" class="invoice-sign-gap"></td><td width="45%"><div class="invoice-sign-space">&nbsp;</div><div>........................................................</div><div>ผู้อนุมัติ{{ $order->approvedBy?->name ? ' · '.$order->approvedBy->name : '' }}</div><div class="invoice-sign-date">{{ $order->approved_at ? 'อนุมัติ '.$order->approved_at->format('d/m/Y H:i') : 'วันที่ .......... / .......... / ..........' }}</div></td></tr></table>
+    <x-platform::pdf-signatures :document="$order" :slots="[
+        ['role' => 'prepared', 'label' => 'ผู้จัดทำ', 'name' => $order->createdBy?->name],
+        ['role' => 'approved', 'label' => 'ผู้อนุมัติ', 'name' => $order->approvedBy?->name],
+    ]" />
     <p class="pdf-control">{{ $order->document_number }} · ใบสั่งซื้อ / PURCHASE ORDER</p>
 </div>

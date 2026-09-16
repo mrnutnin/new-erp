@@ -28,8 +28,8 @@ final class PurchasingPurchaseDocumentPdfContractTest extends TestCase
             self::assertStringContainsString($expected, $pdf);
         }
         self::assertSame(2, substr_count($pdf, 'pdf-tax-invoice pdf-readable'));
-        self::assertStringContainsString('pdf-signatures pdf-signatures-three', $pdf);
-        self::assertSame(2, substr_count($pdf, 'class="invoice-sign-gap"'));
+        self::assertStringContainsString('x-platform::pdf-signatures', $pdf);
+        self::assertSame(3, substr_count($pdf, "['role' =>"));
         self::assertStringContainsString('.pdf-tax-invoice.pdf-readable .pdf-signatures td { font-size:10pt; }', file_get_contents(base_path('app/Modules/Platform/Services/DocumentPdfRenderer.php')));
         self::assertStringContainsString('.pdf-signatures.pdf-signatures-three td { width:31.333%; }', file_get_contents(base_path('app/Modules/Platform/Services/DocumentPdfRenderer.php')));
         self::assertStringNotContainsString('number_format((float)', $pdf);

@@ -14,13 +14,35 @@
             <div class="col-12">
                 <div class="card border-0 shadow-sm">
                     <div class="card-body p-4 p-md-5">
-                        <form id="user-form" action="{{ $user->exists ? route('settings.users.update', $user) : route('settings.users.store') }}" method="post" novalidate>
+                        <form id="user-form" action="{{ $user->exists ? route('settings.users.update', $user) : route('settings.users.store') }}" method="post" enctype="multipart/form-data" novalidate>
                             @csrf
                             @if ($user->exists)
                                 @method('PUT')
                             @endif
 
                             <div class="row g-3">
+                                <div class="col-12">
+                                    <div class="row justify-content-center">
+                                        <div class="col-12 col-md-8 col-lg-6">
+                                            <x-platform::file-uploader
+                                                name="profile_image"
+                                                label="รูปโปรไฟล์"
+                                                accept="image/jpeg,image/png,image/webp"
+                                                max-file-size="5MB"
+                                                help="JPG, PNG หรือ WEBP ขนาดไม่เกิน 5 MB"
+                                                :image-preview="true"
+                                                :preview-url="$user->exists && $user->profile_image_path ? route('settings.users.profile-image', $user) : null"
+                                                preview-alt="รูปโปรไฟล์ของ {{ $user->name }}"
+                                            />
+                                            @if ($user->exists && $user->profile_image_path)
+                                                <div class="form-check mt-2">
+                                                    <input class="form-check-input" id="remove_profile_image" name="remove_profile_image" type="checkbox" value="1">
+                                                    <label class="form-check-label text-danger" for="remove_profile_image">ลบรูปโปรไฟล์ปัจจุบัน</label>
+                                                </div>
+                                            @endif
+                                        </div>
+                                    </div>
+                                </div>
                                 <div class="col-12 col-md-6">
                                     <label class="form-label" for="name">ชื่อผู้ใช้งาน</label>
                                     <input class="form-control" id="name" name="name" value="{{ old('name', $user->name) }}" required>
@@ -35,6 +57,11 @@
                                     <label class="form-label" for="employee_code">รหัสพนักงาน</label>
                                     <input class="form-control" id="employee_code" name="employee_code" value="{{ old('employee_code', $user->employee_code) }}" autocomplete="off">
                                     <div class="invalid-feedback" data-error-for="employee_code"></div>
+                                </div>
+                                <div class="col-12 col-md-6">
+                                    <label class="form-label" for="position">ตำแหน่ง</label>
+                                    <input class="form-control" id="position" name="position" value="{{ old('position', $user->position) }}" autocomplete="organization-title">
+                                    <div class="invalid-feedback" data-error-for="position"></div>
                                 </div>
                                 <div class="col-12 col-md-6">
                                     <label class="form-label" for="primary_branch_id">สาขาหลักที่สังกัด</label>
@@ -60,6 +87,11 @@
                                     <label class="form-label" for="password_confirmation">ยืนยันรหัสผ่าน</label>
                                     <input class="form-control" type="password" id="password_confirmation" name="password_confirmation" autocomplete="new-password">
                                 </div>
+                                <x-platform::user-signature-fields
+                                    :has-signature="$user->exists && filled($user->signature_path)"
+                                    :preview-url="$user->exists && $user->signature_path ? route('settings.users.signature', $user) : null"
+                                    preview-alt="ลายเซ็นของ {{ $user->name }}"
+                                />
                                 <div class="col-12">
                                     <input type="hidden" name="is_active" value="0">
                                     <div class="form-check form-switch">
@@ -131,7 +163,7 @@
             window.erpAjaxForm({
                 form: '#user-form',
                 redirect: @json(! $user->exists),
-                reload: false
+                reload: @json($user->exists)
             });
         });
     </script>

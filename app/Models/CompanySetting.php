@@ -10,6 +10,7 @@ class CompanySetting extends Model
     protected $fillable = [
         'company_name',
         'company_address',
+        'logo_disk',
         'logo_path',
         'tax_id',
         'locale',

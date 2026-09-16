@@ -45,7 +45,8 @@ final class WithholdingCertificatePdfRenderer
         'issue_year' => [429.311, 72.2581, 40.8, 14.3936],
     ];
 
-    public function render(object $row, object $company, string $formType, string $certificateNumber, string $payerAddress, string $taxAmountText): string
+    /** @param array<string, mixed>|null $signature */
+    public function render(object $row, object $company, string $formType, string $certificateNumber, string $payerAddress, string $taxAmountText, ?array $signature = null): string
     {
         $options = (array) config('erp.pdf.profiles.a4', []);
         $tempDir = storage_path('app/mpdf');
@@ -84,6 +85,9 @@ final class WithholdingCertificatePdfRenderer
         $this->write($pdf, 'issue_day', $date->format('d'), 7.5, 'C');
         $this->write($pdf, 'issue_month', $this->thaiMonth((int) $date->format('n')), 7.5, 'C');
         $this->write($pdf, 'issue_year', (string) ($date->year + 543), 7.5, 'C');
+        if (filled($signature['image'] ?? null)) {
+            $pdf->Image($signature['image'], 103, 250, 32, 10, '', '', true, false);
+        }
 
         return $pdf->Output('', Destination::STRING_RETURN);
     }

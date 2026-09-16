@@ -211,6 +211,8 @@ Route::middleware(['auth', 'warehouse'])->prefix('wms')->name('wms.')->group(fun
         Route::get('/items/uom-options', [ItemController::class, 'uomOptions'])->middleware('permission:wms.items.view')->name('items.uom-options');
         Route::get('/items/create', [ItemController::class, 'create'])->middleware('permission:wms.items.create')->name('items.create');
         Route::post('/items', [ItemController::class, 'store'])->middleware('permission:wms.items.create')->name('items.store');
+        Route::get('/items/{item}/cover-image', [ItemController::class, 'coverImage'])->middleware('permission:wms.items.update')->name('items.cover-image');
+        Route::get('/items/{item}/additional-images/{index}', [ItemController::class, 'additionalImage'])->whereNumber('index')->middleware('permission:wms.items.update')->name('items.additional-image');
         Route::get('/items/{item}/edit', [ItemController::class, 'edit'])->middleware('permission:wms.items.update')->name('items.edit');
         Route::put('/items/{item}', [ItemController::class, 'update'])->middleware('permission:wms.items.update')->name('items.update');
     });

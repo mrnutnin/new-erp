@@ -47,14 +47,22 @@
                                     <textarea class="form-control" id="company_address" name="company_address" rows="2" maxlength="2000" @disabled(! $canUpdate)>{{ old('company_address', $setting->company_address) }}</textarea>
                                     <div class="invalid-feedback" data-error-for="company_address"></div>
                                 </div>
-                                <div class="col-12 col-md-6">
-                                    <label class="form-label" for="logo">โลโก้บริษัทสำหรับเอกสาร PDF</label>
-                                    <input class="form-control" id="logo" name="logo" type="file" accept="image/jpeg,image/png,image/webp" @disabled(! $canUpdate)>
-                                    <div class="form-text">JPG, PNG หรือ WEBP ขนาดไม่เกิน 2 MB</div>
-                                    <div class="invalid-feedback" data-error-for="logo"></div>
-                                    @if ($setting->logo_path)
-                                        <img class="mt-2" src="{{ asset('storage/'.$setting->logo_path) }}" alt="โลโก้บริษัท" style="max-height:64px;max-width:240px;">
-                                    @endif
+                                <div class="col-12">
+                                    <div class="row justify-content-center">
+                                        <div class="col-12 col-md-8 col-lg-6">
+                                            <x-platform::file-uploader
+                                                name="logo"
+                                                label="โลโก้บริษัทสำหรับเอกสาร PDF"
+                                                accept="image/jpeg,image/png,image/webp"
+                                                max-file-size="2MB"
+                                                help="JPG, PNG หรือ WEBP ขนาดไม่เกิน 2 MB"
+                                                :disabled="! $canUpdate"
+                                                :image-preview="true"
+                                                :preview-url="$setting->logo_path ? route('settings.company.logo') : null"
+                                                preview-alt="โลโก้บริษัทปัจจุบัน"
+                                            />
+                                        </div>
+                                    </div>
                                 </div>
                                 <div class="col-12 col-md-6">
                                     <label class="form-label" for="locale">ภาษาเริ่มต้น</label>

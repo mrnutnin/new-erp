@@ -9,6 +9,8 @@ use App\Modules\Accounting\Models\FiscalPeriod;
 use App\Modules\Accounting\Models\JournalBook;
 use App\Modules\Accounting\Services\AccountingReportService;
 use App\Modules\Accounting\Services\WithholdingCertificatePdfRenderer;
+use App\Modules\Finance\Models\Settlement;
+use App\Modules\Platform\Services\DocumentSignatureService;
 use App\Modules\Accounting\Support\ThaiBahtText;
 use App\Modules\Settings\Services\GlobalSettings;
 use App\Modules\Wms\Services\InventoryReconciliationService;
@@ -394,7 +396,7 @@ class AccountingReportController extends Controller
         }, strtolower($form).'-'.now()->format('Ymd-His').'.csv', ['Content-Type' => 'text/csv; charset=UTF-8']);
     }
 
-    public function withholdingCertificate(Request $request, int $realization, WithholdingCertificatePdfRenderer $renderer): Response
+    public function withholdingCertificate(Request $request, int $realization, WithholdingCertificatePdfRenderer $renderer, DocumentSignatureService $signatures): Response
     {
         $row = DB::table('finance_withholding_realizations as wr')
             ->join('finance_open_items as oi', 'oi.id', '=', 'wr.open_item_id')
@@ -406,7 +408,7 @@ class AccountingReportController extends Controller
             ->where('wr.direction', 'PAYABLE')
             ->whereIn('oi.warehouse_id', $this->authorizedWarehouseIds($request, 'all'))
             ->select([
-                'wr.id', 'wr.settlement_date', 'wr.tax_base', 'wr.tax_amount', 'oi.document_number',
+                'wr.id', 'wr.settlement_id', 'wr.settlement_date', 'wr.tax_base', 'wr.tax_amount', 'oi.document_number',
                 'p.name as party_name', 'p.type as party_type', 'p.tax_id', 'p.branch_code', 'p.address as party_address',
                 'tc.code as tax_code', 'tc.name as tax_name', 'b.name as branch_name',
                 'b.tax_branch_code as payer_branch_code', 'b.tax_address as payer_address',
@@ -430,7 +432,9 @@ class AccountingReportController extends Controller
         abort_unless(preg_match('/^\d{5}$/', (string) $row->payer_branch_code), 422, 'รหัสสาขาภาษีของผู้มีหน้าที่หักภาษีต้องมี 5 หลัก');
 
         $taxAmountText = ThaiBahtText::convert((string) $row->tax_amount);
-        $pdf = $renderer->render($row, $company, $formType, $certificateNumber, $payerAddress, $taxAmountText);
+        $settlement = Settlement::query()->find($row->settlement_id);
+        $signature = $settlement ? ($signatures->forDocument($settlement, ['posted'])['posted'] ?? null) : null;
+        $pdf = $renderer->render($row, $company, $formType, $certificateNumber, $payerAddress, $taxAmountText, $signature);
 
         return response($pdf, 200, ['Content-Type' => 'application/pdf', 'Content-Disposition' => 'inline; filename="'.$certificateNumber.'.pdf"']);
     }

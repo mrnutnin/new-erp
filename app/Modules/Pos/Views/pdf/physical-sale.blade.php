@@ -102,11 +102,10 @@
 </tr></table>
 <p class="pdf-note"><b>หมายเหตุ:</b> {{ $sale->description ?: '—' }}</p>
 @if($sale->status === 'POSTED')
-<table class="pdf-signatures"><tr>
-    <td width="45%"><div class="invoice-sign-space">&nbsp;</div><div>........................................................</div><div>ผู้ซื้อ / ผู้รับสินค้า</div><div class="invoice-sign-date">วันที่ .......... / .......... / ..........</div></td>
-    <td width="10%" class="invoice-sign-gap"></td>
-    <td width="45%"><div class="invoice-sign-space">&nbsp;</div><div>........................................................</div><div>ผู้รับเงิน / ผู้มีอำนาจลงนาม</div><div class="invoice-sign-date">วันที่ .......... / .......... / ..........</div></td>
-</tr></table>
+<x-platform::pdf-signatures :document="$sale" :slots="[
+    ['label' => 'ผู้ซื้อ / ผู้รับสินค้า'],
+    ['role' => 'posted', 'label' => 'ผู้รับเงิน / ผู้มีอำนาจลงนาม'],
+]" />
 @endif
 <p class="pdf-control">{{ $sale->document_number }} · {{ $isFullTaxInvoice ? 'ใบกำกับภาษีเต็มรูป' : $documentTitle }}</p>
 </div>

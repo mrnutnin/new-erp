@@ -9,6 +9,7 @@ use App\Models\Role;
 use App\Models\User;
 use App\Models\Warehouse;
 use App\Modules\Platform\Services\AuditLogger;
+use App\Modules\Platform\Services\UserMediaService;
 use App\Modules\Settings\Requests\SaveUserRequest;
 use App\Modules\Settings\Rules\UserAccessGuard;
 use Illuminate\Database\Eloquent\Builder;
@@ -86,18 +87,23 @@ class UserController extends Controller
         return $this->formView(new User(['is_active' => true]));
     }
 
-    public function store(SaveUserRequest $request, AuditLogger $audit): JsonResponse|RedirectResponse
+    public function store(SaveUserRequest $request, AuditLogger $audit, UserMediaService $media): JsonResponse|RedirectResponse
     {
-        $user = DB::transaction(function () use ($audit, $request) {
-            $data = $request->safe()->except(['branch_ids', 'program_ids', 'warehouse_ids', 'role_ids', 'password_confirmation']);
-            $user = User::query()->create($data);
-            $this->syncAssignments($user, $request);
-            $audit->record('settings.user.created', $user, [], [
-                ...$request->safe()->except(['password', 'password_confirmation']),
-                'password_changed' => true,
-            ], $request->user(), $request);
+        $user = new User;
+        $mediaFields = ['profile_image', 'remove_profile_image', 'signature_image', 'signature_data', 'remove_signature'];
+        $data = $request->safe()->except(['branch_ids', 'program_ids', 'warehouse_ids', 'role_ids', 'password_confirmation', ...$mediaFields]);
 
-            return $user;
+        $media->persist($user, $request->file('profile_image'), false, $request->file('signature_image'), $request->input('signature_data'), false, function (array $mediaValues) use ($audit, $data, $mediaFields, $request, $user): void {
+            DB::transaction(function () use ($audit, $data, $mediaFields, $mediaValues, $request, $user): void {
+                $user->fill([...$data, ...$mediaValues])->save();
+                $this->syncAssignments($user, $request);
+                $audit->record('settings.user.created', $user, [], [
+                    ...$request->safe()->except(['password', 'password_confirmation', ...$mediaFields]),
+                    'password_changed' => true,
+                    'has_profile_image' => filled($user->profile_image_path),
+                    'has_signature' => filled($user->signature_path),
+                ], $request->user(), $request);
+            });
         });
 
         return $this->savedResponse($request, 'เพิ่มผู้ใช้งานแล้ว', $user);
@@ -115,6 +121,7 @@ class UserController extends Controller
         User $user,
         UserAccessGuard $guard,
         AuditLogger $audit,
+        UserMediaService $media,
     ): JsonResponse|RedirectResponse {
         $isSelf = $request->user()->is($user);
 
@@ -135,29 +142,54 @@ class UserController extends Controller
             throw ValidationException::withMessages(['role_ids' => 'ไม่สามารถนำบทบาทผู้ดูแลระบบของตนเองออกได้']);
         }
 
-        DB::transaction(function () use ($audit, $request, $user) {
-            $before = [
-                ...$user->only(['name', 'username', 'employee_code', 'email', 'is_active', 'primary_branch_id']),
-                'program_ids' => $user->programs()->pluck('programs.id')->all(),
-                'warehouse_ids' => $user->warehouses()->pluck('warehouses.id')->all(),
-                'role_ids' => $user->roles()->pluck('roles.id')->all(),
-                'branch_ids' => $user->branches()->pluck('branches.id')->all(),
-            ];
-            $data = $request->safe()->except(['branch_ids', 'program_ids', 'warehouse_ids', 'role_ids', 'password_confirmation']);
+        $mediaFields = ['profile_image', 'remove_profile_image', 'signature_image', 'signature_data', 'remove_signature'];
+        $media->persist(
+            $user,
+            $request->file('profile_image'),
+            $request->boolean('remove_profile_image'),
+            $request->file('signature_image'),
+            $request->input('signature_data'),
+            $request->boolean('remove_signature'),
+            function (array $mediaValues) use ($audit, $mediaFields, $request, $user): void {
+                DB::transaction(function () use ($audit, $mediaFields, $mediaValues, $request, $user): void {
+                    $before = [
+                        ...$user->only(['name', 'username', 'employee_code', 'position', 'email', 'is_active', 'primary_branch_id']),
+                        'has_profile_image' => filled($user->profile_image_path),
+                        'has_signature' => filled($user->signature_path),
+                        'program_ids' => $user->programs()->pluck('programs.id')->all(),
+                        'warehouse_ids' => $user->warehouses()->pluck('warehouses.id')->all(),
+                        'role_ids' => $user->roles()->pluck('roles.id')->all(),
+                        'branch_ids' => $user->branches()->pluck('branches.id')->all(),
+                    ];
+                    $data = $request->safe()->except(['branch_ids', 'program_ids', 'warehouse_ids', 'role_ids', 'password_confirmation', ...$mediaFields]);
 
-            if (blank($data['password'] ?? null)) {
-                unset($data['password']);
-            }
+                    if (blank($data['password'] ?? null)) {
+                        unset($data['password']);
+                    }
 
-            $user->update($data);
-            $this->syncAssignments($user, $request);
-            $audit->record('settings.user.updated', $user, $before, [
-                ...$request->safe()->except(['password', 'password_confirmation']),
-                'password_changed' => $request->filled('password'),
-            ], $request->user(), $request);
-        });
+                    $user->update([...$data, ...$mediaValues]);
+                    $this->syncAssignments($user, $request);
+                    $audit->record('settings.user.updated', $user, $before, [
+                        ...$request->safe()->except(['password', 'password_confirmation', ...$mediaFields]),
+                        'password_changed' => $request->filled('password'),
+                        'profile_image_changed' => $request->hasFile('profile_image') || $request->boolean('remove_profile_image'),
+                        'signature_changed' => $request->hasFile('signature_image') || $request->filled('signature_data') || $request->boolean('remove_signature'),
+                    ], $request->user(), $request);
+                });
+            },
+        );
 
         return $this->savedResponse($request, 'แก้ไขผู้ใช้งานแล้ว', $user);
+    }
+
+    public function profileImage(User $user, UserMediaService $media): StreamedResponse
+    {
+        return $media->inlineProfile($user);
+    }
+
+    public function signature(User $user, UserMediaService $media): StreamedResponse
+    {
+        return $media->inlineSignature($user);
     }
 
     public function destroy(Request $request, User $user, UserAccessGuard $guard, AuditLogger $audit): JsonResponse
@@ -171,7 +203,7 @@ class UserController extends Controller
 
         DB::transaction(function () use ($audit, $request, $user) {
             $user = User::query()->lockForUpdate()->findOrFail($user->id);
-            $before = $user->only(['name', 'username', 'employee_code', 'email', 'is_active', 'primary_branch_id']);
+            $before = $user->only(['name', 'username', 'employee_code', 'position', 'email', 'is_active', 'primary_branch_id']);
             $user->delete();
             $audit->record('settings.user.deleted', $user, $before, ['deleted_at' => $user->deleted_at], $request->user(), $request);
         });

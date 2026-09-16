@@ -16,8 +16,11 @@ Route::middleware('guest')->group(function () {
 Route::middleware('auth')->group(function () {
     Route::post('/logout', [AuthController::class, 'destroy'])->name('logout');
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
+    Route::get('/profile/image', [ProfileController::class, 'image'])->name('profile.image');
+    Route::get('/profile/signature', [ProfileController::class, 'signature'])->name('profile.signature');
     Route::get('/profile/audit-data', [ProfileController::class, 'auditData'])->name('profile.audit-data');
     Route::put('/profile', [ProfileController::class, 'update'])->name('profile.update');
+    Route::put('/profile/password', [ProfileController::class, 'updatePassword'])->name('profile.password.update');
 
     Route::get('/select-program', [ContextController::class, 'programs'])->name('programs.index');
     Route::post('/select-program', [ContextController::class, 'storeProgram'])->name('programs.store');

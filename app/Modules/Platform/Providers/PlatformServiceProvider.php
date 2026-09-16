@@ -2,6 +2,7 @@
 
 namespace App\Modules\Platform\Providers;
 
+use Illuminate\Support\Facades\Blade;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\ServiceProvider;
 
@@ -11,5 +12,6 @@ class PlatformServiceProvider extends ServiceProvider
     {
         Route::middleware('web')->group(__DIR__.'/../Routes/web.php');
         $this->loadViewsFrom(__DIR__.'/../Views', 'Platform');
+        Blade::anonymousComponentPath(__DIR__.'/../Views/components', 'platform');
     }
 }

@@ -28,7 +28,13 @@
                     </nav>
                     <div class="app-sidebar-footer mt-auto">
                         <a class="app-sidebar-profile text-decoration-none" href="{{ route('profile.edit') }}" title="โปรไฟล์ของฉัน">
-                            <span class="app-sidebar-profile-icon"><i class="bx bx-user" aria-hidden="true"></i></span>
+                            <span class="app-sidebar-profile-icon app-user-avatar">
+                                @if (auth()->user()->profile_image_path)
+                                    <img src="{{ route('profile.image') }}" alt="" width="28" height="28" loading="lazy" decoding="async">
+                                @else
+                                    <i class="bx bx-user" aria-hidden="true"></i>
+                                @endif
+                            </span>
                             <span class="app-sidebar-profile-name">{{ auth()->user()->name }}</span>
                         </a>
                         <form id="logout-form" class="app-sidebar-logout-form" action="{{ route('logout') }}" method="post">
@@ -81,7 +87,16 @@
                 <div class="container-fluid d-flex align-items-center justify-content-between py-3">
                     <a class="app-brand text-decoration-none text-dark" href="{{ route('entry') }}">New ERP</a>
                     <div class="d-flex align-items-center gap-3">
-                        <a class="text-secondary small text-decoration-none" href="{{ route('profile.edit') }}"><i class="bx bx-user me-1" aria-hidden="true"></i>{{ auth()->user()->name }}</a>
+                        <a class="app-header-profile text-secondary small text-decoration-none" href="{{ route('profile.edit') }}">
+                            <span class="app-user-avatar">
+                                @if (auth()->user()->profile_image_path)
+                                    <img src="{{ route('profile.image') }}" alt="" width="28" height="28" loading="lazy" decoding="async">
+                                @else
+                                    <i class="bx bx-user" aria-hidden="true"></i>
+                                @endif
+                            </span>
+                            <span>{{ auth()->user()->name }}</span>
+                        </a>
                         <form id="logout-form" action="{{ route('logout') }}" method="post">
                             @csrf
                             <button class="btn btn-outline-dark btn-sm" type="submit" data-busy-text="กำลังออก...">

@@ -24,7 +24,6 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Storage;
 use Illuminate\View\View;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\HttpFoundation\StreamedResponse;
@@ -160,12 +159,11 @@ class JournalEntryController extends Controller
             'book', 'period.fiscalYear', 'branch', 'warehouse', 'lines.account', 'lines.taxCode',
             'createdBy', 'validatedBy', 'postedBy', 'reversedBy', 'reversalOf', 'reversal',
         ]);
-        $logoPath = $settings->value('logo_path');
         $debitTotal = $journalEntry->lines->reduce(fn (BigDecimal $total, $line) => $total->plus((string) $line->debit), BigDecimal::zero());
         $creditTotal = $journalEntry->lines->reduce(fn (BigDecimal $total, $line) => $total->plus((string) $line->credit), BigDecimal::zero());
         $bytes = $renderer->renderView('Accounting::pdf.journal-voucher', [
             'journalEntry' => $journalEntry,
-            'logo' => $logoPath && Storage::disk('public')->exists($logoPath) ? Storage::disk('public')->path($logoPath) : null,
+            'logo' => $settings->logoDataUri(),
             'companyName' => (string) ($settings->value('company_name') ?: config('app.name')),
             'companyAddress' => (string) ($journalEntry->branch?->tax_address ?: $settings->value('company_address')),
             'companyTaxId' => (string) ($settings->value('tax_id') ?: ''),

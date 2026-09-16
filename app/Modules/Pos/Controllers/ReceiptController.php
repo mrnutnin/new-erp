@@ -23,7 +23,6 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
@@ -117,8 +116,7 @@ final class ReceiptController extends Controller
     public function pdf(Request $request, Settlement $receipt, DocumentPdfRenderer $renderer, GlobalSettings $settings)
     {
         $receipt = $this->receipt($request, $receipt)->load(['party', 'bankAccount', 'journalEntry', 'createdBy', 'tenders.bankAccount', 'allocationIntents.openItem']);
-        $logoPath = $settings->value('logo_path');
-        $logo = $logoPath && Storage::disk('public')->exists($logoPath) ? Storage::disk('public')->path($logoPath) : null;
+        $logo = $settings->logoDataUri();
         $bytes = $renderer->renderView('Pos::pdf.receipt', [
             'receipt' => $receipt,
             'logo' => $logo,

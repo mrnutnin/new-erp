@@ -18,7 +18,9 @@ final class WithholdingCertificatePdfRendererTest extends TestCase
         $company = new CompanySetting(['company_name' => 'บริษัททดสอบ จำกัด', 'tax_id' => '0105551111111']);
 
         $pdf = app(WithholdingCertificatePdfRenderer::class)->render(
-            $row, $company, 'PND53', 'WT2026000001', 'กรุงเทพมหานคร', 'สามสิบบาทถ้วน'
+            $row, $company, 'PND53', 'WT2026000001', 'กรุงเทพมหานคร', 'สามสิบบาทถ้วน', [
+                'image' => 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',
+            ]
         );
 
         self::assertStringStartsWith('%PDF-', $pdf);

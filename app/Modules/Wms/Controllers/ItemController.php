@@ -6,16 +6,22 @@ use App\Http\Controllers\Controller;
 use App\Modules\Accounting\Models\Account;
 use App\Modules\Asset\Models\AssetCategory;
 use App\Modules\Platform\Services\AuditLogger;
+use App\Modules\Platform\Services\FileStorageService;
+use App\Modules\Settings\Services\GlobalSettings;
 use App\Modules\Wms\Models\Item;
 use App\Modules\Wms\Models\ItemCategory;
 use App\Modules\Wms\Models\Uom;
 use App\Modules\Wms\Requests\SaveItemRequest;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
+use Symfony\Component\HttpFoundation\StreamedResponse;
+use Throwable;
 use Yajra\DataTables\Facades\DataTables;
 
 class ItemController extends Controller
@@ -73,9 +79,9 @@ class ItemController extends Controller
         return view('Wms::items.form', $this->formData(new Item(['is_active' => true, 'item_type' => 'GOODS', 'is_stock_item' => true])));
     }
 
-    public function store(SaveItemRequest $request, AuditLogger $audit): JsonResponse
+    public function store(SaveItemRequest $request, AuditLogger $audit, FileStorageService $storage, GlobalSettings $settings): JsonResponse
     {
-        $item = DB::transaction(fn () => $this->save($request, new Item, $audit, 'created'));
+        $this->save($request, new Item, $audit, $storage, $settings, 'created');
 
         return response()->json(['status' => true, 'msg' => 'เพิ่มสินค้าแล้ว', 'redirect' => route('wms.items.index')]);
     }
@@ -85,11 +91,26 @@ class ItemController extends Controller
         return view('Wms::items.form', $this->formData($item));
     }
 
-    public function update(SaveItemRequest $request, Item $item, AuditLogger $audit): JsonResponse
+    public function update(SaveItemRequest $request, Item $item, AuditLogger $audit, FileStorageService $storage, GlobalSettings $settings): JsonResponse
     {
-        $this->save($request, $item, $audit, 'updated');
+        $this->save($request, $item, $audit, $storage, $settings, 'updated');
 
-        return response()->json(['status' => true, 'msg' => 'แก้ไขสินค้าแล้ว']);
+        return response()->json(['status' => true, 'msg' => 'แก้ไขสินค้าแล้ว', 'redirect' => route('wms.items.edit', $item)]);
+    }
+
+    public function coverImage(Item $item, FileStorageService $storage): StreamedResponse
+    {
+        abort_unless($item->cover_image_disk && $item->cover_image_path, 404);
+
+        return $this->inlineImage($storage, $item->cover_image_disk, $item->cover_image_path);
+    }
+
+    public function additionalImage(Item $item, int $index, FileStorageService $storage): StreamedResponse
+    {
+        $image = ($item->additional_images ?? [])[$index] ?? null;
+        abort_unless(is_array($image) && isset($image['disk'], $image['path']), 404);
+
+        return $this->inlineImage($storage, $image['disk'], $image['path'], $image['mime_type'] ?? null);
     }
 
     public function destroy(Request $request, Item $item, AuditLogger $audit): JsonResponse
@@ -112,15 +133,78 @@ class ItemController extends Controller
         return response()->json(['status' => true, 'msg' => 'ลบสินค้าแล้ว']);
     }
 
-    private function save(SaveItemRequest $request, Item $item, AuditLogger $audit, string $event): Item
+    private function save(SaveItemRequest $request, Item $item, AuditLogger $audit, FileStorageService $storage, GlobalSettings $settings, string $event): Item
     {
-        $values = $request->validated();
+        $validated = $request->validated();
+        $values = Arr::except($validated, ['cover_image', 'remove_cover_image', 'additional_images', 'remove_additional_images']);
         $this->assertAccounts($values);
         $before = $item->exists ? $item->toArray() : [];
-        $item->fill([...$values, 'created_by' => $item->created_by ?? $request->user()->id])->save();
-        $audit->record('wms.item.'.$event, $item, $before, $item->fresh()->toArray(), $request->user(), $request);
+        $storedFiles = [];
+        $filesToDelete = [];
+        $existingImages = collect($item->additional_images ?? []);
+        $removedIndexes = collect($validated['remove_additional_images'] ?? [])->map(fn ($index) => (int) $index)->unique();
+        $retainedImages = $existingImages->reject(fn ($image, $index) => $removedIndexes->contains($index))->values();
+        $filesToDelete = $existingImages->filter(fn ($image, $index) => $removedIndexes->contains($index))->values()->all();
+        $companyCode = (string) ($settings->current()->tax_id ?: 'company');
+
+        try {
+            if ($request->hasFile('cover_image')) {
+                $cover = $storage->store($request->file('cover_image'), 'wms-item-images', $companyCode);
+                $storedFiles[] = $cover;
+                if ($item->cover_image_disk && $item->cover_image_path) {
+                    $filesToDelete[] = ['disk' => $item->cover_image_disk, 'path' => $item->cover_image_path];
+                }
+                $values['cover_image_disk'] = $cover['disk'];
+                $values['cover_image_path'] = $cover['path'];
+            } elseif ($request->boolean('remove_cover_image') && $item->cover_image_disk && $item->cover_image_path) {
+                $filesToDelete[] = ['disk' => $item->cover_image_disk, 'path' => $item->cover_image_path];
+                $values['cover_image_disk'] = null;
+                $values['cover_image_path'] = null;
+            }
+
+            foreach ($request->file('additional_images', []) as $image) {
+                $stored = $storage->store($image, 'wms-item-images', $companyCode);
+                $storedFiles[] = $stored;
+                $retainedImages->push($stored);
+            }
+            $values['additional_images'] = $retainedImages->values()->all();
+
+            DB::transaction(function () use ($audit, $before, $event, $item, $request, $values): void {
+                $item->fill([...$values, 'created_by' => $item->created_by ?? $request->user()->id])->save();
+                $audit->record('wms.item.'.$event, $item, $before, $item->fresh()->toArray(), $request->user(), $request);
+            });
+        } catch (Throwable $exception) {
+            $this->deleteImages($storage, $storedFiles);
+            throw $exception;
+        }
+
+        $this->deleteImages($storage, $filesToDelete);
 
         return $item;
+    }
+
+    private function inlineImage(FileStorageService $storage, string $disk, string $path, ?string $mimeType = null, ?string $filename = null): StreamedResponse
+    {
+        $filesystem = Storage::disk($disk);
+        abort_unless($filesystem->exists($path), 404);
+
+        return $storage->inline($disk, $path, $filename ?: basename($path), $mimeType ?: ($filesystem->mimeType($path) ?: 'image/jpeg'));
+    }
+
+    /** @param array<int, array<string, mixed>> $images */
+    private function deleteImages(FileStorageService $storage, array $images): void
+    {
+        foreach ($images as $image) {
+            if (empty($image['disk']) || empty($image['path'])) {
+                continue;
+            }
+
+            try {
+                $storage->delete((string) $image['disk'], (string) $image['path']);
+            } catch (Throwable $exception) {
+                report($exception);
+            }
+        }
     }
 
     private function assertAccounts(array $values): void

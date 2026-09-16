@@ -13,6 +13,8 @@ class AuditLogger
 {
     private const SENSITIVE_KEYS = ['password', 'remember_token'];
 
+    public function __construct(private readonly DocumentSignatureService $signatures) {}
+
     public function record(
         string $action,
         Model $subject,
@@ -21,7 +23,7 @@ class AuditLogger
         ?User $actor,
         Request $request,
     ): void {
-        AuditLog::query()->create([
+        $audit = AuditLog::query()->create([
             'user_id' => $actor?->id,
             'action' => $action,
             'subject_type' => $subject->getMorphClass(),
@@ -31,5 +33,11 @@ class AuditLogger
             'ip_address' => $request->ip(),
             'user_agent' => Str::limit((string) $request->userAgent(), 500, ''),
         ]);
+
+        try {
+            $this->signatures->captureFromAudit($audit, $subject, $actor);
+        } catch (\Throwable $exception) {
+            report($exception);
+        }
     }
 }

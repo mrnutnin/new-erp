@@ -20,6 +20,8 @@ Route::middleware(['auth', 'program:settings'])
 
         Route::get('/company', [CompanySettingController::class, 'edit'])
             ->middleware('permission:settings.company.view')->name('company.edit');
+        Route::get('/company/logo', [CompanySettingController::class, 'logo'])
+            ->middleware('permission:settings.company.view')->name('company.logo');
         Route::put('/company', [CompanySettingController::class, 'update'])
             ->middleware('permission:settings.company.update')->name('company.update');
         // Permission names remain under finance during the transition so existing roles keep access.
@@ -44,6 +46,10 @@ Route::middleware(['auth', 'program:settings'])
             ->middleware('permission:settings.users.create')->name('users.store');
         Route::get('/users/{user}/edit', [UserController::class, 'edit'])
             ->middleware('permission:settings.users.update')->name('users.edit');
+        Route::get('/users/{user}/profile-image', [UserController::class, 'profileImage'])
+            ->middleware('permission:settings.users.update')->name('users.profile-image');
+        Route::get('/users/{user}/signature', [UserController::class, 'signature'])
+            ->middleware('permission:settings.users.update')->name('users.signature');
         Route::put('/users/{user}', [UserController::class, 'update'])
             ->middleware('permission:settings.users.update')->name('users.update');
         Route::delete('/users/{user}', [UserController::class, 'destroy'])

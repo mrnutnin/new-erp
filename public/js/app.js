@@ -31,6 +31,12 @@
             var $field = $form.find('[name="' + inputName + '"]');
             var $error = $form.find('[data-error-for="' + field + '"]');
 
+            if (!$field.length && field.indexOf('.') !== -1) {
+                var rootField = field.split('.')[0];
+                $field = $form.find('[name="' + rootField + '[]"]');
+                $error = $form.find('[data-error-for="' + rootField + '"]');
+            }
+
             $field.addClass('is-invalid');
             if ($error.length) {
                 $error.text(messages[0]);

@@ -11,6 +11,7 @@ use App\Modules\Platform\Services\BranchContext;
 use App\Modules\Platform\Services\ModuleCapability;
 use App\Modules\Platform\Services\WarehouseContext;
 use App\Modules\Platform\Support\ContextSelection;
+use App\Modules\Settings\Services\GlobalSettings;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -18,7 +19,7 @@ use Illuminate\View\View;
 
 class ContextController extends Controller
 {
-    public function programs(Request $request, ModuleCapability $capability): View
+    public function programs(Request $request, ModuleCapability $capability, GlobalSettings $globalSettings): View
     {
         $programs = $request->user()->programs()
             ->where('is_enabled', true)
@@ -28,7 +29,11 @@ class ContextController extends Controller
             ->filter(fn ($program) => $capability->isProgramAvailable($program->code))
             ->values();
 
-        return view('Platform::context.select-program', compact('programs'));
+        return view('Platform::context.select-program', [
+            'programs' => $programs,
+            'companySetting' => $globalSettings->current(),
+            'companyLogoDataUri' => $globalSettings->logoDataUri(),
+        ]);
     }
 
     public function storeProgram(

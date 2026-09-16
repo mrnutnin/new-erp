@@ -14,7 +14,7 @@ final class AssetAttachmentContractTest extends TestCase
         $storage = file_get_contents((new \ReflectionClass(FileStorageService::class))->getFileName());
         $controller = file_get_contents((new \ReflectionClass(AssetAttachmentController::class))->getFileName());
 
-        self::assertStringContainsString("config('filesystems.private_disk', 'local')", $storage);
+        self::assertStringContainsString("config('filesystems.private_disk', 's3')", $storage);
         self::assertStringContainsString("if (\$disk === 'public')", $storage);
         self::assertStringContainsString('app()->environment()', $storage);
         self::assertStringContainsString('FileStorageService $storage', $controller);

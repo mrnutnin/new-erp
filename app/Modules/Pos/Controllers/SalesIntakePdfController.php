@@ -7,7 +7,6 @@ use App\Modules\Platform\Services\DocumentPdfRenderer;
 use App\Modules\Pos\Models\SalesIntake;
 use App\Modules\Settings\Services\GlobalSettings;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Storage;
 
 final class SalesIntakePdfController extends Controller
 {
@@ -15,8 +14,7 @@ final class SalesIntakePdfController extends Controller
     {
         abort_unless((int) $salesIntake->branch_id === (int) $request->attributes->get('selectedBranch')->id, 404);
         $salesIntake->load(['branch', 'lines.item', 'lines.uom', 'preparedBy']);
-        $logoPath = $settings->value('logo_path');
-        $logo = $logoPath && Storage::disk('public')->exists($logoPath) ? Storage::disk('public')->path($logoPath) : null;
+        $logo = $settings->logoDataUri();
         $bytes = $renderer->renderView('Pos::pdf.sales-intake', [
             'intake' => $salesIntake, 'sourceIntake' => $salesIntake, 'logo' => $logo, 'companyName' => $settings->value('company_name') ?: 'บริษัท',
             'companyAddress' => $salesIntake->branch?->tax_address ?: $settings->value('company_address'),

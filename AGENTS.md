@@ -2,6 +2,21 @@
 
 These instructions apply to the entire `new-erp` repository. User instructions for a specific task take precedence.
 
+## File upload and object storage standard
+
+Apply this section whenever adding or changing an image/file upload.
+
+- Reuse `<x-platform::file-uploader>` from `app/Modules/Platform/Views/components/file-uploader.blade.php`; do not create a page-specific dropzone or initialize FilePond again. Set `accept`, `multiple`, `max-files`, and `max-file-size` explicitly. The native file input fallback must remain usable when the CDN is unavailable.
+- For a handwritten user signature, reuse `<x-platform::user-signature-fields>` and `<x-platform::signature-pad>`. Support either one uploaded image or one canvas drawing, validate both server-side, and store them through the same private object-storage lifecycle. A signature image is presentational and must not be described as a digital signature.
+- Validate every upload server-side with Laravel rules. Treat client-side file type, size, and count checks as UX only. Show validation beside the shared component, including errors for array members such as `files.0`.
+- Store private uploads through `App\Modules\Platform\Services\FileStorageService`. The configured private disk must be S3-compatible and must never be `public`.
+- Persist the storage `disk` and object `path` (plus metadata returned by `FileStorageService` when the domain needs it), never a bucket URL or temporary URL. Stream/download private objects through an authenticated, authorized controller action; do not expose the S3 path directly to the browser.
+- Use a stable module folder name and the current company code when calling `FileStorageService::store()`. Do not build object keys independently in feature modules.
+- Upload new objects before committing database references. If the database operation fails, delete newly uploaded objects. Replace/delete old objects only after the database commit succeeds. A soft-deleted business record keeps its objects until a separate, explicit retention/purge process exists.
+- Keep upload and view/download routes behind the same module, branch/warehouse context, and permission boundary as the owning record. Do not rely on an unguessable path as authorization.
+- Any new upload metadata columns require a normal migration with a reversible `down()`, model `$fillable`/cast updates, and an entry in `DatabasePreparationService::requiredSchema()` so the web installer verifies the deployed schema. If S3 is required, preserve the installer object-storage write/delete health check.
+- Add the smallest contract test covering the shared uploader options, server validation, private storage service, authorized delivery route, migration, model cast, and installer schema check.
+
 ## PDF document standard
 
 Whenever creating, reviewing, or changing a PDF/print document, read and follow [`PDF_STANDARD.md`](PDF_STANDARD.md). Use [`PDF_COVERAGE_CHECKLIST.md`](PDF_COVERAGE_CHECKLIST.md) for approved coverage and implementation priority. Classify the document before implementation, reuse the shared mPDF renderer and Thai font profile, and complete the legal/tax checklist when the document is within Revenue Department scope. A visible signature image is not a digital signature and must never be presented as e-Tax/e-Receipt compliance.

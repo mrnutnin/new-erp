@@ -21,7 +21,6 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
 use Yajra\DataTables\Facades\DataTables;
@@ -212,8 +211,7 @@ final class SalesReturnController extends Controller
     {
         $this->ensureCurrentBranch($request, $salesReturn);
         $salesReturn->load(['sale', 'lines.item', 'lines.uom']);
-        $logoPath = $settings->value('logo_path');
-        $logo = $logoPath && Storage::disk('public')->exists($logoPath) ? Storage::disk('public')->path($logoPath) : null;
+        $logo = $settings->logoDataUri();
         $bytes = $renderer->renderView('Pos::pdf.sales-return', [
             'returnDocument' => $salesReturn,
             'logo' => $logo,

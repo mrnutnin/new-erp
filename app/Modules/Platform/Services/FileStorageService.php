@@ -13,7 +13,7 @@ class FileStorageService
     /** @return array{disk: string, path: string, checksum: string, bytes: int, mime_type: string, original_name: string} */
     public function store(UploadedFile $file, string $module, string $companyCode): array
     {
-        $disk = (string) config('filesystems.private_disk', 'local');
+        $disk = (string) config('filesystems.private_disk', 's3');
         if ($disk === 'public') {
             throw new RuntimeException('Private attachment storage cannot use the public disk.');
         }

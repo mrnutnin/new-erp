@@ -129,6 +129,8 @@ final class DocumentPdfRenderer
 .document-render .pdf-tax-invoice .pdf-signatures.pdf-signatures-three td { width:31.333%; }
 .document-render .pdf-tax-invoice .pdf-signatures.pdf-signatures-three td.invoice-sign-gap { width:3%; }
 .document-render .pdf-tax-invoice .invoice-sign-space { height:12mm; }
+.document-render .pdf-signature-image { display:block; max-height:11mm; max-width:42mm; margin:0 auto; }
+.document-render .invoice-sign-position { color:#737b83; font-size:8pt; }
 .document-render .pdf-tax-invoice .invoice-sign-date { color:#737b83; margin-top:2mm; }
 .document-render .pdf-tax-invoice .pdf-control { font-size:8.5pt; color:#737b83; margin:4mm 0 0; }
 .document-render .pdf-tax-invoice.pdf-readable { font-size:10.5pt; }

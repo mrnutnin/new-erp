@@ -9,6 +9,7 @@ class SettingRegistry
     public const DEFINITIONS = [
         'company_name' => ['name' => 'ชื่อบริษัท', 'description' => 'ชื่อบริษัทที่แสดงบนระบบและเอกสาร', 'type' => 'string', 'allowed' => null, 'default' => null, 'owner' => 'Settings', 'retroactive' => false],
         'company_address' => ['name' => 'ที่อยู่บริษัท', 'description' => 'ที่อยู่บริษัทที่แสดงบนเอกสาร', 'type' => 'string', 'allowed' => null, 'default' => null, 'owner' => 'Settings', 'retroactive' => false],
+        'logo_disk' => ['name' => 'พื้นที่จัดเก็บโลโก้บริษัท', 'description' => 'Filesystem disk ของโลโก้บริษัท', 'type' => 'string', 'allowed' => null, 'default' => null, 'owner' => 'Platform', 'retroactive' => false],
         'logo_path' => ['name' => 'โลโก้บริษัท', 'description' => 'ไฟล์โลโก้ที่แสดงบนเอกสาร PDF', 'type' => 'file', 'allowed' => null, 'default' => null, 'owner' => 'Settings', 'retroactive' => false],
         'tax_id' => ['name' => 'เลขประจำตัวผู้เสียภาษี', 'description' => 'เลข 13 หลักของบริษัท', 'type' => 'string', 'allowed' => null, 'default' => null, 'owner' => 'Settings', 'retroactive' => false],
         'locale' => ['name' => 'ภาษาเริ่มต้น', 'description' => 'ภาษาหลักของหน้าจอและรายงาน', 'type' => 'enum', 'allowed' => ['th', 'en'], 'default' => 'th', 'owner' => 'Settings', 'retroactive' => true],

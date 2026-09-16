@@ -32,6 +32,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\View\View;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
@@ -590,6 +591,7 @@ class SetupController extends Controller
     private function checks(): array
     {
         $database = $this->databaseCheck();
+        $objectStorage = $this->objectStorageCheck();
         $storagePath = storage_path();
         $cachePath = base_path('bootstrap/cache');
 
@@ -622,6 +624,12 @@ class SetupController extends Controller
                 'label' => 'Storage writable',
                 'status' => is_writable($storagePath) ? 'pass' : 'fail',
                 'detail' => $storagePath,
+                'critical' => true,
+            ],
+            [
+                'label' => 'AWS S3 upload storage',
+                'status' => $objectStorage['status'],
+                'detail' => $objectStorage['detail'],
                 'critical' => true,
             ],
             [
@@ -696,6 +704,33 @@ class SetupController extends Controller
             return true;
         } catch (Throwable) {
             return false;
+        }
+    }
+
+    /** @return array{status:string, detail:string} */
+    private function objectStorageCheck(): array
+    {
+        $disk = (string) config('filesystems.private_disk', 's3');
+        $configuration = config("filesystems.disks.{$disk}", []);
+        if (($configuration['driver'] ?? null) !== 's3') {
+            return ['status' => 'fail', 'detail' => "Private upload disk [{$disk}] must use the s3 driver"];
+        }
+        if (blank($configuration['bucket'] ?? null) || blank($configuration['region'] ?? null)) {
+            return ['status' => 'fail', 'detail' => 'AWS_BUCKET and AWS_DEFAULT_REGION are required'];
+        }
+
+        $path = 'installer/health/'.bin2hex(random_bytes(12)).'.txt';
+        try {
+            $storage = Storage::disk($disk);
+            if (! $storage->put($path, 'ok') || ! $storage->delete($path)) {
+                return ['status' => 'fail', 'detail' => "S3 disk [{$disk}] is not writable"];
+            }
+
+            return ['status' => 'pass', 'detail' => "Connected · Disk: {$disk} · Bucket: {$configuration['bucket']} · Region: {$configuration['region']}"];
+        } catch (Throwable $exception) {
+            report($exception);
+
+            return ['status' => 'fail', 'detail' => "Unable to write and delete an object using S3 disk [{$disk}]"];
         }
     }
 

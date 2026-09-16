@@ -13,7 +13,6 @@ use App\Modules\Settings\Services\GlobalSettings;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Storage;
 use Illuminate\View\View;
 use Symfony\Component\HttpFoundation\Response;
 
@@ -87,7 +86,6 @@ class OperationalReportController extends Controller
             ['title' => 'ใบลดหนี้ซื้อ', 'rows' => $summarize(PurchaseDocument::class, 'document_date', 'gross_amount', 'CREDIT_NOTE')],
             ['title' => 'Landed Cost', 'rows' => $summarize(LandedCost::class, 'business_date', 'total_amount')],
         ]);
-        $logoPath = $settings->value('logo_path');
         $bytes = $renderer->renderView('Purchasing::pdf.operational-report', [
             'sections' => $sections,
             'dateFrom' => $dateFrom,
@@ -95,7 +93,7 @@ class OperationalReportController extends Controller
             'generatedAt' => now(),
             'generatedBy' => $request->user()->name,
             'warehouses' => $warehouses,
-            'logo' => $logoPath && Storage::disk('public')->exists($logoPath) ? Storage::disk('public')->path($logoPath) : null,
+            'logo' => $settings->logoDataUri(),
             'companyName' => (string) ($settings->value('company_name') ?: config('app.name')),
             'companyAddress' => (string) ($branch->tax_address ?: $settings->value('company_address')),
             'companyTaxId' => (string) ($settings->value('tax_id') ?: ''),

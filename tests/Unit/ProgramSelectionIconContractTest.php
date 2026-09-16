@@ -16,4 +16,19 @@ class ProgramSelectionIconContractTest extends TestCase
 
         $this->assertStringContainsString("?? 'bx-grid-alt'", $view);
     }
+
+    public function test_program_selection_displays_the_company_brand_next_to_the_heading(): void
+    {
+        $root = dirname(__DIR__, 2);
+        $controller = file_get_contents($root.'/app/Modules/Platform/Controllers/ContextController.php');
+        $view = file_get_contents($root.'/app/Modules/Platform/Views/context/select-program.blade.php');
+
+        $this->assertStringContainsString('GlobalSettings $globalSettings', $controller);
+        $this->assertStringContainsString("'companySetting' => \$globalSettings->current()", $controller);
+        $this->assertStringContainsString("'companyLogoDataUri' => \$globalSettings->logoDataUri()", $controller);
+        $this->assertStringContainsString('program-selection-brand', $view);
+        $this->assertStringContainsString('$companyLogoDataUri', $view);
+        $this->assertStringContainsString('$companySetting->company_name', $view);
+        $this->assertStringNotContainsString("route('settings.company.logo')", $view);
+    }
 }
