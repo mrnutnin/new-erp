@@ -7,7 +7,7 @@
     <div class="d-flex justify-content-between align-items-end mb-4">
         <div><p class="eyebrow mb-2">POS / MASTER DATA</p><h1 class="h3 mb-2">กลุ่มลูกค้า</h1><p class="text-secondary mb-0">จัดกลุ่มลูกค้าเพื่อใช้ร่วมกับ Credit และ Price List ในขั้นถัดไป</p></div>
         @if (auth()->user()->hasPermission('pos.customer-groups.create'))
-            <a class="btn btn-dark" href="{{ route('pos.customer-groups.create') }}"><i class="bx bx-plus me-1" aria-hidden="true"></i>เพิ่มกลุ่มลูกค้า</a>
+            <a class="btn btn-app-primary" href="{{ route('pos.customer-groups.create') }}"><i class="bx bx-plus me-1" aria-hidden="true"></i>เพิ่มกลุ่มลูกค้า</a>
         @endif
     </div>
     <div class="card border-0 shadow-sm"><div class="card-body p-3 p-lg-4"><div class="table-responsive">
@@ -29,7 +29,7 @@ $(function () {
             {data:'name', name:'name', render:text.display},
             {data:'party_count', name:'party_count', className:'text-end'},
             {data:'is_active', name:'is_active', render:function(v,t){ return t === 'display' ? '<span class="badge '+(v?'text-bg-success">ใช้งาน':'text-bg-secondary">ปิดใช้งาน')+'</span>' : v; }},
-            {data:null, orderable:false, searchable:false, className:'text-end', render:function(v,t,row){ if(t!=='display') return ''; var a=[]; if(row.edit_url) a.push('<a class="btn btn-sm btn-outline-dark" title="แก้ไข" href="'+text.display(row.edit_url)+'"><i class="bx bx-edit" aria-hidden="true"></i><span class="visually-hidden">แก้ไข</span></a>'); if(row.delete_url) a.push('<button class="btn btn-sm btn-outline-danger js-delete-group" title="ลบ" data-url="'+text.display(row.delete_url)+'" type="button"><i class="bx bx-trash" aria-hidden="true"></i><span class="visually-hidden">ลบ</span></button>'); return a.join(' '); }}
+            {data:null, orderable:false, searchable:false, className:'text-end text-nowrap', render:function(v,t,row){ if(t!=='display') return ''; var a=[]; if(row.edit_url) a.push('<a class="btn btn-sm btn-app-soft" title="แก้ไข" href="'+text.display(row.edit_url)+'"><i class="bx bx-edit-alt" aria-hidden="true"></i><span class="visually-hidden">แก้ไข</span></a>'); if(row.delete_url) a.push('<button class="btn btn-sm btn-app-danger js-delete-group" title="ลบ" data-url="'+text.display(row.delete_url)+'" type="button"><i class="bx bx-trash" aria-hidden="true"></i><span class="visually-hidden">ลบ</span></button>'); return a.join(' '); }}
         ]
     }));
     window.erpAjaxDelete({button:'.js-delete-group', reload:'#customer-groups-table', confirm:'ยืนยันการลบกลุ่มลูกค้านี้หรือไม่? หากมีลูกค้าใช้งานอยู่ ระบบจะให้ปิดใช้งานแทน'});

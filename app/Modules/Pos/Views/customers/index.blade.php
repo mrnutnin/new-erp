@@ -11,7 +11,7 @@
                 <p class="text-secondary mb-0">ข้อมูลกลางของลูกค้า ใช้ร่วมกันทุกสาขา</p>
             </div>
             @if (auth()->user()->hasPermission('pos.customers.create'))
-                <a class="btn btn-dark" href="{{ route('pos.customers.create') }}"><i class="bx bx-plus me-1" aria-hidden="true"></i>เพิ่มลูกค้า</a>
+                <a class="btn btn-app-primary" href="{{ route('pos.customers.create') }}"><i class="bx bx-plus me-1" aria-hidden="true"></i>เพิ่มลูกค้า</a>
             @endif
         </div>
 
@@ -88,8 +88,8 @@
                     render: function (value, type, row) {
                         if (type !== 'display') return '';
                         var actions = [];
-                        if (row.edit_url) actions.push('<a class="btn btn-sm btn-outline-dark" href="' + text.display(row.edit_url) + '">แก้ไข</a>');
-                        if (row.delete_url) actions.push('<button class="btn btn-sm btn-outline-danger js-delete-customer" data-url="' + text.display(row.delete_url) + '" type="button">ลบ</button>');
+                        if (row.edit_url) actions.push('<a class="btn btn-sm btn-app-soft" href="' + text.display(row.edit_url) + '"><i class="bx bx-edit-alt" aria-hidden="true"></i><span class="visually-hidden">แก้ไข</span></a>');
+                        if (row.delete_url) actions.push('<button class="btn btn-sm btn-app-danger js-delete-customer" data-url="' + text.display(row.delete_url) + '" type="button"><i class="bx bx-trash" aria-hidden="true"></i><span class="visually-hidden">ลบ</span></button>');
                         return actions.join(' ');
                     }
                 });

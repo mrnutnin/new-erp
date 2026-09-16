@@ -8,10 +8,11 @@
             'description' => 'เอกสารขายจริงจะกระทบ Stock และบัญชีเมื่อเปิดใช้งานการ Post',
             'actionUrl' => route('pos.physical-sales.create'),
             'actionLabel' => 'สร้างใบขาย',
-            'actionClass' => 'btn-dark',
+            'actionClass' => 'btn-app-primary',
         ])
         <div class="card border-0 shadow-sm mb-3">
             <div class="card-body p-3 p-lg-4">
+                <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3"><div><h2 class="h5 mb-1">ตัวกรอง HS/IV</h2><p class="text-secondary mb-0 small">กรองก่อนค้นหาจากตาราง</p></div><button id="physical-sale-reset" type="button" class="btn btn-sm btn-app-soft"><i class="bx bx-reset me-1"></i>ล้างตัวกรอง</button></div>
                 <div class="row g-3 align-items-end">
                     <div class="col-12 col-md-4 col-lg-2"><label class="form-label"
                             for="physical-sale-from">วันที่เริ่ม</label><input id="physical-sale-from" type="date"
@@ -43,16 +44,15 @@
                             <option value="CHECK">ต้องตรวจสอบ AR</option>
                         </select></div>
                     <div class="col-12 col-md-4 col-lg-2"><button id="physical-sale-filter"
-                            class="btn btn-outline-secondary w-100" type="button"><i class="bx bx-filter-alt me-1"
-                                aria-hidden="true"></i>กรอง</button></div>
+                            class="btn btn-app-primary w-100" type="button"><i class="bx bx-filter-alt me-1"
+                                aria-hidden="true"></i>ใช้ตัวกรอง</button></div>
                 </div>
             </div>
         </div>
         <div class="card border-0 shadow-sm">
             <div class="card-body p-3 p-lg-4">
                 <div class="mb-3">
-                <h2 class="h6 mb-0">รายการใบ HS/IV</h2>
-
+                <h2 class="h5 mb-1">รายการใบ HS/IV</h2><p class="text-secondary mb-0 small">เลือกดูรายละเอียดเพื่อยืนยันขาย รับชำระหนี้ หรือยกเลิกเอกสารตามสถานะ</p>
                 </div>
                 <div class="table-responsive">
                     <table id="physical-sales-table" class="table table-hover align-middle w-100"
@@ -151,22 +151,16 @@
                         className: 'text-end text-nowrap',
                         render: function(_, type, row) {
                             if (type !== 'display') return '';
-                            var button = function(url, style, icon, label) {
+                            var button = function(url, style, icon, label, newTab) {
                                 return url ? '<a class="btn btn-sm ' + style + '" title="' +
                                     label + '" aria-label="' + label + '" href="' + esc
-                                    .display(url) + '"><i class="bx ' + icon +
+                                    .display(url) + (newTab ? '" target="_blank" rel="noopener' : '') + '"><i class="bx ' + icon +
                                     '" aria-hidden="true"></i><span class="visually-hidden">' +
                                     label + '</span></a> ' : '';
                             };
-                            return button(row.show_url, 'btn-app-soft', 'bx-show',
+                            return button(row.show_url, 'btn-app-soft', 'bx-file-find',
                                 'ดูรายละเอียด') + button(row.pdf_url, 'btn-app-soft',
-                                'bx-printer', 'พิมพ์ PDF') + button(row.post_detail_url,
-                                'btn-primary', 'bx-check-circle', 'ยืนยันขาย') + button(row
-                                .void_detail_url, 'btn-outline-danger', 'bx-x-circle',
-                                'ยกเลิก') + button(row.receive_receipt_url, 'btn-success',
-                                'bx-money', 'รับชำระหนี้') + button(row
-                                .cancel_full_detail_url, 'btn-outline-danger',
-                                'bx-x-circle', 'ยกเลิกทั้งใบ');
+                                'bx-printer', 'พิมพ์ PDF', true) + (row.delete_url ? '<button class="btn btn-sm btn-app-danger js-delete-physical-sale" type="button" data-url="' + esc.display(row.delete_url) + '" title="ลบร่าง" aria-label="ลบร่าง"><i class="bx bx-trash" aria-hidden="true"></i></button>' : '');
                         }
                     }
                 ]
@@ -174,6 +168,12 @@
             $('#physical-sale-filter').on('click', function() {
                 t.DataTable().ajax.reload();
             });
+            $('#physical-sale-reset').on('click', function() {
+                $('#physical-sale-from,#physical-sale-to').val('');
+                $('#physical-sale-type,#physical-sale-status,#physical-sale-payment-status').val('');
+                t.DataTable().ajax.reload();
+            });
+            window.erpAjaxDelete({button: '.js-delete-physical-sale', reload: '#physical-sales-table', confirm: 'ยืนยันการลบร่าง HS/IV นี้หรือไม่?', confirmButtonText: 'ลบร่าง', cancelButtonText: 'กลับ'});
         });
     </script>
 @endpush

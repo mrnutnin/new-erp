@@ -44,7 +44,7 @@ final class ProductionFinishedReceiptController extends Controller
     public function data(Request $request, GlobalSettings $settings): JsonResponse
     {
         $warehouseId = (int) $request->attributes->get('selectedWarehouse')->id;
-        $labels = ['DRAFT' => 'ร่าง', 'APPROVED' => 'อนุมัติแล้ว', 'POSTED' => 'ลงบัญชีแล้ว', 'VOID' => 'ยกเลิก', 'REVERSED' => 'กลับรายการแล้ว'];
+        $labels = ['DRAFT' => 'ร่าง', 'APPROVED' => 'อนุมัติแล้ว', 'POSTED' => 'ลง Stock และบัญชีแล้ว', 'VOID' => 'ยกเลิกเอกสาร', 'REVERSED' => 'ยกเลิกเอกสารแล้ว'];
         $query = InventoryAdjustmentDocument::query()
             ->with(['lines.item:id,code,name', 'lines.uom:id,code', 'creator:id,name'])
             ->where('warehouse_id', $warehouseId)
@@ -67,15 +67,9 @@ final class ProductionFinishedReceiptController extends Controller
             ->addColumn('status_label', fn ($r) => $labels[$r->status] ?? $r->status)
             ->addColumn('quantity', fn ($r) => WmsDecimal::format($r->lines->sum('quantity')))
             ->addColumn('value', fn ($r) => WmsDecimal::format($r->lines->sum('value')))
-            ->addColumn('can_approve', fn ($r) => $r->status === 'DRAFT' && $request->user()->hasPermission('wms.inventory-adjustments.approve'))
-            ->addColumn('can_post', fn ($r) => $r->status === 'APPROVED' && (bool) config('erp.inventory.manual_production_receipt_posting_enabled', false) && $request->user()->hasPermission('wms.inventory-adjustments.post'))
             ->addColumn('can_delete', fn ($r) => $r->status === 'DRAFT' && $request->user()->hasPermission('wms.inventory-adjustments.delete'))
-            ->addColumn('can_reverse', fn ($r) => $r->status === 'POSTED' && $r->reversal_status !== 'REVERSED' && $request->user()->hasPermission('wms.inventory-adjustments.reverse'))
             ->addColumn('show_url', fn ($r) => route('wms.production.finished-receipts.show', $r))
-            ->addColumn('approve_url', fn ($r) => route('wms.production.finished-receipts.approve', $r))
-            ->addColumn('post_url', fn ($r) => route('wms.production.finished-receipts.post', $r))
             ->addColumn('delete_url', fn ($r) => route('wms.production.finished-receipts.destroy', $r))
-            ->addColumn('reverse_url', fn ($r) => route('wms.production.finished-receipts.reverse', $r))
             ->toJson();
     }
 
@@ -177,7 +171,7 @@ final class ProductionFinishedReceiptController extends Controller
         $before = $document->load('lines')->toArray();
         DB::transaction(function () use ($values, $document, $request, $audit, $before): void {
             $document->forceFill(['document_date' => Carbon::parse($values['document_date']), 'direction' => 'GAIN', 'reason' => $values['reason'], 'source_issue_id' => $values['source_issue_ids'][0]])->save();
-            $document->lines()->delete();
+            $document->lines()->forceDelete();
             foreach ($values['lines'] as $position => $line) {
                 InventoryAdjustment::query()->create([...$line, 'direction' => 'GAIN', 'document_id' => $document->id, 'line_number' => $position + 1, 'warehouse_id' => $document->warehouse_id, 'business_date' => $document->document_date, 'reason' => $values['reason'], 'idempotency_key' => 'production-receipt:'.$document->id.':line:'.$position.':'.bin2hex(random_bytes(4)), 'created_by' => $document->created_by]);
             }

@@ -7,9 +7,12 @@ use App\Models\Warehouse;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 class LandedCost extends Model
 {
+    use SoftDeletes;
+
     protected $table = 'purchasing_landed_costs';
 
     protected $fillable = [
@@ -49,5 +52,10 @@ class LandedCost extends Model
     public function postedBy(): BelongsTo
     {
         return $this->belongsTo(User::class, 'posted_by');
+    }
+
+    public function createdBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'created_by');
     }
 }

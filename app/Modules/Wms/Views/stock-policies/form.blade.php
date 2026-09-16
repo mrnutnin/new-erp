@@ -24,7 +24,7 @@
                 <div class="col-md-4"><label class="form-label">จำนวนที่เติมเมื่อถึง Min</label><input class="form-control" name="reorder_quantity" type="number" min="0" step="{{$quantityStep}}" value="{{old('reorder_quantity',$policy->reorder_quantity ?? 0)}}" required><div class="invalid-feedback" data-error-for="reorder_quantity"></div></div>
                 <div class="col-12 form-check"><input class="form-check-input" name="is_active" type="checkbox" value="1" @checked(old('is_active',$policy->is_active ?? true))><label class="form-check-label">เปิดใช้งานนโยบายนี้</label></div>
             </div>
-            <div class="p-4"><button class="btn btn-dark" type="submit">บันทึก</button> <a class="btn btn-outline-secondary" href="{{route('wms.stock-policies.index')}}">ยกเลิก</a></div>
+            <div class="p-4"><button class="btn btn-app-primary" type="submit"><i class="bx bx-save me-1" aria-hidden="true"></i>บันทึก</button> <a class="btn btn-outline-secondary" href="{{route('wms.stock-policies.index')}}"><i class="bx bx-arrow-back me-1" aria-hidden="true"></i>กลับหน้ารายการ</a></div>
         </div>
     </form>
 </div>

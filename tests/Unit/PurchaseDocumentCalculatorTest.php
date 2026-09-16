@@ -40,4 +40,15 @@ class PurchaseDocumentCalculatorTest extends TestCase
         $this->assertSame(4, $result['lines'][0]['item_id']);
         $this->assertSame(2, $result['lines'][0]['uom_id']);
     }
+
+    public function test_explicit_line_amount_remains_authoritative_when_derived_unit_price_is_rounded(): void
+    {
+        $result = PurchaseDocumentCalculator::calculate([
+            ['quantity' => '3', 'unit_price' => '33.3333', 'line_amount' => '100.00', 'discount_amount' => '0'],
+        ]);
+
+        $this->assertSame('33.3333', $result['lines'][0]['unit_price']);
+        $this->assertSame('100.00', $result['lines'][0]['net_amount']);
+        $this->assertSame('100.00', $result['gross_amount']);
+    }
 }

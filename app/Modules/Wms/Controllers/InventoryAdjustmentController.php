@@ -10,23 +10,23 @@ use App\Modules\Platform\Services\AuditLogger;
 use App\Modules\Settings\Services\GlobalSettings;
 use App\Modules\Wms\Models\InventoryAdjustment;
 use App\Modules\Wms\Models\InventoryAdjustmentDocument;
-use App\Modules\Wms\Models\Item;
 use App\Modules\Wms\Models\IssueDocument;
+use App\Modules\Wms\Models\Item;
 use App\Modules\Wms\Requests\SaveInventoryAdjustmentRequest;
+use App\Modules\Wms\Services\CostPropagationTriggerDispatcher;
 use App\Modules\Wms\Services\InventoryAdjustmentDocumentReversalService;
 use App\Modules\Wms\Services\InventoryAdjustmentLiveReversalAdapter;
 use App\Modules\Wms\Services\InventoryAdjustmentPostingService;
 use App\Modules\Wms\Services\ManualProductionReceiptPostingService;
-use App\Modules\Wms\Services\CostPropagationTriggerDispatcher;
-use App\Modules\Wms\Support\WmsDecimal;
 use App\Modules\Wms\Support\ManualProductionReceiptContract;
+use App\Modules\Wms\Support\WmsDecimal;
 use Brick\Math\BigDecimal;
 use Brick\Math\RoundingMode;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
 use Yajra\DataTables\Facades\DataTables;
@@ -44,7 +44,7 @@ final class InventoryAdjustmentController extends Controller
     public function data(Request $request, GlobalSettings $settings): JsonResponse
     {
         $warehouseId = (int) $request->attributes->get('selectedWarehouse')->id;
-        $labels = ['DRAFT' => 'ร่าง', 'APPROVED' => 'อนุมัติแล้ว', 'POSTED' => 'ลงบัญชีแล้ว', 'VOID' => 'ยกเลิก', 'REVERSED' => 'กลับรายการแล้ว'];
+        $labels = ['DRAFT' => 'ร่าง', 'APPROVED' => 'อนุมัติแล้ว', 'POSTED' => 'ลง Stock และบัญชีแล้ว', 'VOID' => 'ยกเลิกเอกสาร', 'REVERSED' => 'ยกเลิกเอกสารแล้ว'];
         $directions = ['GAIN' => 'เพิ่มสินค้า', 'LOSS' => 'ลดสินค้า'];
         $query = InventoryAdjustmentDocument::query()->with(['lines.item:id,code,name', 'lines.uom:id,code', 'creator:id,name'])->where('warehouse_id', $warehouseId);
         $context = $request->string('document_context')->toString();
@@ -53,9 +53,15 @@ final class InventoryAdjustmentController extends Controller
                 ? $query->where('document_context', $context)
                 : $query->whereRaw('1 = 0');
         }
-        if ($request->filled('status') && in_array($request->string('status')->toString(), ['DRAFT', 'APPROVED', 'POSTED', 'VOID', 'REVERSED'], true)) $query->where('status', $request->string('status')->toString());
-        if ($request->filled('date_from')) $query->whereDate('document_date', '>=', $request->date('date_from'));
-        if ($request->filled('date_to')) $query->whereDate('document_date', '<=', $request->date('date_to'));
+        if ($request->filled('status') && in_array($request->string('status')->toString(), ['DRAFT', 'APPROVED', 'POSTED', 'VOID', 'REVERSED'], true)) {
+            $query->where('status', $request->string('status')->toString());
+        }
+        if ($request->filled('date_from')) {
+            $query->whereDate('document_date', '>=', $request->date('date_from'));
+        }
+        if ($request->filled('date_to')) {
+            $query->whereDate('document_date', '<=', $request->date('date_to'));
+        }
         $query->latest('id');
 
         return DataTables::eloquent($query)
@@ -66,12 +72,7 @@ final class InventoryAdjustmentController extends Controller
             ->addColumn('direction_label', fn ($r) => $directions[$r->direction] ?? $r->direction ?? '-')
             ->addColumn('context_label', fn ($r) => $r->document_context === 'PRODUCTION_RECEIPT' ? 'รับสินค้าผลิตเสร็จ' : 'ปรับปรุงสินค้า')
             ->addColumn('status_label', fn ($r) => $labels[$r->status] ?? $r->status)
-            ->addColumn('can_approve', fn ($r) => $r->status === 'DRAFT' && $request->user()->hasPermission('wms.inventory-adjustments.approve'))
-            ->addColumn('can_post', fn ($r) => $r->status === 'APPROVED'
-                && (bool) config($r->document_context === 'PRODUCTION_RECEIPT' ? 'erp.inventory.manual_production_receipt_posting_enabled' : 'erp.inventory.adjustment_posting_enabled', false)
-                && $request->user()->hasPermission('wms.inventory-adjustments.post'))
             ->addColumn('can_delete', fn ($r) => $r->status === 'DRAFT' && $request->user()->hasPermission('wms.inventory-adjustments.delete'))
-            ->addColumn('can_reverse', fn ($r) => $r->status === 'POSTED' && $r->reversal_status !== 'REVERSED' && (bool) config('erp.inventory.adjustment_posting_enabled', false) && $request->user()->hasPermission('wms.inventory-adjustments.reverse'))
             ->addColumn('business_date', fn ($r) => $r->document_date?->format((string) ($settings->value('date_format') ?: 'd/m/Y')) ?: '-')
             ->addColumn('quantity', fn ($r) => WmsDecimal::format($r->lines->sum('quantity')))
             ->addColumn('value', fn ($r) => WmsDecimal::format($r->lines->sum('value')))
@@ -79,6 +80,7 @@ final class InventoryAdjustmentController extends Controller
             ->addColumn('show_url', fn ($r) => $r->document_context === 'PRODUCTION_RECEIPT'
                 ? route('wms.production.finished-receipts.show', $r)
                 : route('wms.inventory-adjustments.documents.show', $r))
+            ->addColumn('delete_url', fn ($r) => route('wms.inventory-adjustments.documents.delete', $r))
             ->orderColumn('business_date', 'document_date $1')
             ->toJson();
     }
@@ -199,7 +201,7 @@ final class InventoryAdjustmentController extends Controller
                 }
             }
             $document->forceFill($documentValues)->save();
-            $document->lines()->delete();
+            $document->lines()->forceDelete();
             foreach ($values['lines'] as $position => $line) {
                 $item = Item::query()->findOrFail($line['item_id']);
                 abort_unless((int) $line['uom_id'] === (int) $item->base_uom_id, 422, 'Adjustment ต้องใช้หน่วยฐานของสินค้าใน MVP');
@@ -528,6 +530,7 @@ final class InventoryAdjustmentController extends Controller
         foreach ($values['lines'] as $position => &$line) {
             if ($position === $last) {
                 $line['value'] = $sourceTotal->minus($running)->toScale(8, RoundingMode::HALF_UP)->__toString();
+
                 continue;
             }
             $line['value'] = BigDecimal::of((string) $line['value'])->toScale(8, RoundingMode::HALF_UP)->__toString();

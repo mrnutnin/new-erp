@@ -39,7 +39,7 @@ $(function () {
             {data: 'on_hand', searchable: false, className: 'text-end', render: textRenderer.display},
             {data: 'average_unit_cost', searchable: false, className: 'text-end', render: textRenderer.display},
             {data: 'inventory_value', searchable: false, className: 'text-end', render: textRenderer.display},
-            {data: null, orderable: false, searchable: false, className: 'text-end text-nowrap', render: function (value, type, row) { return type === 'display' ? '<a class="btn btn-sm btn-app-soft" href="' + encodeURI(row.detail_url) + '" title="ดูรายละเอียด" aria-label="ดูรายละเอียด"><i class="bx bx-show" aria-hidden="true"></i></a>' : ''; }}
+            {data: null, orderable: false, searchable: false, className: 'text-end text-nowrap', render: function (value, type, row) { return type === 'display' ? '<a class="btn btn-sm btn-app-soft" href="' + encodeURI(row.detail_url) + '" title="ดูรายละเอียด" aria-label="ดูรายละเอียด"><i class="bx bx-file-find" aria-hidden="true"></i></a>' : ''; }}
         ],
         drawCallback: function (settings) {
             var balance = settings.json && settings.json.balance || {};

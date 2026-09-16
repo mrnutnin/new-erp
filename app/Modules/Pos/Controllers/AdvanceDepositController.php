@@ -111,7 +111,7 @@ final class AdvanceDepositController extends Controller
         $this->scope($request, $advanceDeposit);
         $deposit = $advanceDeposit->load(['party', 'tenders.bankAccount']);
         $logoPath = $settings->value('logo_path');
-        $bytes = $renderer->renderView('Pos::pdf.advance-deposit', ['advanceDeposit' => $deposit, 'companyName' => $settings->value('company_name') ?: 'บริษัท', 'companyAddress' => $settings->value('company_address'), 'dateFormat' => (string) ($settings->value('date_format') ?: 'd/m/Y'), 'logo' => $logoPath && Storage::disk('public')->exists($logoPath) ? Storage::disk('public')->path($logoPath) : null]);
+        $bytes = $renderer->renderView('Pos::pdf.advance-deposit', ['advanceDeposit' => $deposit, 'companyName' => $settings->value('company_name') ?: 'บริษัท', 'companyAddress' => $settings->value('company_address'), 'companyTaxId' => $settings->value('tax_id'), 'dateFormat' => (string) ($settings->value('date_format') ?: 'd/m/Y'), 'logo' => $logoPath && Storage::disk('public')->exists($logoPath) ? Storage::disk('public')->path($logoPath) : null]);
 
         return response($bytes, 200, ['Content-Type' => 'application/pdf', 'Content-Disposition' => 'inline; filename="'.rawurlencode($deposit->document_number).'.pdf"']);
     }

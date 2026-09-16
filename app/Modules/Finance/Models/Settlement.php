@@ -7,6 +7,7 @@ use App\Models\User;
 use App\Modules\Accounting\Models\JournalEntry;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Settlement extends Model
@@ -55,5 +56,10 @@ class Settlement extends Model
     public function tenders(): HasMany
     {
         return $this->hasMany(SettlementTender::class)->orderBy('line_number');
+    }
+
+    public function paymentVoucher(): HasOne
+    {
+        return $this->hasOne(PaymentVoucher::class);
     }
 }

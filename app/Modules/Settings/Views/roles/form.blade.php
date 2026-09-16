@@ -65,7 +65,7 @@
                                     <h2 class="h5 mb-1">สิทธิ์ของบทบาท</h2>
                                     <p class="text-secondary small mb-0">เลือกเฉพาะสิทธิ์ที่จำเป็นต่อหน้าที่</p>
                                 </div>
-                                <span class="badge text-bg-light">{{ $permissionGroups->flatten()->count() }} สิทธิ์</span>
+                                <span class="badge app-badge-soft">{{ $permissionGroups->flatten()->count() }} สิทธิ์</span>
                             </div>
 
                             <div class="row g-3">
@@ -101,10 +101,10 @@
                             <div class="invalid-feedback d-block" data-error-for="permission_ids"></div>
 
                             <div class="d-flex justify-content-between align-items-center mt-4">
-                                <a class="btn btn-outline-dark" href="{{ route('settings.roles.index') }}">
-                                    <i class="bx bx-arrow-back me-1" aria-hidden="true"></i>ยกเลิก
+                                <a class="btn btn-app-soft" href="{{ route('settings.roles.index') }}">
+                                    <i class="bx bx-arrow-back me-1" aria-hidden="true"></i>กลับหน้ารายการ
                                 </a>
-                                <button class="btn btn-dark" type="submit" data-busy-text="กำลังบันทึก...">
+                                <button class="btn btn-app-primary" type="submit" data-busy-text="กำลังบันทึก...">
                                     <i class="bx bx-save me-1" aria-hidden="true"></i>บันทึกบทบาท
                                 </button>
                             </div>

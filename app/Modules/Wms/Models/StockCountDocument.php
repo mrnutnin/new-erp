@@ -6,10 +6,11 @@ use App\Models\Concerns\HasDocumentBranch;
 use App\Models\User;
 use App\Models\Warehouse;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 final class StockCountDocument extends Model
 {
-    use HasDocumentBranch;
+    use HasDocumentBranch, SoftDeletes;
 
     protected $table = 'wms_stock_count_documents';
 

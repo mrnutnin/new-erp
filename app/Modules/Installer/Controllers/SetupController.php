@@ -8,30 +8,30 @@ use App\Models\CompanySetting;
 use App\Models\Program;
 use App\Models\User;
 use App\Models\Warehouse;
-use App\Modules\Installer\Services\DatabasePreparationService;
-use App\Modules\Installer\Services\CustomerSetupService;
-use App\Modules\Installer\Services\InstallerStateStore;
-use App\Modules\Installer\Services\InstallationValidationService;
-use App\Modules\Installer\Services\PartyImportService;
-use App\Modules\Installer\Services\ItemImportService;
-use App\Modules\Installer\Services\EmployeeImportService;
-use App\Modules\Installer\Services\OpenItemImportService;
 use App\Modules\Accounting\Services\JournalPostingService;
 use App\Modules\Finance\Services\OpenItemService;
-use App\Modules\Platform\Services\SpreadsheetService;
+use App\Modules\Installer\Models\InstallationSession;
+use App\Modules\Installer\Services\CustomerSetupService;
+use App\Modules\Installer\Services\DatabasePreparationService;
+use App\Modules\Installer\Services\EmployeeImportService;
+use App\Modules\Installer\Services\GoLiveService;
+use App\Modules\Installer\Services\InstallationValidationService;
+use App\Modules\Installer\Services\InstallerStateStore;
+use App\Modules\Installer\Services\ItemImportService;
+use App\Modules\Installer\Services\OpenItemImportService;
+use App\Modules\Installer\Services\PartyImportService;
+use App\Modules\Installer\Services\SystemDefaultOrchestrator;
 use App\Modules\Platform\Models\MigrationImportBatch;
+use App\Modules\Platform\Services\SpreadsheetService;
 use App\Modules\Wms\Services\OpeningBalanceImportService;
 use App\Modules\Wms\Services\OpeningBalanceService;
 use App\Modules\Wms\Support\OpeningBalanceTemplate;
-use App\Modules\Installer\Services\SystemDefaultOrchestrator;
-use App\Modules\Installer\Services\GoLiveService;
-use App\Modules\Installer\Models\InstallationSession;
 use Illuminate\Database\ConnectionException;
-use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
-use Illuminate\Support\Facades\Schema;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\View\View;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
@@ -84,7 +84,7 @@ class SetupController extends Controller
             $data = Validator::make($request->all(), [
                 'company_name' => ['required', 'string', 'max:255'],
                 'company_address' => ['nullable', 'string', 'max:1000'],
-                'tax_id' => ['nullable', 'string', 'max:30'],
+                'tax_id' => ['nullable', 'digits:13'],
                 'locale' => ['required', 'in:th,en'],
                 'timezone' => ['required', 'timezone'],
                 'base_currency' => ['required', 'string', 'size:3'],
@@ -310,9 +310,11 @@ class SetupController extends Controller
             $data = Validator::make($request->all(), ['party_type' => ['required', 'in:CUSTOMER,SUPPLIER'], 'file' => ['required', 'file', 'mimes:csv,txt', 'max:10240']])->validate();
             $admin = User::query()->whereHas('roles', fn ($query) => $query->where('roles.code', 'admin'))->latest('id')->firstOrFail();
             $batch = $imports->stage($request->file('file'), $data['party_type'], $admin);
+
             return $this->render($request, 'ตรวจสอบไฟล์ '.($data['party_type'] === 'CUSTOMER' ? 'ลูกค้า' : 'Supplier').' แล้ว: ผ่าน '.$batch->valid_rows.' รายการ ผิดพลาด '.$batch->error_rows.' รายการ');
         } catch (Throwable $exception) {
             report($exception);
+
             return $this->render($request, 'ไม่สามารถตรวจสอบไฟล์คู่ค้าได้ กรุณาตรวจสอบหัวตาราง CSV และลองใหม่');
         }
     }
@@ -326,9 +328,11 @@ class SetupController extends Controller
             $batch = MigrationImportBatch::query()->whereIn('type', ['INSTALLER_PARTY_CUSTOMER', 'INSTALLER_PARTY_SUPPLIER'])->latest('id')->firstOrFail();
             $admin = User::query()->whereHas('roles', fn ($query) => $query->where('roles.code', 'admin'))->latest('id')->firstOrFail();
             $count = $imports->commit($batch, $admin);
+
             return $this->render($request, 'นำเข้าคู่ค้าเรียบร้อยแล้ว '.$count.' รายการ');
         } catch (Throwable $exception) {
             report($exception);
+
             return $this->render($request, 'ยังไม่สามารถยืนยันไฟล์คู่ค้าได้ กรุณาตรวจสอบรายการผิดพลาด');
         }
     }
@@ -342,9 +346,11 @@ class SetupController extends Controller
             $data = Validator::make($request->all(), ['file' => ['required', 'file', 'mimes:csv,txt', 'max:10240']])->validate();
             $admin = User::query()->whereHas('roles', fn ($query) => $query->where('roles.code', 'admin'))->latest('id')->firstOrFail();
             $batch = $imports->stage($request->file('file'), $admin);
+
             return $this->render($request, 'ตรวจสอบไฟล์สินค้าแล้ว: ผ่าน '.$batch->valid_rows.' รายการ ผิดพลาด '.$batch->error_rows.' รายการ');
         } catch (Throwable $exception) {
             report($exception);
+
             return $this->render($request, 'ไม่สามารถตรวจสอบไฟล์สินค้าได้ กรุณาตรวจสอบหัวตารางและ Master Data ก่อนลองใหม่');
         }
     }
@@ -358,9 +364,11 @@ class SetupController extends Controller
             $batch = MigrationImportBatch::query()->where('type', 'INSTALLER_ITEMS')->latest('id')->firstOrFail();
             $admin = User::query()->whereHas('roles', fn ($query) => $query->where('roles.code', 'admin'))->latest('id')->firstOrFail();
             $count = $imports->commit($batch, $admin);
+
             return $this->render($request, 'นำเข้าสินค้าเรียบร้อยแล้ว '.$count.' รายการ');
         } catch (Throwable $exception) {
             report($exception);
+
             return $this->render($request, 'ยังไม่สามารถยืนยันไฟล์สินค้าได้ กรุณาตรวจสอบรายการผิดพลาด');
         }
     }
@@ -374,9 +382,11 @@ class SetupController extends Controller
             $data = Validator::make($request->all(), ['file' => ['required', 'file', 'mimes:csv,txt', 'max:10240']])->validate();
             $admin = User::query()->whereHas('roles', fn ($query) => $query->where('roles.code', 'admin'))->latest('id')->firstOrFail();
             $batch = $imports->stage($request->file('file'), $admin);
+
             return $this->render($request, 'ตรวจสอบไฟล์พนักงานแล้ว: ผ่าน '.$batch->valid_rows.' รายการ ผิดพลาด '.$batch->error_rows.' รายการ');
         } catch (Throwable $exception) {
             report($exception);
+
             return $this->render($request, 'ไม่สามารถตรวจสอบไฟล์พนักงานได้ กรุณาตรวจสอบหัวตารางและลองใหม่');
         }
     }
@@ -390,9 +400,11 @@ class SetupController extends Controller
             $batch = MigrationImportBatch::query()->where('type', 'INSTALLER_EMPLOYEES')->latest('id')->firstOrFail();
             $admin = User::query()->whereHas('roles', fn ($query) => $query->where('roles.code', 'admin'))->latest('id')->firstOrFail();
             $count = $imports->commit($batch, $admin);
+
             return $this->render($request, 'นำเข้าพนักงานเรียบร้อยแล้ว '.$count.' รายการ');
         } catch (Throwable $exception) {
             report($exception);
+
             return $this->render($request, 'ยังไม่สามารถยืนยันไฟล์พนักงานได้ กรุณาตรวจสอบรายการผิดพลาด');
         }
     }
@@ -406,9 +418,11 @@ class SetupController extends Controller
             $data = Validator::make($request->all(), ['file' => ['required', 'file', 'mimes:csv,txt', 'max:10240']])->validate();
             $admin = User::query()->whereHas('roles', fn ($query) => $query->where('roles.code', 'admin'))->latest('id')->firstOrFail();
             $batch = $imports->stage($request->file('file'), $admin);
+
             return $this->render($request, 'ตรวจสอบไฟล์ Opening AR/AP แล้ว: ผ่าน '.$batch->valid_rows.' รายการ ผิดพลาด '.$batch->error_rows.' รายการ');
         } catch (Throwable $exception) {
             report($exception);
+
             return $this->render($request, 'ไม่สามารถตรวจสอบไฟล์ Opening AR/AP ได้ กรุณาตรวจสอบ Master Data และหัวตาราง');
         }
     }
@@ -422,9 +436,11 @@ class SetupController extends Controller
             $batch = MigrationImportBatch::query()->where('type', 'INSTALLER_OPEN_ITEMS')->latest('id')->firstOrFail();
             $admin = User::query()->whereHas('roles', fn ($query) => $query->where('roles.code', 'admin'))->latest('id')->firstOrFail();
             $count = $imports->commit($batch, $admin, $posting, $openItems);
+
             return $this->render($request, 'นำเข้า Opening AR/AP และสร้าง Open Item เรียบร้อยแล้ว '.$count.' รายการ');
         } catch (Throwable $exception) {
             report($exception);
+
             return $this->render($request, 'ยังไม่สามารถยืนยัน Opening AR/AP ได้ กรุณาตรวจสอบงวดบัญชี สมุดบัญชี และ Account Mapping');
         }
     }

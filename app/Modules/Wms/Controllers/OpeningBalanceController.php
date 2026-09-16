@@ -3,26 +3,31 @@
 namespace App\Modules\Wms\Controllers;
 
 use App\Http\Controllers\Controller;
+use App\Modules\Platform\Models\MigrationImportBatch;
+use App\Modules\Platform\Services\AuditLogger;
+use App\Modules\Platform\Services\SpreadsheetService;
 use App\Modules\Settings\Services\GlobalSettings;
 use App\Modules\Wms\Models\Item;
 use App\Modules\Wms\Models\OpeningBalanceBatch;
 use App\Modules\Wms\Requests\SaveOpeningBalanceRequest;
 use App\Modules\Wms\Requests\StageOpeningBalanceImportRequest;
-use App\Modules\Wms\Services\OpeningBalanceService;
 use App\Modules\Wms\Services\OpeningBalanceImportService;
-use App\Modules\Wms\Support\WmsDecimal;
+use App\Modules\Wms\Services\OpeningBalanceService;
 use App\Modules\Wms\Support\OpeningBalanceTemplate;
-use App\Modules\Platform\Models\MigrationImportBatch;
-use App\Modules\Platform\Services\SpreadsheetService;
+use App\Modules\Wms\Support\WmsDecimal;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\View\View;
-use Yajra\DataTables\Facades\DataTables;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
+use Yajra\DataTables\Facades\DataTables;
 
 final class OpeningBalanceController extends Controller
 {
-    public function index(): View { return view('Wms::opening-balances.index'); }
+    public function index(): View
+    {
+        return view('Wms::opening-balances.index');
+    }
 
     public function template(SpreadsheetService $spreadsheets): BinaryFileResponse
     {
@@ -32,12 +37,14 @@ final class OpeningBalanceController extends Controller
     public function importStage(StageOpeningBalanceImportRequest $request, OpeningBalanceImportService $imports): JsonResponse
     {
         $batch = $imports->stage($request->file('file'), $request->user(), $request->validated());
+
         return response()->json(['status' => true, 'msg' => 'อัปโหลดและตรวจสอบข้อมูลแล้ว', 'redirect' => route('wms.opening-balances.import.show', $batch)]);
     }
 
     public function importShow(Request $request, MigrationImportBatch $batch): View
     {
         abort_unless($batch->type === OpeningBalanceTemplate::TYPE && (int) $batch->created_by === (int) $request->user()->id, 404);
+
         return view('Wms::opening-balances.import-show', compact('batch'));
     }
 
@@ -63,6 +70,7 @@ final class OpeningBalanceController extends Controller
     public function importCommit(Request $request, MigrationImportBatch $batch, OpeningBalanceImportService $imports, OpeningBalanceService $openingBalances): JsonResponse
     {
         $created = $imports->commit($batch, $request->user(), $openingBalances);
+
         return response()->json(['status' => true, 'msg' => 'อนุมัติและสร้างยอดยกมาเป็นร่างแล้ว '.count($created).' คลัง', 'redirect' => route('wms.opening-balances.index')]);
     }
 
@@ -72,9 +80,15 @@ final class OpeningBalanceController extends Controller
         $labels = ['DRAFT' => 'ร่าง', 'POSTED' => 'ลงบัญชีแล้ว', 'VOIDED' => 'ยกเลิก'];
 
         $query = OpeningBalanceBatch::query()->with('lines')->where('warehouse_id', $warehouse->id);
-        if ($request->filled('status') && in_array($request->string('status')->toString(), ['DRAFT', 'POSTED', 'VOIDED'], true)) $query->where('status', $request->string('status')->toString());
-        if ($request->filled('date_from')) $query->whereDate('cutover_date', '>=', $request->date('date_from'));
-        if ($request->filled('date_to')) $query->whereDate('cutover_date', '<=', $request->date('date_to'));
+        if ($request->filled('status') && in_array($request->string('status')->toString(), ['DRAFT', 'POSTED', 'VOIDED'], true)) {
+            $query->where('status', $request->string('status')->toString());
+        }
+        if ($request->filled('date_from')) {
+            $query->whereDate('cutover_date', '>=', $request->date('date_from'));
+        }
+        if ($request->filled('date_to')) {
+            $query->whereDate('cutover_date', '<=', $request->date('date_to'));
+        }
 
         return DataTables::eloquent($query->latest('id'))
             ->addColumn('line_count', fn ($row) => $row->lines->count())
@@ -87,6 +101,9 @@ final class OpeningBalanceController extends Controller
             ->editColumn('total_value', fn ($row) => WmsDecimal::format($row->total_value))
             ->addColumn('status_label', fn ($row) => $labels[$row->status] ?? $row->status)
             ->addColumn('show_url', fn ($row) => route('wms.opening-balances.show', $row))
+            ->addColumn('delete_url', fn ($row) => $row->status === 'DRAFT' && $request->user()->hasPermission('wms.opening-balances.delete')
+                ? route('wms.opening-balances.destroy', $row)
+                : null)
             ->toJson();
     }
 
@@ -121,6 +138,7 @@ final class OpeningBalanceController extends Controller
     public function show(Request $request, OpeningBalanceBatch $batch): View
     {
         abort_unless($this->accessibleWarehouses($request)->contains('id', (int) $batch->warehouse_id), 404);
+
         return view('Wms::opening-balances.show', ['batch' => $batch->load('lines.item', 'lines.uom')]);
     }
 
@@ -128,7 +146,28 @@ final class OpeningBalanceController extends Controller
     {
         abort_unless($this->accessibleWarehouses($request)->contains('id', (int) $batch->warehouse_id), 404);
         $service->post($batch, $request->user());
+
         return response()->json(['status' => true, 'msg' => 'ลงบัญชี Opening Balance แล้ว', 'redirect' => route('wms.opening-balances.show', $batch)]);
+    }
+
+    public function destroy(Request $request, OpeningBalanceBatch $batch, AuditLogger $audit): JsonResponse
+    {
+        abort_unless($this->accessibleWarehouses($request)->contains('id', (int) $batch->warehouse_id), 404);
+
+        DB::transaction(function () use ($batch, $request, $audit): void {
+            $locked = OpeningBalanceBatch::query()->with('lines')->lockForUpdate()->findOrFail($batch->id);
+            abort_unless($locked->status === 'DRAFT', 422, 'ลบได้เฉพาะยอดยกมาที่ยังเป็นร่าง');
+
+            $before = $locked->toArray();
+            $locked->delete();
+            $audit->record('wms.opening_balance.deleted', $locked, $before, [], $request->user(), $request);
+        }, 3);
+
+        return response()->json([
+            'status' => true,
+            'msg' => 'ลบร่างยอดยกมาสินค้าแล้ว',
+            'redirect' => route('wms.opening-balances.index'),
+        ]);
     }
 
     private function accessibleWarehouses(Request $request)

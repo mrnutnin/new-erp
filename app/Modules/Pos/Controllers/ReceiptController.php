@@ -16,11 +16,14 @@ use App\Modules\Finance\Services\OpenItemService;
 use App\Modules\Finance\Services\SettlementPostingService;
 use App\Modules\Finance\Services\SettlementReversalService;
 use App\Modules\Platform\Services\AuditLogger;
+use App\Modules\Platform\Services\DocumentPdfRenderer;
 use App\Modules\Pos\Requests\SavePosReceiptRequest;
 use App\Modules\Settings\Services\GlobalSettings;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
@@ -58,6 +61,8 @@ final class ReceiptController extends Controller
             ->addColumn('bank_label', fn (Settlement $receipt) => ($receipt->bankAccount?->code ?: '—').' · '.($receipt->bankAccount?->name ?: '—'))
             ->addColumn('status_label', fn (Settlement $receipt) => ['DRAFT' => 'ร่าง', 'APPROVED' => 'อนุมัติแล้ว', 'POSTED' => 'ลงบัญชีแล้ว', 'VOID' => 'ยกเลิก', 'REVERSED' => 'ยกเลิกแล้ว'][$receipt->status] ?? $receipt->status)
             ->addColumn('show_url', fn (Settlement $receipt) => route('pos.receipts.show', $receipt))
+            ->addColumn('pdf_url', fn (Settlement $receipt) => $request->user()->hasPermission('pos.receipts.print') ? route('pos.receipts.pdf', $receipt) : null)
+            ->addColumn('delete_url', fn (Settlement $receipt) => $receipt->status === 'DRAFT' && $request->user()->hasPermission('pos.receipts.delete') ? route('pos.receipts.destroy', $receipt) : null)
             ->toJson();
     }
 
@@ -109,6 +114,26 @@ final class ReceiptController extends Controller
         return view('Pos::receipts.show', ['receipt' => $receipt, 'history' => $history, 'dateFormat' => (string) $settings->value('date_format'), 'postReadiness' => $posting->postReadiness($receipt)]);
     }
 
+    public function pdf(Request $request, Settlement $receipt, DocumentPdfRenderer $renderer, GlobalSettings $settings)
+    {
+        $receipt = $this->receipt($request, $receipt)->load(['party', 'bankAccount', 'journalEntry', 'createdBy', 'tenders.bankAccount', 'allocationIntents.openItem']);
+        $logoPath = $settings->value('logo_path');
+        $logo = $logoPath && Storage::disk('public')->exists($logoPath) ? Storage::disk('public')->path($logoPath) : null;
+        $bytes = $renderer->renderView('Pos::pdf.receipt', [
+            'receipt' => $receipt,
+            'logo' => $logo,
+            'companyName' => $settings->value('company_name') ?: config('app.name'),
+            'companyAddress' => $settings->value('company_address'),
+            'companyTaxId' => $settings->value('tax_id'),
+            'dateFormat' => (string) ($settings->value('date_format') ?: 'd/m/Y'),
+        ]);
+
+        return response($bytes, 200, [
+            'Content-Type' => 'application/pdf',
+            'Content-Disposition' => 'inline; filename="'.rawurlencode($receipt->document_number).'.pdf"',
+        ]);
+    }
+
     public function approve(ChangeSettlementStatusRequest $request, Settlement $receipt, AuditLogger $audit): JsonResponse
     {
         return $this->finance()->approve($request, $this->receipt($request, $receipt), $audit);
@@ -122,6 +147,20 @@ final class ReceiptController extends Controller
     public function reverse(ReverseSettlementRequest $request, Settlement $receipt, SettlementReversalService $reversal, AuditLogger $audit): JsonResponse
     {
         return $this->finance()->reverse($request, $this->receipt($request, $receipt), $reversal, $audit);
+    }
+
+    public function destroy(Request $request, Settlement $receipt, AuditLogger $audit): JsonResponse
+    {
+        $this->receipt($request, $receipt);
+        DB::transaction(function () use ($request, $receipt, $audit): void {
+            $document = Settlement::query()->lockForUpdate()->findOrFail($receipt->id);
+            abort_unless($document->status === 'DRAFT', 422, 'ลบได้เฉพาะเอกสารรับชำระสถานะร่าง');
+            $before = $document->toArray();
+            $document->delete();
+            $audit->record('pos.receipt.deleted', $document, $before, [], $request->user(), $request);
+        });
+
+        return response()->json(['status' => true, 'msg' => 'ลบร่างเอกสารรับชำระแล้ว', 'redirect' => route('pos.receipts.index')]);
     }
 
     private function receipt(Request $request, Settlement $receipt): Settlement

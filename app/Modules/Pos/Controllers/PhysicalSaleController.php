@@ -4,6 +4,7 @@ namespace App\Modules\Pos\Controllers;
 
 use App\Http\Controllers\Controller;
 use App\Models\AuditLog;
+use App\Models\Branch;
 use App\Models\PartyRole;
 use App\Models\Warehouse;
 use App\Modules\Accounting\Models\TaxCode;
@@ -21,9 +22,11 @@ use App\Modules\Pos\Models\SalesReturn;
 use App\Modules\Pos\Requests\CancelFullPhysicalSaleRequest;
 use App\Modules\Pos\Requests\PostPhysicalSaleRequest;
 use App\Modules\Pos\Requests\SavePhysicalSaleRequest;
+use App\Modules\Pos\Requests\UpdatePhysicalSaleNoteRequest;
 use App\Modules\Pos\Services\PhysicalSaleCancellationService;
 use App\Modules\Pos\Services\PhysicalSalePostingService;
 use App\Modules\Pos\Support\PhysicalSaleDueDate;
+use App\Modules\Pos\Support\PhysicalSalePdfSummary;
 use App\Modules\Pos\Support\PhysicalSaleWithholdingSnapshot;
 use App\Modules\Pos\Support\SalesDocumentCalculator;
 use App\Modules\Pos\Support\SalesDocumentTrail;
@@ -61,6 +64,7 @@ final class PhysicalSaleController extends Controller
         $canVoid = $request->user()->hasPermission('pos.physical-sales.create');
         $canReceiveReceipt = $request->user()->hasPermission('pos.receipts.create');
         $canCancelFull = $request->user()->hasPermission('pos.physical-sales.cancel-full');
+        $canDelete = $request->user()->hasPermission('pos.physical-sales.delete');
         $format = (string) ($settings->value('date_format') ?: 'd/m/Y');
         $asOf = today()->format('Y-m-d');
         $allocations = DB::table('finance_allocations')->selectRaw('debit_open_item_id, SUM(amount) AS allocated_amount')
@@ -102,6 +106,7 @@ final class PhysicalSaleController extends Controller
             })
             ->addColumn('show_url', fn (PhysicalSale $sale) => route('pos.physical-sales.show', $sale))
             ->addColumn('pdf_url', fn (PhysicalSale $sale) => $canPrint ? route('pos.physical-sales.pdf', $sale) : null)
+            ->addColumn('delete_url', fn (PhysicalSale $sale) => $canDelete && $sale->status === 'DRAFT' ? route('pos.physical-sales.destroy', $sale) : null)
             ->addColumn('post_detail_url', fn (PhysicalSale $sale) => $canPost && $sale->status === 'DRAFT' ? route('pos.physical-sales.show', $sale) : null)
             ->addColumn('void_detail_url', fn (PhysicalSale $sale) => $canVoid && $sale->status === 'DRAFT' ? route('pos.physical-sales.show', $sale) : null)
             ->addColumn('receive_receipt_url', fn (PhysicalSale $sale) => $canReceiveReceipt && $sale->document_type === 'IV' && $sale->status === 'POSTED' && in_array($this->paymentStatus($sale), ['UNPAID', 'PARTIAL'], true) ? route('pos.physical-sales.receive-payment.create', $sale) : null)
@@ -251,7 +256,7 @@ final class PhysicalSaleController extends Controller
     public function show(Request $request, PhysicalSale $physicalSale, GlobalSettings $settings, OpenItemService $openItems, PhysicalSalePostingService $posting): View
     {
         $this->ensureCurrentBranch($request, $physicalSale);
-        $sale = $physicalSale->load(['warehouse', 'party', 'lines.item', 'lines.saleUom', 'lines.stockUom', 'tenders.bankAccount', 'advanceDepositApplications.advanceDeposit']);
+        $sale = $physicalSale->load(['branch', 'warehouse', 'party', 'lines.item', 'lines.saleUom', 'lines.stockUom', 'tenders.bankAccount', 'advanceDepositApplications.advanceDeposit']);
         $source = $sale->source_type === 'SALES_ORDER'
             ? SalesOrder::query()->with(['sourceIntake.preparedBy', 'quotation.sourceIntake.preparedBy', 'quotation.rfq.sourceIntake.preparedBy', 'rfq.sourceIntake.preparedBy', 'physicalSales'])->whereKey($sale->source_id)->where('warehouse_id', $sale->warehouse_id)->first()
             : null;
@@ -309,6 +314,20 @@ final class PhysicalSaleController extends Controller
         return response()->json(['status' => true, 'msg' => "ยกเลิก {$physicalSale->document_number} แล้ว"]);
     }
 
+    public function destroy(Request $request, PhysicalSale $physicalSale, AuditLogger $audit): JsonResponse
+    {
+        $this->ensureCurrentBranch($request, $physicalSale);
+        DB::transaction(function () use ($request, $physicalSale, $audit): void {
+            $sale = PhysicalSale::query()->lockForUpdate()->findOrFail($physicalSale->id);
+            abort_unless($sale->status === 'DRAFT', 422, 'ลบได้เฉพาะ HS/IV สถานะร่าง');
+            $before = $sale->toArray();
+            $sale->delete();
+            $audit->record('pos.physical-sale.deleted', $sale, $before, [], $request->user(), $request);
+        });
+
+        return response()->json(['status' => true, 'msg' => 'ลบร่าง HS/IV แล้ว', 'redirect' => route('pos.physical-sales.index')]);
+    }
+
     public function cancelFull(CancelFullPhysicalSaleRequest $request, PhysicalSale $physicalSale, PhysicalSaleCancellationService $cancellation): JsonResponse
     {
         $this->ensureCurrentBranch($request, $physicalSale);
@@ -326,7 +345,28 @@ final class PhysicalSaleController extends Controller
         return response()->json(['status' => true, 'msg' => "ยกเลิก {$sale->document_number} พร้อมคืนเงินและคืนสินค้าแล้ว", 'redirect' => route('pos.physical-sales.show', $sale)]);
     }
 
-    public function post(PostPhysicalSaleRequest $request, PhysicalSale $physicalSale, PhysicalSalePostingService $posting): JsonResponse
+    public function updateNote(UpdatePhysicalSaleNoteRequest $request, PhysicalSale $physicalSale, AuditLogger $audit): JsonResponse
+    {
+        $this->ensureCurrentBranch($request, $physicalSale);
+
+        $before = ['description' => $physicalSale->description];
+        $physicalSale->update([
+            'description' => $request->validated('description'),
+            'updated_by' => $request->user()->id,
+        ]);
+        $audit->record(
+            'pos.physical-sale.note-updated',
+            $physicalSale,
+            $before,
+            ['description' => $physicalSale->fresh()->description],
+            $request->user(),
+            $request,
+        );
+
+        return response()->json(['status' => true, 'msg' => "บันทึกหมายเหตุ {$physicalSale->document_number} แล้ว"]);
+    }
+
+    public function post(PostPhysicalSaleRequest $request, PhysicalSale $physicalSale, PhysicalSalePostingService $posting, GlobalSettings $settings): JsonResponse
     {
         $this->ensureCurrentBranch($request, $physicalSale);
         if ($physicalSale->status === 'POSTED') {
@@ -334,8 +374,9 @@ final class PhysicalSaleController extends Controller
         }
 
         $warehouse = $physicalSale->warehouse;
-        $sale = DB::transaction(function () use ($request, $physicalSale, $posting, $warehouse) {
+        $sale = DB::transaction(function () use ($request, $physicalSale, $posting, $warehouse, $settings) {
             $draft = PhysicalSale::query()->lockForUpdate()->findOrFail($physicalSale->id);
+            $this->snapshotTaxInvoice($draft, $request->validated('tax_invoice_type'), $settings);
             $tax = $request->filled('withholding_tax_code_id')
                 ? TaxCode::query()->whereKey($request->integer('withholding_tax_code_id'))->where('kind', 'WHT')->where('is_active', true)->lockForUpdate()->first()
                 : null;
@@ -351,22 +392,23 @@ final class PhysicalSaleController extends Controller
     public function pdf(Request $request, PhysicalSale $physicalSale, DocumentPdfRenderer $renderer, GlobalSettings $settings)
     {
         $this->ensureCurrentBranch($request, $physicalSale);
-        $sale = $physicalSale->load(['warehouse', 'lines.item', 'lines.saleUom', 'party']);
+        $sale = $physicalSale->load(['branch', 'warehouse', 'lines.item', 'lines.saleUom', 'party', 'tenders.bankAccount', 'advanceDepositApplications.advanceDeposit']);
         $source = $sale->source_type === 'SALES_ORDER'
             ? SalesOrder::query()->with(['lines.item', 'lines.uom', 'sourceIntake.preparedBy', 'quotation.sourceIntake.preparedBy', 'quotation.rfq.sourceIntake.preparedBy', 'rfq.sourceIntake.preparedBy'])->whereKey($sale->source_id)->where('warehouse_id', $sale->warehouse_id)->first()
             : null;
-        $history = AuditLog::query()->with('user:id,name')->where('subject_type', $sale->getMorphClass())->where('subject_id', $sale->id)->latest('created_at')->latest('id')->get();
         $logoPath = $settings->value('logo_path');
         $logo = $logoPath && Storage::disk('public')->exists($logoPath) ? Storage::disk('public')->path($logoPath) : null;
         $bytes = $renderer->renderView('Pos::pdf.physical-sale', [
+            'paymentSummary' => PhysicalSalePdfSummary::build($sale),
             'sale' => $sale,
             'source' => $source,
             'sourceIntake' => $source?->sourceIntake ?? $source?->quotation?->sourceIntake ?? $source?->quotation?->rfq?->sourceIntake ?? $source?->rfq?->sourceIntake,
             'sourceLabel' => $source?->document_number,
-            'history' => $history,
             'logo' => $logo,
-            'companyName' => $settings->value('company_name') ?: 'บริษัท',
-            'companyAddress' => $settings->value('company_address'),
+            'companyName' => $sale->issuer_company_name ?: ($settings->value('company_name') ?: 'บริษัท'),
+            'companyAddress' => $sale->issuer_company_address ?: $sale->branch?->tax_address,
+            'companyTaxId' => $sale->issuer_tax_id ?: $settings->value('tax_id'),
+            'companyTaxBranchCode' => $sale->issuer_tax_branch_code ?: $sale->branch?->tax_branch_code,
             'dateFormat' => (string) ($settings->value('date_format') ?: 'd/m/Y'),
             'decimalPlaces' => (int) ($settings->value('tax_decimal_places') ?? 2),
         ]);
@@ -375,6 +417,53 @@ final class PhysicalSaleController extends Controller
             'Content-Type' => 'application/pdf',
             'Content-Disposition' => 'inline; filename="'.rawurlencode($sale->document_number).'.pdf"',
         ]);
+    }
+
+    private function snapshotTaxInvoice(PhysicalSale $sale, ?string $taxInvoiceType, GlobalSettings $settings): void
+    {
+        if ($sale->document_type !== 'HS') {
+            return;
+        }
+
+        $branch = Branch::query()->lockForUpdate()->findOrFail($sale->branch_id);
+        $issuer = [
+            'issuer_company_name' => trim((string) $settings->value('company_name')),
+            'issuer_company_address' => trim((string) $branch->tax_address),
+            'issuer_tax_id' => preg_replace('/\D+/', '', (string) $settings->value('tax_id')),
+            'issuer_tax_branch_code' => preg_replace('/\D+/', '', (string) $branch->tax_branch_code),
+        ];
+        $missingIssuer = collect([
+            'issuer_company_name' => 'ชื่อบริษัท',
+            'issuer_company_address' => 'ที่อยู่บริษัท',
+            'issuer_tax_id' => 'เลขประจำตัวผู้เสียภาษีบริษัท',
+            'issuer_tax_branch_code' => 'รหัสสาขาผู้ออกใบกำกับภาษี',
+        ])->filter(fn (string $label, string $field): bool => $issuer[$field] === '' || ($field === 'issuer_tax_id' && strlen($issuer[$field]) !== 13) || ($field === 'issuer_tax_branch_code' && strlen($issuer[$field]) !== 5));
+        if ($missingIssuer->isNotEmpty()) {
+            throw ValidationException::withMessages(['tax_invoice_type' => 'กรุณาตั้งค่า '.implode(', ', $missingIssuer->values()->all()).' ให้ครบก่อนออกใบเสร็จรับเงิน/ใบกำกับภาษี']);
+        }
+
+        if ($taxInvoiceType === 'FULL') {
+            $missingBuyer = collect([
+                'party_name' => 'ชื่อลูกค้า',
+                'party_address' => 'ที่อยู่ลูกค้า',
+                'party_tax_id' => 'เลขประจำตัวผู้เสียภาษีลูกค้า',
+                'party_branch_code' => 'รหัสสาขาลูกค้า',
+            ])->filter(function (string $label, string $field) use ($sale): bool {
+                $value = trim((string) $sale->getAttribute($field));
+
+                return $value === ''
+                    || ($field === 'party_tax_id' && strlen(preg_replace('/\D+/', '', $value)) !== 13)
+                    || ($field === 'party_branch_code' && strlen(preg_replace('/\D+/', '', $value)) !== 5);
+            });
+            if ($missingBuyer->isNotEmpty()) {
+                throw ValidationException::withMessages(['tax_invoice_type' => 'ใบกำกับภาษีเต็มรูปต้องมี '.implode(', ', $missingBuyer->values()->all()).' ครบถ้วน กรุณาแก้ไขข้อมูลลูกค้าแล้วสร้างเอกสารร่างใหม่']);
+            }
+        }
+
+        $sale->forceFill([
+            'tax_invoice_type' => $taxInvoiceType,
+            ...$issuer,
+        ])->save();
     }
 
     private function source(string $type, int $id, int $branchId): ?object

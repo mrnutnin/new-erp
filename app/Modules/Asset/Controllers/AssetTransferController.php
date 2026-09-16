@@ -13,6 +13,7 @@ use App\Modules\Asset\Requests\StoreAssetTransferRequest;
 use App\Modules\Asset\Services\AssetTransferService;
 use App\Modules\Finance\Models\DocumentSequence;
 use App\Modules\Finance\Services\DocumentSequenceService;
+use App\Modules\Platform\Services\AuditLogger;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -42,7 +43,8 @@ final class AssetTransferController extends Controller
             ->addColumn('document_date_label', fn (AssetTransfer $transfer) => $transfer->document_date?->format('d/m/Y') ?? '-')
             ->addColumn('source_branch_label', fn (AssetTransfer $transfer) => $transfer->sourceBranch?->code.' · '.$transfer->sourceBranch?->name)
             ->addColumn('destination_branch_label', fn (AssetTransfer $transfer) => $transfer->destinationBranch?->code.' · '.$transfer->destinationBranch?->name)
-            ->addColumn('show_url', fn (AssetTransfer $transfer) => route('asset.transfers.show', $transfer))->toJson();
+            ->addColumn('show_url', fn (AssetTransfer $transfer) => route('asset.transfers.show', $transfer))
+            ->addColumn('delete_url', fn (AssetTransfer $transfer) => $transfer->status === 'DRAFT' && (int) $transfer->source_branch_id === $branchId && $request->user()->hasPermission('asset.transfers.create') ? route('asset.transfers.destroy', $transfer) : null)->toJson();
     }
 
     public function create(): View
@@ -79,6 +81,22 @@ final class AssetTransferController extends Controller
     public function submit(Request $request, AssetTransfer $transfer, AssetTransferService $service): JsonResponse
     {
         return $this->changed($service->submit($this->sourceScoped($request, $transfer), $request->user()), 'ส่งใบโอนเพื่ออนุมัติแล้ว');
+    }
+
+    public function destroy(Request $request, AssetTransfer $transfer, AuditLogger $audit): JsonResponse
+    {
+        $transfer = $this->sourceScoped($request, $transfer);
+        DB::transaction(function () use ($request, $transfer, $audit): void {
+            $transfer = AssetTransfer::query()->lockForUpdate()->findOrFail($transfer->id);
+            if ($transfer->status !== 'DRAFT') {
+                throw ValidationException::withMessages(['status' => 'ลบได้เฉพาะใบโอนสินทรัพย์สถานะร่าง']);
+            }
+            $before = $transfer->toArray();
+            $transfer->delete();
+            $audit->record('asset.transfer.deleted', $transfer, $before, ['deleted_at' => $transfer->deleted_at], $request->user(), $request);
+        });
+
+        return response()->json(['status' => true, 'msg' => 'ลบใบโอนสินทรัพย์ร่างแล้ว', 'redirect' => route('asset.transfers.index')]);
     }
 
     public function approve(Request $request, AssetTransfer $transfer, AssetTransferService $service): JsonResponse

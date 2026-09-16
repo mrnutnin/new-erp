@@ -4,9 +4,12 @@ namespace App\Modules\Accounting\Controllers;
 
 use App\Http\Controllers\Controller;
 use App\Modules\Accounting\Models\BankStatement;
-use App\Modules\Finance\Models\BankAccount;
+use App\Modules\Accounting\Models\BankStatementLine;
 use App\Modules\Accounting\Models\JournalEntryLine;
+use App\Modules\Finance\Models\BankAccount;
+use App\Modules\Platform\Services\AuditLogger;
 use Carbon\Carbon;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -55,16 +58,28 @@ class BankReconciliationController extends Controller
         $lineNumber = 0;
         while (($row = fgetcsv($handle)) !== false) {
             $lineNumber++;
-            if (count(array_filter($row, fn ($value) => trim((string) $value) !== '')) === 0) continue;
+            if (count(array_filter($row, fn ($value) => trim((string) $value) !== '')) === 0) {
+                continue;
+            }
             $date = trim((string) ($row[0] ?? ''));
-            if ($lineNumber === 1 && ! preg_match('/\\d/', $date)) continue;
-            try { $transactionDate = Carbon::parse($date)->toDateString(); } catch (\Throwable) { continue; }
+            if ($lineNumber === 1 && ! preg_match('/\\d/', $date)) {
+                continue;
+            }
+            try {
+                $transactionDate = Carbon::parse($date)->toDateString();
+            } catch (\Throwable) {
+                continue;
+            }
             $amount = str_replace([',', ' '], '', trim((string) ($row[3] ?? $row[2] ?? '')));
-            if ($amount === '' || ! is_numeric($amount)) continue;
+            if ($amount === '' || ! is_numeric($amount)) {
+                continue;
+            }
             $rows[] = ['line_number' => count($rows) + 1, 'transaction_date' => $transactionDate, 'description' => trim((string) ($row[1] ?? '')) ?: null, 'reference' => trim((string) ($row[2] ?? '')) ?: null, 'amount' => (float) $amount, 'running_balance' => isset($row[4]) && is_numeric(str_replace(',', '', $row[4])) ? (float) str_replace(',', '', $row[4]) : null, 'status' => 'UNMATCHED'];
         }
         fclose($handle);
-        if ($rows === []) throw ValidationException::withMessages(['statement' => 'ไม่พบรายการที่อ่านได้จาก CSV (รูปแบบ: วันที่, รายละเอียด, Reference, จำนวนเงิน, ยอดคงเหลือ)']);
+        if ($rows === []) {
+            throw ValidationException::withMessages(['statement' => 'ไม่พบรายการที่อ่านได้จาก CSV (รูปแบบ: วันที่, รายละเอียด, Reference, จำนวนเงิน, ยอดคงเหลือ)']);
+        }
 
         DB::transaction(function () use ($data, $bank, $rows, $file, $request): void {
             $statement = BankStatement::query()->create(['bank_account_id' => $bank->id, 'statement_date' => $data['statement_date'], 'opening_balance' => $data['opening_balance'] ?? 0, 'closing_balance' => $data['closing_balance'] ?? 0, 'source_file_name' => $file->getClientOriginalName(), 'status' => 'DRAFT', 'created_by' => $request->user()->id]);
@@ -85,13 +100,44 @@ class BankReconciliationController extends Controller
             ->limit(500)->get();
         $candidatesByLine = $bankStatement->lines->mapWithKeys(function ($line) use ($candidatePool) {
             $amount = abs((float) $line->amount);
+
             return [$line->id => $candidatePool->filter(function ($candidate) use ($line, $amount) {
                 $candidateAmount = abs((float) $candidate->debit ?: (float) $candidate->credit);
+
                 return abs($candidateAmount - $amount) <= 0.005 && abs($candidate->entry->entry_date->diffInDays($line->transaction_date)) <= 7;
             })->values()];
         });
 
         return view('Accounting::bank-reconciliation.show', compact('bankStatement', 'candidatesByLine'));
+    }
+
+    public function destroy(Request $request, BankStatement $bankStatement, AuditLogger $audit): JsonResponse
+    {
+        $warehouseId = $request->attributes->get('selectedWarehouse')?->id;
+        $bankStatement->load('bankAccount');
+        abort_unless(! $warehouseId || $bankStatement->bankAccount->warehouse_id === $warehouseId, 404);
+
+        DB::transaction(function () use ($request, $bankStatement, $warehouseId, $audit): void {
+            $statement = BankStatement::query()->with('bankAccount')->lockForUpdate()->findOrFail($bankStatement->id);
+            abort_unless(! $warehouseId || $statement->bankAccount->warehouse_id === $warehouseId, 404);
+            abort_unless($statement->status === 'DRAFT', 422, 'ลบได้เฉพาะ Bank Statement สถานะร่าง');
+
+            $audit->record(
+                'accounting.bank_statement.deleted',
+                $statement,
+                $statement->only(['bank_account_id', 'statement_date', 'source_file_name', 'status']),
+                [],
+                $request->user(),
+                $request,
+            );
+            $statement->delete();
+        });
+
+        return response()->json([
+            'status' => true,
+            'msg' => 'ลบร่าง Bank Statement แล้ว',
+            'redirect' => route('accounting.bank-reconciliation.index'),
+        ]);
     }
 
     public function reconcile(Request $request, BankStatement $bankStatement): RedirectResponse
@@ -116,6 +162,7 @@ class BankReconciliationController extends Controller
         }
 
         $bankStatement->update(['status' => 'RECONCILED']);
+
         return back()->with('success', 'กระทบยอดธนาคารสำเร็จ: Statement ตรงกับ GL แล้ว');
     }
 
@@ -128,6 +175,7 @@ class BankReconciliationController extends Controller
         $journalLine = JournalEntryLine::query()->with('entry')->whereKey($data['journal_entry_line_id'])->where('account_id', $bankStatementLine->statement->bankAccount->account_id)->whereHas('entry', fn ($q) => $q->where('status', 'POSTED'))->firstOrFail();
         $bankStatementLine->update(['matched_journal_entry_line_id' => $journalLine->id, 'status' => 'MATCHED']);
         $statement = $bankStatementLine->statement()->first();
+
         return back()->with('success', 'จับคู่รายการกับ Journal แล้ว');
     }
 }

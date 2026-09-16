@@ -10,7 +10,7 @@
             <h1 class="h3 mb-2">รับโอนสินค้าเข้า</h1>
             <p class="text-secondary mb-0">{{ $transfer->document_number }} · {{ $transfer->sourceWarehouse?->name ?: '-' }} → {{ $transfer->destinationWarehouse?->name ?: '-' }}</p>
         </div>
-        <a class="btn btn-app-soft" href="{{ route('wms.transfers.incoming.index') }}"><i class="bx bx-arrow-back me-1" aria-hidden="true"></i>กลับรายการ</a>
+        <a class="btn btn-app-soft" href="{{ route('wms.transfers.incoming.index') }}"><i class="bx bx-arrow-back me-1" aria-hidden="true"></i>กลับหน้ารายการ</a>
     </div>
 
     <div class="card border-0 shadow-sm mb-4">
@@ -57,7 +57,7 @@
                     <div class="col-md-4"><label class="form-label">วันที่รับ/ปฏิเสธ</label><input class="form-control" type="date" name="business_date" value="{{ now()->toDateString() }}" max="{{ now()->toDateString() }}" required></div>
                     <div class="col-md-8"><label class="form-label">เหตุผล (จำเป็นเมื่อปฏิเสธ)</label><textarea class="form-control" name="reason" rows="2" placeholder="ระบุเหตุผลเมื่อปฏิเสธ หรือหมายเหตุการรับเข้า"></textarea></div>
                 </div>
-                <div class="d-flex flex-wrap gap-2 mt-4"><button class="btn btn-app-primary" type="submit" data-transfer-action="accept"><i class="bx bx-check me-1" aria-hidden="true"></i>รับเข้าเต็มจำนวน</button><button class="btn btn-outline-danger" type="submit" data-transfer-action="reject"><i class="bx bx-x me-1" aria-hidden="true"></i>ปฏิเสธทั้งรายการ</button></div>
+                <div class="d-flex flex-wrap gap-2 mt-4"><button class="btn btn-app-primary" type="submit" data-transfer-action="accept"><i class="bx bx-check me-1" aria-hidden="true"></i>รับเข้าเต็มจำนวน</button><button class="btn btn-app-danger" type="submit" data-transfer-action="reject"><i class="bx bx-x me-1" aria-hidden="true"></i>ปฏิเสธทั้งรายการ</button></div>
             </form>
         </div>
     </div>

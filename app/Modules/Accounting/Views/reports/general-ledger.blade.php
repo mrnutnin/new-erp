@@ -93,7 +93,7 @@
                     { data: null, orderable: false, searchable: false, render: function (value, type, row) { return type === 'display' ? text.display(row.subledger_type && row.subledger_id ? row.subledger_type + ' · ' + row.subledger_id : '') : ''; } },
                     { data: 'debit', name: 'journal_entry_lines.debit', className: 'text-end', render: text.display },
                     { data: 'credit', name: 'journal_entry_lines.credit', className: 'text-end', render: text.display },
-                    { data: null, orderable: false, searchable: false, className: 'text-end', render: function (value, type, row) { return type === 'display' ? '<a class="btn btn-sm btn-outline-dark" href="' + text.display(row.entry_url) + '"><i class="bx bx-show me-1" aria-hidden="true"></i>ดู</a>' : ''; } }
+                    { data: null, orderable: false, searchable: false, className: 'text-end', render: function (value, type, row) { return type === 'display' ? '<a class="btn btn-sm btn-outline-dark" href="' + text.display(row.entry_url) + '"><i class="bx bx-file-find me-1" aria-hidden="true"></i>ดู</a>' : ''; } }
                 ]
             }));
             function reload() { table.ajax.reload(); }

@@ -9,9 +9,12 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 class JournalEntry extends Model
 {
+    use SoftDeletes;
+
     protected $fillable = [
         'journal_book_id', 'fiscal_period_id', 'branch_id', 'warehouse_id', 'sequence_number',
         'entry_number', 'entry_date', 'document_date', 'source_type', 'source_event', 'source_id', 'source_reference',

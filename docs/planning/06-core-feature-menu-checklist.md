@@ -417,4 +417,6 @@ Min/Max เป็นนโยบายแจ้งเตือนและช่
 
 > Verification record (2026-09-04): เพิ่มฟอนต์ `Noto Sans Thai` จาก Google Fonts สำหรับ PDF profile A4 ใน `resources/fonts` และตรวจ render ภาษาไทยจริงแล้ว; `DocumentPdfRendererTest` ผ่าน 3 tests / 5 assertions.
 
+> Retired (2026-09-15): ถอด Document Template Builder ออกจาก Settings และ runtime แล้ว; Purchasing PDF ใช้ template มาตรฐานของ module ต่อไป ส่วน migration/table เดิมเก็บไว้เพื่อไม่ลบข้อมูลย้อนหลัง
+
 > Finance Petty Cash (2026-09-04): เพิ่ม Petty Cash subledger แบบแยกจาก Settlement ได้แก่ Fund/Voucher/Line ที่ warehouse-scoped, cash-account gate, expense snapshots, workflow service, atomic post/reverse, backend routes/RBAC, Yajra endpoint และ fund setup/deactivation guard. เพิ่ม Top-up จาก BANK ที่ active/postable ไป CASH ของ Fund พร้อม snapshot, sequence, audit, idempotency, Journal reverse, route/RBAC, Yajra DataTable + Excel และ AJAX UI; clearing/reconciliation ยังไม่เริ่ม.

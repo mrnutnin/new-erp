@@ -11,7 +11,7 @@
                 <p class="text-secondary mb-0">อนุมัติเอกสารก่อนจัดสรร AR/AP และลงบัญชี</p>
             </div>
             @if (auth()->user()->hasPermission('finance.settlements.create'))
-                <a class="btn btn-dark" href="{{ route('finance.settlements.create') }}"><i class="bx bx-plus me-1" aria-hidden="true"></i>สร้างเอกสาร</a>
+                <a class="btn btn-app-primary" href="{{ route('finance.settlements.create') }}"><i class="bx bx-plus me-1" aria-hidden="true"></i>สร้างเอกสาร</a>
             @endif
         </div>
 
@@ -27,7 +27,7 @@
                     <div class="col-12 col-md-3"><label class="form-label" for="settlement-filter-to">วันที่รับ/จ่าย ถึง</label><input class="form-control" id="settlement-filter-to" type="date"></div>
                     <div class="col-12 col-md-3"><label class="form-label" for="settlement-filter-min">ยอดสุทธิขั้นต่ำ</label><input class="form-control" id="settlement-filter-min" type="number" min="0" step="0.01" inputmode="decimal"></div>
                     <div class="col-12 col-md-3"><label class="form-label" for="settlement-filter-max">ยอดสุทธิสูงสุด</label><input class="form-control" id="settlement-filter-max" type="number" min="0" step="0.01" inputmode="decimal"></div>
-                    <div class="col-12 d-flex justify-content-end gap-2"><button class="btn btn-outline-secondary" id="settlement-filter-reset" type="button">ล้างตัวกรอง</button></div>
+                    <div class="col-12 d-flex justify-content-end gap-2"><button class="btn btn-app-soft" id="settlement-filter-reset" type="button">ล้างตัวกรอง</button></div>
                 </div>
             </div>
         </div>
@@ -124,22 +124,25 @@
                     className: 'text-end text-nowrap',
                     render: function (value, type, row) {
                         if (type !== 'display') return '';
-                        var actions = ['<a class="btn btn-sm btn-app-soft" href="' + text.display(row.show_url) + '" title="ดูรายละเอียด" aria-label="ดูรายละเอียด"><i class="bx bx-show" aria-hidden="true"></i></a>'];
+                        var actions = ['<a class="btn btn-sm btn-app-soft" href="' + text.display(row.show_url) + '" title="ดูรายละเอียด" aria-label="ดูรายละเอียด"><i class="bx bx-file-find" aria-hidden="true"></i></a>'];
                         var documentNumber = text.display(row.document_number);
                         if (row.approve_url) {
                             actions.push('<button class="btn btn-sm btn-app-soft js-settlement-approve" type="button" data-url="' + text.display(row.approve_url) + '" data-document="' + documentNumber + '" title="อนุมัติ" aria-label="อนุมัติ"><i class="bx bx-check" aria-hidden="true"></i></button>');
                         }
                         if (row.void_url) {
-                            actions.push('<button class="btn btn-sm btn-outline-danger js-settlement-void" type="button" data-url="' + text.display(row.void_url) + '" data-document="' + documentNumber + '" title="ยกเลิกเอกสาร" aria-label="ยกเลิกเอกสาร"><i class="bx bx-x" aria-hidden="true"></i></button>');
+                            actions.push('<button class="btn btn-sm btn-app-danger js-settlement-void" type="button" data-url="' + text.display(row.void_url) + '" data-document="' + documentNumber + '" title="ยกเลิกเอกสาร" aria-label="ยกเลิกเอกสาร"><i class="bx bx-x" aria-hidden="true"></i></button>');
                         }
                         if (row.post_url) {
                             actions.push('<button class="btn btn-sm btn-app-soft js-settlement-post" type="button" data-url="' + text.display(row.post_url) + '" data-document="' + documentNumber + '" title="ลงบัญชี" aria-label="ลงบัญชี"><i class="bx bx-send" aria-hidden="true"></i></button>');
                         }
                         if (row.reverse_url) {
-                            actions.push('<button class="btn btn-sm btn-outline-danger js-settlement-reverse" type="button" data-url="' + text.display(row.reverse_url) + '" data-document="' + documentNumber + '" title="กลับรายการ" aria-label="กลับรายการ"><i class="bx bx-revision" aria-hidden="true"></i></button>');
+                            actions.push('<button class="btn btn-sm btn-app-danger js-settlement-reverse" type="button" data-url="' + text.display(row.reverse_url) + '" data-document="' + documentNumber + '" title="กลับรายการ" aria-label="กลับรายการ"><i class="bx bx-revision" aria-hidden="true"></i></button>');
                         }
                         if (row.advance_url) {
                             actions.push('<button class="btn btn-sm btn-app-soft js-settlement-advance" type="button" data-url="' + text.display(row.advance_url) + '" data-document="' + documentNumber + '" data-status="' + text.display(row.status || '') + '" title="สร้างเงินล่วงหน้า/เงินมัดจำ" aria-label="สร้างเงินล่วงหน้า/เงินมัดจำ"><i class="bx bx-wallet" aria-hidden="true"></i></button>');
+                        }
+                        if (row.delete_url) {
+                            actions.push('<button class="btn btn-sm btn-app-danger js-delete-settlement" type="button" data-url="' + text.display(row.delete_url) + '" title="ลบร่าง" aria-label="ลบร่าง"><i class="bx bx-trash" aria-hidden="true"></i></button>');
                         }
                         return actions.join(' ');
                     }
@@ -173,6 +176,7 @@
                 $('#settlement-filter-from, #settlement-filter-to, #settlement-filter-min, #settlement-filter-max').val('');
                 dataTable.ajax.reload();
             });
+            window.erpAjaxDelete({button:'.js-delete-settlement',reload:'#settlements-table',confirm:'ยืนยันการลบร่างเอกสารรับ/จ่ายเงินนี้หรือไม่?',confirmButtonText:'ลบร่าง',cancelButtonText:'กลับ'});
 
             function submitSettlementState($button, reason) {
                 if ($button.data('submitting')) return;

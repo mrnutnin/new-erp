@@ -17,7 +17,7 @@
             @php($account = $selectedAccounts->get(old($field, $assetCategory->{$field})))
             <div class="col-12 col-md-6"><label class="form-label" for="{{ $field }}">{{ $label }}{{ in_array($field, ['accumulated_depreciation_account_id', 'depreciation_expense_account_id']) ? ' (เมื่อคิดค่าเสื่อม)' : '' }}</label><select class="form-select js-account" id="{{ $field }}" name="{{ $field }}" data-field="{{ $field }}" @if($field === 'asset_account_id') required @endif><option value="">ไม่กำหนด</option>@if($account)<option value="{{ $account->id }}" selected>{{ $account->code }} · {{ $account->name }}</option>@endif</select><div class="invalid-feedback" data-error-for="{{ $field }}"></div></div>
         @endforeach
-        </div><div class="d-flex justify-content-between mt-4"><a class="btn btn-outline-dark" href="{{ route('asset.categories.index') }}"><i class="bx bx-arrow-back me-1" aria-hidden="true"></i>กลับ</a><button class="btn btn-dark" type="submit" data-busy-text="กำลังบันทึก..."><i class="bx bx-save me-1" aria-hidden="true"></i>บันทึกหมวดสินทรัพย์</button></div>
+        </div><div class="d-flex justify-content-between mt-4"><a class="btn btn-app-soft" href="{{ route('asset.categories.index') }}"><i class="bx bx-arrow-back me-1" aria-hidden="true"></i>กลับ</a><button class="btn btn-app-primary" type="submit" data-busy-text="กำลังบันทึก..."><i class="bx bx-save me-1" aria-hidden="true"></i>บันทึกหมวดสินทรัพย์</button></div>
     </form></div></div></div>
 @endsection
 

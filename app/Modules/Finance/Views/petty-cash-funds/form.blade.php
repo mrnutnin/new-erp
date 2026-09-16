@@ -6,7 +6,7 @@
 <div class="container-fluid px-3 px-lg-4 py-4">
     <div class="d-flex justify-content-between align-items-end mb-4">
         <div><p class="eyebrow mb-2">FINANCE / MASTER DATA</p><h1 class="h3 mb-1">{{ $fund->exists ? 'แก้ไข' : 'เพิ่ม' }}วงเงินสดย่อย</h1></div>
-        <a class="btn btn-outline-secondary" href="{{ route('finance.petty-cash-funds.index') }}">กลับ</a>
+        <a class="btn btn-app-soft" href="{{ route('finance.petty-cash-funds.index') }}"><i class="bx bx-arrow-back me-1" aria-hidden="true"></i>กลับหน้ารายการ</a>
     </div>
     <div class="card border-0 shadow-sm"><div class="card-body p-3 p-lg-4">
         <form id="petty-cash-fund-form" method="POST" action="{{ $fund->exists ? route('finance.petty-cash-funds.update', $fund) : route('finance.petty-cash-funds.store') }}">
@@ -20,7 +20,7 @@
                 <div class="col-md-6"><label class="form-label">วงเงิน <span class="text-danger">*</span></label><input class="form-control text-end" type="number" name="fund_limit" min="0" step="0.01" value="{{ old('fund_limit',$fund->fund_limit) }}" required><div class="invalid-feedback" data-error-for="fund_limit"></div></div>
                 <div class="col-12"><input type="hidden" name="is_active" value="0"><div class="form-check"><input class="form-check-input" id="fund-active" type="checkbox" name="is_active" value="1" @checked(old('is_active',$fund->is_active))><label class="form-check-label" for="fund-active">เปิดใช้งานวงเงินสดย่อย</label></div></div>
             </div>
-            <div class="mt-4 d-flex gap-2"><button class="btn btn-dark" type="submit">บันทึก</button><a class="btn btn-outline-secondary" href="{{ route('finance.petty-cash-funds.index') }}">ยกเลิก</a></div>
+            <div class="mt-4 d-flex gap-2"><button class="btn btn-app-primary" type="submit">บันทึก</button><a class="btn btn-app-soft" href="{{ route('finance.petty-cash-funds.index') }}"><i class="bx bx-arrow-back me-1" aria-hidden="true"></i>กลับหน้ารายการ</a></div>
         </form>
     </div></div>
     @if($fund->exists)

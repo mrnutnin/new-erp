@@ -8,19 +8,19 @@
     --app-text: #111111;
     --app-muted: #6b6b6b;
     --app-radius: 1rem;
-    --app-accent-primary: #5664d2;
+    --app-accent-primary: #171717;
     --app-accent-success: #2f9e72;
     --app-accent-warning: #c98a24;
     --app-accent-danger: #c55463;
     --app-accent-info: #3a9aa6;
     --app-accent-neutral: #68727d;
-    --app-accent-soft-primary: rgba(86, 100, 210, .12);
+    --app-accent-soft-primary: rgba(17, 17, 17, .08);
     --app-accent-soft-success: rgba(47, 158, 114, .12);
     --app-accent-soft-warning: rgba(201, 138, 36, .14);
     --app-accent-soft-danger: rgba(197, 84, 99, .12);
     --app-accent-soft-info: rgba(58, 154, 166, .12);
-    --app-badge-primary-bg: #dbeafe;
-    --app-badge-primary-text: #1e4f91;
+    --app-badge-primary-bg: #e5e7eb;
+    --app-badge-primary-text: #343a40;
     --app-badge-success-bg: #d9f5e5;
     --app-badge-success-text: #216f50;
     --app-badge-warning-bg: #fff0bd;
@@ -384,6 +384,8 @@ body {
     font-weight: 700;
 }
 
+.program-code i { font-size: 1.5rem; }
+
 .workflow-map {
     display: flex;
     flex-direction: column;
@@ -530,10 +532,10 @@ body {
     min-height: 22rem;
     overflow-x: auto;
     padding: 1rem;
-    border: 1px solid rgba(86, 100, 210, .16);
+    border: 1px solid rgba(17, 17, 17, .12);
     border-radius: .8rem;
     background:
-        radial-gradient(circle at 12% 18%, rgba(86, 100, 210, .08), transparent 30%),
+        radial-gradient(circle at 12% 18%, rgba(17, 17, 17, .05), transparent 30%),
         radial-gradient(circle at 88% 82%, rgba(58, 154, 166, .08), transparent 28%),
         rgba(255, 255, 255, .52);
 }
@@ -571,10 +573,10 @@ body {
     min-height: 22rem;
     overflow-x: auto;
     padding: 1rem;
-    border: 1px solid rgba(86, 100, 210, .16);
+    border: 1px solid rgba(17, 17, 17, .12);
     border-radius: .8rem;
     background:
-        radial-gradient(circle at 12% 18%, rgba(86, 100, 210, .08), transparent 30%),
+        radial-gradient(circle at 12% 18%, rgba(17, 17, 17, .05), transparent 30%),
         radial-gradient(circle at 88% 82%, rgba(58, 154, 166, .08), transparent 28%),
         rgba(255, 255, 255, .52);
 }
@@ -1007,7 +1009,7 @@ form:has(#allocation-rows) .table-responsive td:nth-child(2) { min-width: 170px;
     font-weight: 600;
 }
 
-.app-status-primary { color: #39479f; background: var(--app-accent-soft-primary); }
+.app-status-primary { color: #343a40; background: var(--app-accent-soft-primary); }
 .app-status-success { color: #216f50; background: var(--app-accent-soft-success); }
 .app-status-warning { color: #875b13; background: var(--app-accent-soft-warning); }
 .app-status-danger { color: #963d4a; background: var(--app-accent-soft-danger); }
@@ -1048,12 +1050,15 @@ form:has(#allocation-rows) .table-responsive td:nth-child(2) { min-width: 170px;
 
 .btn-app-primary { color: #fff; background: var(--app-accent-primary); border-color: var(--app-accent-primary); }
 .btn-app-primary:hover,
-.btn-app-primary:focus-visible { color: #fff; background: #4654bd; border-color: #4654bd; }
-.btn-app-soft { color: #39479f; background: var(--app-accent-soft-primary); border-color: transparent; }
+.btn-app-primary:focus-visible { color: #fff; background: #000; border-color: #000; }
+.btn-app-soft { color: #343a40; background: var(--app-accent-soft-primary); border-color: transparent; }
 .dt-export-excel { color: var(--app-badge-primary-text) !important; background: var(--app-badge-primary-bg) !important; border-color: transparent !important; }
-.dt-export-excel:hover, .dt-export-excel:focus { color: var(--app-badge-primary-text) !important; background: #c7dcfb !important; border-color: transparent !important; }
+.dt-export-excel:hover, .dt-export-excel:focus { color: var(--app-badge-primary-text) !important; background: #d1d5db !important; border-color: transparent !important; }
 .btn-app-soft:hover,
-.btn-app-soft:focus-visible { color: #2f3d91; background: rgba(86, 100, 210, .2); }
+.btn-app-soft:focus-visible { color: #171717; background: rgba(17, 17, 17, .14); }
+.btn-app-danger { color: #963d4a; background: var(--app-accent-soft-danger); border-color: transparent; }
+.btn-app-danger:hover,
+.btn-app-danger:focus-visible { color: #7f2634; background: rgba(220, 53, 69, .2); border-color: transparent; }
 
 /* Shared DataTable surface: dense back-office tables stay usable on small screens. */
 .dataTables_wrapper {
@@ -1092,14 +1097,14 @@ form:has(#allocation-rows) .table-responsive td:nth-child(2) { min-width: 170px;
 
 .dataTables_wrapper .dataTables_filter input:focus,
 .dataTables_wrapper .dataTables_length select:focus {
-    border-color: rgba(86, 100, 210, .55);
-    box-shadow: 0 0 0 .25rem rgba(86, 100, 210, .12);
+    border-color: rgba(17, 17, 17, .55);
+    box-shadow: 0 0 0 .25rem rgba(17, 17, 17, .12);
     outline: 0;
 }
 
 .dataTables_wrapper .dataTables_processing {
     z-index: 3;
-    border: 1px solid rgba(86, 100, 210, .18);
+    border: 1px solid rgba(17, 17, 17, .18);
     border-radius: .75rem;
     color: var(--app-text);
     background: rgba(255, 255, 255, .9);
@@ -1183,8 +1188,8 @@ form:has(#allocation-rows) .table-responsive td:nth-child(2) { min-width: 170px;
 .select2-container--focus .select2-selection--single,
 .select2-container--open .select2-selection--single,
 .select2-container--focus .select2-selection--multiple {
-    border-color: rgba(86, 100, 210, .55);
-    box-shadow: 0 0 0 .25rem rgba(86, 100, 210, .12);
+    border-color: rgba(17, 17, 17, .55);
+    box-shadow: 0 0 0 .25rem rgba(17, 17, 17, .12);
     outline: 0;
 }
 

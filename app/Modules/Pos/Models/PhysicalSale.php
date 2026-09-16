@@ -12,16 +12,18 @@ use App\Modules\Finance\Models\AdvanceDepositApplication;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 class PhysicalSale extends Model
 {
-    use HasDocumentBranch;
+    use HasDocumentBranch, SoftDeletes;
 
     protected $table = 'pos_physical_sales';
 
     protected $fillable = [
-        'warehouse_id', 'branch_id', 'document_type', 'document_number', 'source_type', 'source_id', 'party_id',
+        'warehouse_id', 'branch_id', 'document_type', 'tax_invoice_type', 'document_number', 'source_type', 'source_id', 'party_id',
         'party_code', 'party_name', 'party_tax_id', 'party_branch_code', 'party_address',
+        'issuer_company_name', 'issuer_company_address', 'issuer_tax_id', 'issuer_tax_branch_code',
         'document_date', 'tax_treatment', 'prices_include_vat', 'due_date', 'posting_date', 'subtotal', 'discount_amount', 'promotion_snapshot', 'promotion_discount_amount', 'tax_base', 'tax_amount', 'withholding_tax_code_id', 'withholding_rate', 'withholding_base', 'withholding_amount', 'total_amount',
         'status', 'journal_entry_id', 'cogs_journal_entry_id', 'cancellation_return_id', 'reversal_status', 'reversal_revision', 'reversal_key', 'posted_by', 'posted_at', 'voided_by', 'voided_at', 'void_reason',
         'description', 'created_by', 'updated_by',

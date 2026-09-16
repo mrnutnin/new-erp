@@ -1,9 +1,9 @@
 @extends('Wms::layout')
 @php($productionMode = true)
 @php($wmsDecimal = \App\Modules\Wms\Support\WmsDecimal::class)
-@php($statusLabels = ['DRAFT' => 'ร่าง', 'APPROVED' => 'อนุมัติแล้ว', 'POSTED' => 'ลงบัญชีแล้ว', 'VOID' => 'ยกเลิก', 'REVERSED' => 'กลับรายการแล้ว'])
+@php($statusLabels = ['DRAFT' => 'ร่าง', 'APPROVED' => 'อนุมัติแล้ว', 'POSTED' => 'ลง Stock และบัญชีแล้ว', 'VOID' => 'ยกเลิกเอกสาร', 'REVERSED' => 'ยกเลิกเอกสารแล้ว'])
 @php($statusClasses = ['DRAFT' => 'neutral', 'APPROVED' => 'info', 'POSTED' => 'success', 'VOID' => 'danger', 'REVERSED' => 'warning'])
-@php($directionLabels = ['GAIN' => 'เพิ่มสินค้า', 'LOSS' => 'ลดสินค้า']) @php($events = ['wms.inventory_adjustment.created' => 'สร้างร่างเอกสาร', 'wms.inventory_adjustment.updated' => 'แก้ไขร่างเอกสาร', 'wms.inventory_adjustment.approved' => 'อนุมัติเอกสาร', 'wms.inventory_adjustment.posted' => 'ลงบัญชีเอกสาร', 'wms.inventory_adjustment.deleted' => 'ลบร่างเอกสาร', 'wms.inventory_adjustment.reversed' => 'กลับรายการเอกสาร', 'wms.inventory_adjustment.document_reversed' => 'กลับรายการทั้งเอกสาร'])
+@php($directionLabels = ['GAIN' => 'เพิ่มสินค้า', 'LOSS' => 'ลดสินค้า']) @php($events = ['wms.inventory_adjustment.created' => 'สร้างร่างเอกสาร', 'wms.inventory_adjustment.updated' => 'แก้ไขร่างเอกสาร', 'wms.inventory_adjustment.approved' => 'อนุมัติเอกสาร', 'wms.inventory_adjustment.posted' => 'ลง Stock และบัญชี', 'wms.inventory_adjustment.deleted' => 'ลบร่างเอกสาร', 'wms.inventory_adjustment.reversed' => 'ยกเลิกเอกสาร', 'wms.inventory_adjustment.document_reversed' => 'ยกเลิกเอกสาร'])
 @php(
     $displayValue = static function ($value): string {
         if (is_array($value)) {
@@ -51,16 +51,18 @@
                     {{ $displayValue($document->warehouse?->code) }} · {{ $document->document_date?->format($dateFormat) }}
                 </p>
             </div>
-            <div class="d-flex gap-2"><a class="btn btn-outline-secondary"
+            <div class="d-flex flex-wrap gap-2"><a class="btn btn-outline-secondary"
                     href="{{ $productionMode ?? false ? route('wms.production.finished-receipts.index') : route('wms.production.finished-receipts.index') }}"
-                    title="กลับ" aria-label="กลับ"><i class="bx bx-arrow-back" aria-hidden="true"></i></a>
+                    title="กลับหน้ารายการ" aria-label="กลับหน้ารายการ"><i class="bx bx-arrow-back me-1" aria-hidden="true"></i>กลับหน้ารายการ</a>
                 @if ($document->status === 'DRAFT' && auth()->user()->hasPermission('wms.inventory-adjustments.update'))
                     <a class="btn btn-app-soft"
                         href="{{ $productionMode ?? false ? route('wms.production.finished-receipts.edit', $document) : route('wms.production.finished-receipts.edit', $document) }}"
-                        title="แก้ไข" aria-label="แก้ไข"><i class="bx bx-edit" aria-hidden="true"></i></a>
+                        title="แก้ไข" aria-label="แก้ไข"><i class="bx bx-edit me-1" aria-hidden="true"></i>แก้ไข</a>
                     @endif @if ($document->status === 'DRAFT' && auth()->user()->hasPermission('wms.inventory-adjustments.approve'))
-                        <button class="btn btn-app-soft js-doc-action" data-action="approve" title="อนุมัติ"
-                            aria-label="อนุมัติ"><i class="bx bx-check" aria-hidden="true"></i></button>
+                        <button class="btn btn-app-primary js-doc-action" data-action="approve" title="อนุมัติ"
+                            aria-label="อนุมัติ"><i class="bx bx-check me-1" aria-hidden="true"></i>อนุมัติ</button>
+                        @endif @if ($document->status === 'DRAFT' && auth()->user()->hasPermission('wms.inventory-adjustments.delete'))
+                            <button class="btn btn-app-danger js-doc-delete" type="button"><i class="bx bx-trash me-1" aria-hidden="true"></i>ลบร่าง</button>
                         @endif @if (
                             $document->status === 'APPROVED' &&
                                 config(
@@ -69,19 +71,20 @@
                                         : 'erp.inventory.adjustment_posting_enabled',
                                     false) &&
                                 auth()->user()->hasPermission('wms.inventory-adjustments.post'))
-                            <button class="btn btn-app-soft js-doc-action" data-action="post" title="ลงบัญชี"
-                                aria-label="ลงบัญชี" @disabled(!($postReadiness['ready'] ?? true))><i class="bx bx-send"
-                                    aria-hidden="true"></i></button>
+                            <button class="btn btn-app-primary js-doc-action" data-action="post" title="ลง Stock และบัญชี"
+                                aria-label="ลง Stock และบัญชี" @disabled(!($postReadiness['ready'] ?? true))><i class="bx bx-send me-1"
+                                aria-hidden="true"></i>ลง Stock และบัญชี</button>
                             @endif @if (
                                 $document->status === 'POSTED' &&
                                     $document->reversal_status !== 'REVERSED' &&
                                     auth()->user()->hasPermission('wms.inventory-adjustments.reverse'))
-                                <button class="btn btn-app-danger js-doc-reverse" title="กลับรายการทั้งเอกสาร"
-                                    aria-label="กลับรายการทั้งเอกสาร"><i class="bx bx-revision"
-                                        aria-hidden="true"></i></button>
+                                <button class="btn btn-app-danger js-doc-reverse" title="ยกเลิกเอกสาร"
+                                    aria-label="ยกเลิกเอกสาร"><i class="bx bx-undo me-1"
+                                        aria-hidden="true"></i>ยกเลิกเอกสาร</button>
                             @endif
             </div>
         </div>
+        <div class="alert alert-info border-0 mb-4"><strong>ขั้นตอนถัดไป:</strong> {{ $document->status === 'DRAFT' ? 'ตรวจสอบข้อมูล แล้วแก้ไขหรือกด “อนุมัติ”' : ($document->status === 'APPROVED' ? (($postReadiness['ready'] ?? false) ? 'กด “ลง Stock และบัญชี” เพื่อบันทึกผลกระทบทั้งหมด' : 'แก้ไข blocker ที่แสดงด้านล่างก่อนลง Stock และบัญชี') : ($document->status === 'POSTED' ? 'เอกสารเสร็จสมบูรณ์ หากพบข้อผิดพลาดให้ยกเลิกเอกสารเพื่อสร้างรายการย้อนกลับ' : 'เอกสารนี้ไม่มีขั้นตอนที่ต้องดำเนินการต่อ')) }}</div>
         @if ($document->status === 'APPROVED' && !($postReadiness['ready'] ?? true))
             <div class="alert alert-warning border-0"><strong>ยังลงบัญชีไม่ได้</strong>
                 <ul class="mb-0 mt-1">
@@ -302,37 +305,6 @@
         });
     </script>
 @endpush
-@if ($document->status === 'DRAFT' && auth()->user()->hasPermission('wms.inventory-adjustments.delete'))
-    @push('scripts')
-        <script>
-            $(function() {
-                const bar = $('.container-fluid > .d-flex.justify-content-between.align-items-start.gap-3').first()
-                    .children('.d-flex.gap-2'),
-                    button = $(
-                        '<button class="btn btn-outline-danger js-doc-delete" type="button"><i class="bx bx-trash me-1" aria-hidden="true"></i>ลบร่าง</button>'
-                        ),
-                    approve = bar.find('.js-doc-action[data-action="approve"]').first();
-                (approve.length ? button.insertBefore(approve) : bar.append(button));
-            });
-        </script>
-    @endpush
-@endif
-@push('scripts')
-    <script>
-        $(function() {
-            const edit = $('a[href*="/edit"]');
-            edit.removeClass('btn-app-soft').addClass('btn-outline-secondary').append(
-                '<span class="ms-1">แก้ไข</span>');
-            $('.js-doc-delete').removeClass('btn-app-danger').addClass('btn-outline-danger');
-            $('.js-doc-action[data-action="approve"]').removeClass('btn-app-soft').addClass('btn-dark').append(
-                '<span class="ms-1">อนุมัติ</span>');
-            $('.js-doc-action[data-action="post"]').removeClass('btn-app-soft').addClass('btn-dark').append(
-                '<span class="ms-1">ลงบัญชี</span>');
-            $('.js-doc-reverse').removeClass('btn-app-danger').addClass('btn-outline-danger').append(
-                '<span class="ms-1">กลับรายการ</span>');
-        });
-    </script>
-@endpush
 @push('scripts')
     <script>
         $(function() {
@@ -343,8 +315,7 @@
                     text: 'รายการนี้จะถูกลบและไม่สามารถกู้คืนได้',
                     showCancelButton: true,
                     confirmButtonText: 'ลบร่าง',
-                    cancelButtonText: 'ยกเลิก',
-                    confirmButtonColor: '#dc3545'
+                    cancelButtonText: 'กลับ'
                 }).then(x => {
                     if (!x.isConfirmed) return;
                     $.ajax({
@@ -380,10 +351,10 @@
                     '{{ route('wms.production.finished-receipts.post', $document) }}';
                 Swal.fire({
                     icon: 'warning',
-                    title: a === 'approve' ? 'อนุมัติ Adjustment?' : 'ลงบัญชี Adjustment?',
+                    title: a === 'approve' ? 'อนุมัติใบรับผลิต?' : 'ลง Stock และบัญชีใบรับผลิต?',
                     showCancelButton: true,
                     confirmButtonText: 'ยืนยัน',
-                    cancelButtonText: 'ยกเลิก'
+                    cancelButtonText: 'กลับ'
                 }).then(x => {
                     if (!x.isConfirmed) return;
                     $.post(u, {
@@ -404,12 +375,12 @@
             $('.js-doc-reverse').on('click', function() {
                 Swal.fire({
                     icon: 'warning',
-                    title: 'กลับรายการทั้งเอกสาร?',
+                    title: 'ยกเลิกเอกสารรับผลิต?',
                     input: 'textarea',
                     inputPlaceholder: 'เหตุผลอย่างน้อย 10 ตัวอักษร',
                     showCancelButton: true,
                     confirmButtonText: 'ยืนยัน',
-                    cancelButtonText: 'ยกเลิก',
+                    cancelButtonText: 'กลับ',
                     preConfirm: v => {
                         if (!v || v.trim().length < 10) {
                             Swal.showValidationMessage('กรุณาระบุเหตุผลอย่างน้อย 10 ตัวอักษร');
@@ -432,7 +403,7 @@
                         }).then(() => location.reload())
                     }).fail(e => Swal.fire({
                         icon: 'error',
-                        text: e.responseJSON?.message || 'กลับรายการไม่สำเร็จ'
+                        text: e.responseJSON?.message || 'ยกเลิกเอกสารไม่สำเร็จ'
                     }));
                 });
             });

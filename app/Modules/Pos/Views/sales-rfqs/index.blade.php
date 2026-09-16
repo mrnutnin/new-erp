@@ -8,6 +8,7 @@
         ])
         <div class="card border-0 shadow-sm mb-3">
             <div class="card-body p-3 p-lg-4">
+                <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3"><div><h2 class="h5 mb-1">ตัวกรองใบขอราคา</h2><p class="text-secondary mb-0 small">กรองก่อนค้นหาจากตาราง</p></div><button class="btn btn-sm btn-app-soft" type="button" id="rfq-reset"><i class="bx bx-reset me-1"></i>ล้างตัวกรอง</button></div>
                 <div class="row g-3 align-items-end">
                     <div class="col-md-3"><label for="rfq-from" class="form-label">วันที่เริ่ม</label><input id="rfq-from"
                             type="date" class="form-control"></div>
@@ -23,15 +24,14 @@
                             <option value="REJECTED">ไม่อนุมัติ</option>
                             <option value="CANCELLED">ยกเลิก</option>
                         </select></div>
-                </div><button class="btn btn-outline-secondary mt-3" id="rfq-filter"><i
-                        class="bx bx-filter-alt me-1"></i>กรอง</button>
+                </div><button class="btn btn-app-primary mt-3" id="rfq-filter"><i
+                        class="bx bx-filter-alt me-1"></i>ใช้ตัวกรอง</button>
             </div>
         </div>
         <div class="card border-0 shadow-sm">
             <div class="card-body p-3 p-lg-4">
                 <div class="mb-3">
-                    <h2 class="h6 mb-0">รายการใบขอราคา</h2>
-
+                    <h2 class="h5 mb-1">รายการใบขอราคา</h2><p class="text-secondary mb-0 small">เลือกดูรายละเอียดเพื่อพิจารณา RFQ และสร้างใบเสนอราคาตามสถานะเอกสาร</p>
                 </div>
                 <div class="table-responsive">
                     <table id="rfq-table" class="table table-hover align-middle w-100"
@@ -104,10 +104,11 @@
                     orderable: false,
                     searchable: false,
                     render: (_, __, r) =>
-                        `<a class="btn btn-sm btn-app-soft" title="ดูรายละเอียด" aria-label="ดูรายละเอียด" href="${esc(r.show_url)}"><i class="bx bx-show"></i></a>${r.order_url?` <a class="btn btn-sm btn-app-soft" title="ดูใบสั่งขาย" aria-label="ดูใบสั่งขาย" href="${esc(r.order_url)}"><i class="bx bx-cart"></i></a>`:''}${r.quotation_url?` <a class="btn btn-sm btn-app-soft" title="ดูใบเสนอราคา" aria-label="ดูใบเสนอราคา" href="${esc(r.quotation_url)}"><i class="bx bx-file"></i></a>`:''}${r.pdf_url?` <a class="btn btn-sm btn-app-soft" title="พิมพ์ PDF" aria-label="พิมพ์ PDF" href="${esc(r.pdf_url)}"><i class="bx bx-printer"></i></a>`:''}`
+                        `<a class="btn btn-sm btn-app-soft" title="ดูรายละเอียด" aria-label="ดูรายละเอียด" href="${esc(r.show_url)}"><i class="bx bx-file-find"></i></a>${r.pdf_url?` <a class="btn btn-sm btn-app-soft" title="พิมพ์ PDF" aria-label="พิมพ์ PDF" href="${esc(r.pdf_url)}" target="_blank" rel="noopener"><i class="bx bx-printer"></i></a>`:''}`
                 }]
             });
             $('#rfq-filter').on('click', () => t.ajax.reload());
+            $('#rfq-reset').on('click', () => { $('#rfq-from,#rfq-to').val(''); $('#rfq-status').val(''); $('#rfq-party').val(null).trigger('change'); t.ajax.reload(); });
             $('#rfq-party').select2({
                 ajax: {
                     url: '{{ route('pos.sales-rfqs.party-options') }}',

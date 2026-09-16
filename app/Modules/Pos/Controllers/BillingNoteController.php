@@ -24,7 +24,10 @@ use Yajra\DataTables\Facades\DataTables;
 
 final class BillingNoteController extends Controller
 {
-    public function index(): View { return view('Pos::billing-notes.index'); }
+    public function index(): View
+    {
+        return view('Pos::billing-notes.index');
+    }
 
     public function data(Request $request): JsonResponse
     {
@@ -38,6 +41,8 @@ final class BillingNoteController extends Controller
             ->addColumn('party_label', fn (BillingNote $note) => trim(($note->party?->code ?: '').' · '.($note->party?->name ?: ''), ' ·') ?: '-')
             ->addColumn('status_label', fn (BillingNote $note) => ['DRAFT' => 'ร่าง', 'ISSUED' => 'ออกใบวางบิลแล้ว', 'CANCELLED' => 'ยกเลิก'][$note->status] ?? $note->status)
             ->addColumn('show_url', fn (BillingNote $note) => route('pos.billing-notes.show', $note))
+            ->addColumn('pdf_url', fn (BillingNote $note) => $request->user()->hasPermission('pos.billing-notes.view') ? route('pos.billing-notes.pdf', $note) : null)
+            ->addColumn('delete_url', fn (BillingNote $note) => $note->status === 'DRAFT' && $request->user()->hasPermission('pos.billing-notes.delete') ? route('pos.billing-notes.destroy', $note) : null)
             ->addColumn('can_issue', fn (BillingNote $note) => $note->status === 'DRAFT' && $request->user()->hasPermission('pos.billing-notes.issue'))
             ->addColumn('can_cancel', fn (BillingNote $note) => in_array($note->status, ['DRAFT', 'ISSUED'], true) && $request->user()->hasPermission('pos.billing-notes.cancel'))
             ->toJson();
@@ -96,21 +101,30 @@ final class BillingNoteController extends Controller
             $lines = collect($invoices->map(function (SalesDocument $invoice) use ($openItems): array {
                 $openItem = $this->openItemFor($invoice);
                 $amount = $openItem ? $openItems->remainingAt($openItem, today()->toDateString()) : '0.00';
-                if ((float) $amount <= 0) throw ValidationException::withMessages(['billing_source_keys' => 'Invoice ต้องมียอดคงค้างมากกว่า 0']);
+                if ((float) $amount <= 0) {
+                    throw ValidationException::withMessages(['billing_source_keys' => 'Invoice ต้องมียอดคงค้างมากกว่า 0']);
+                }
+
                 return ['sales_document_id' => $invoice->id, 'amount' => $amount];
             })->all())->merge($physicalSales->map(function (PhysicalSale $sale) use ($openItems): array {
                 $openItem = $this->openItemFor($sale);
                 $amount = $openItem ? $openItems->remainingAt($openItem, today()->toDateString()) : '0.00';
-                if ((float) $amount <= 0) throw ValidationException::withMessages(['billing_source_keys' => 'ใบขายเชื่อต้องมียอดคงค้างมากกว่า 0']);
+                if ((float) $amount <= 0) {
+                    throw ValidationException::withMessages(['billing_source_keys' => 'ใบขายเชื่อต้องมียอดคงค้างมากกว่า 0']);
+                }
+
                 return ['physical_sale_id' => $sale->id, 'amount' => $amount];
             }));
             $sequence = DocumentSequence::query()->whereNull('warehouse_id')->where('document_type', 'BILLING_NOTE')->where('is_active', true)->first();
-            if (! $sequence) throw ValidationException::withMessages(['document_number' => 'ยังไม่ได้ตั้งค่าเลขเอกสารใบวางบิล']);
+            if (! $sequence) {
+                throw ValidationException::withMessages(['document_number' => 'ยังไม่ได้ตั้งค่าเลขเอกสารใบวางบิล']);
+            }
             $branch = $request->attributes->get('selectedBranch');
             $note = BillingNote::query()->create(['branch_id' => $branch->id, 'party_id' => $values['party_id'], 'document_number' => $sequences->issueForBranch($sequence, $branch, Carbon::parse($values['document_date'])), 'document_date' => $values['document_date'], 'due_date' => $values['due_date'] ?? null, 'total_amount' => $lines->sum('amount'), 'description' => $values['description'] ?? null, 'status' => 'DRAFT', 'created_by' => $request->user()->id]);
             $note->lines()->createMany($lines->all());
             $sequences->recordIssued($sequence, $note->document_number, 'pos_billing_notes', (int) $note->id, Carbon::parse($note->document_date), $request->user()->id);
             $audit->record('pos.billing_note.created', $note->load('lines'), [], $note->toArray(), $request->user(), $request);
+
             return $note;
         });
 
@@ -120,6 +134,7 @@ final class BillingNoteController extends Controller
     public function show(Request $request, BillingNote $billingNote): View
     {
         $this->scope($request, $billingNote);
+
         return view('Pos::billing-notes.show', ['billingNote' => $billingNote->load('party', 'lines.salesDocument', 'lines.physicalSale'), 'dateFormat' => 'd/m/Y']);
     }
 
@@ -130,6 +145,7 @@ final class BillingNoteController extends Controller
         $before = $billingNote->toArray();
         $billingNote->update(['status' => 'ISSUED', 'issued_by' => $request->user()->id, 'issued_at' => now()]);
         $audit->record('pos.billing_note.issued', $billingNote, $before, $billingNote->fresh()->toArray(), $request->user(), $request);
+
         return response()->json(['status' => true, 'msg' => 'ออกใบวางบิลแล้ว']);
     }
 
@@ -142,7 +158,22 @@ final class BillingNoteController extends Controller
         $before = $billingNote->toArray();
         $billingNote->update(['status' => 'CANCELLED', 'cancelled_by' => $request->user()->id, 'cancelled_at' => now(), 'cancel_reason' => $reason]);
         $audit->record('pos.billing_note.cancelled', $billingNote, $before, $billingNote->fresh()->toArray(), $request->user(), $request);
+
         return response()->json(['status' => true, 'msg' => 'ยกเลิกใบวางบิลแล้ว']);
+    }
+
+    public function destroy(Request $request, BillingNote $billingNote, AuditLogger $audit): JsonResponse
+    {
+        $this->scope($request, $billingNote);
+        DB::transaction(function () use ($request, $billingNote, $audit): void {
+            $note = BillingNote::query()->lockForUpdate()->findOrFail($billingNote->id);
+            abort_unless($note->status === 'DRAFT', 422, 'ลบได้เฉพาะใบวางบิลสถานะร่าง');
+            $before = $note->load('lines')->toArray();
+            $note->delete();
+            $audit->record('pos.billing_note.deleted', $note, $before, [], $request->user(), $request);
+        });
+
+        return response()->json(['status' => true, 'msg' => 'ลบร่างใบวางบิลแล้ว', 'redirect' => route('pos.billing-notes.index')]);
     }
 
     private function eligibleInvoices(Request $request, int $partyId, string $term = '')

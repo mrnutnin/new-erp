@@ -16,9 +16,9 @@
             <h1 class="h3 mb-2">รายละเอียดรายการปรับปรุงสินค้า #{{ $adjustment->id }}</h1>
             <p class="text-secondary mb-0">ตรวจสอบรายการ Stock, Cost Allocation และ Journal ที่เชื่อมโยงกัน</p>
         </div>
-        <div class="d-flex gap-2"><a class="btn btn-outline-secondary" href="{{ route('wms.inventory-adjustments.index') }}"><i class="bx bx-arrow-back me-1" aria-hidden="true"></i>กลับรายการ</a>
+        <div class="d-flex gap-2"><a class="btn btn-app-soft" href="{{ route('wms.inventory-adjustments.index') }}"><i class="bx bx-arrow-back me-1" aria-hidden="true"></i>กลับหน้ารายการ</a>
         @if($adjustment->status === 'POSTED' && $adjustment->reversal_status !== 'REVERSED' && config('erp.inventory.adjustment_posting_enabled', false) && auth()->user()->hasPermission('wms.inventory-adjustments.reverse'))
-            <button class="btn btn-outline-danger" id="adjustment-reverse"><i class="bx bx-revision me-1" aria-hidden="true"></i>กลับรายการ</button>
+            <button class="btn btn-app-danger" id="adjustment-reverse"><i class="bx bx-revision me-1" aria-hidden="true"></i>ยกเลิกเอกสาร</button>
         @endif</div>
     </div>
 

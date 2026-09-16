@@ -73,7 +73,7 @@ class PurchaseRequisitionController extends Controller
             ->addColumn('status_label', fn (PurchaseRequisition $r) => [
                 'DRAFT' => 'ร่าง', 'SUBMITTED' => 'รออนุมัติ', 'APPROVED' => 'อนุมัติแล้ว', 'REJECTED' => 'ตีกลับ', 'VOID' => 'ยกเลิก',
             ][$r->status] ?? $r->status)
-            ->addColumn('show_url', fn (PurchaseRequisition $r) => route($this->moduleRoutePrefix().'.purchase-requisitions.edit', $r))
+            ->addColumn('show_url', fn (PurchaseRequisition $r) => route($this->moduleRoutePrefix().'.purchase-requisitions.show', $r))
             ->addColumn('print_url', fn (PurchaseRequisition $r) => $request->user()->hasPermission($this->modulePermission('purchase-requisitions.print')) ? route($this->moduleRoutePrefix().'.purchase-requisitions.pdf', $r) : null)
             ->addColumn('edit_url', fn (PurchaseRequisition $r) => in_array($r->status, ['DRAFT', 'REJECTED'], true) && $request->user()->hasPermission($this->modulePermission('purchase-requisitions.update')) ? route($this->moduleRoutePrefix().'.purchase-requisitions.edit', $r) : null)
             ->addColumn('submit_url', fn (PurchaseRequisition $r) => in_array($r->status, ['DRAFT', 'REJECTED'], true) && $request->user()->hasPermission($this->modulePermission('purchase-requisitions.submit')) ? route($this->moduleRoutePrefix().'.purchase-requisitions.submit', $r) : null)
@@ -166,6 +166,14 @@ class PurchaseRequisitionController extends Controller
         $history = AuditLog::query()->with('user')->where('subject_type', $requisition->getMorphClass())->where('subject_id', $requisition->id)->latest('created_at')->latest('id')->get();
 
         return view($this->moduleViewPrefix().'::purchase-requisitions.form', ['requisition' => $requisition, 'lines' => $requisition->lines, 'supplier' => $requisition->supplier, 'history' => $history, 'moduleRoutePrefix' => $this->moduleRoutePrefix()]);
+    }
+
+    public function show(Request $request, PurchaseRequisition $purchaseRequisition): View
+    {
+        $requisition = $this->scoped($request, $purchaseRequisition)->load(['lines.item', 'lines.uom', 'supplier', 'purchaseOrder']);
+        $history = AuditLog::query()->with('user')->where('subject_type', $requisition->getMorphClass())->where('subject_id', $requisition->id)->latest('created_at')->latest('id')->get();
+
+        return view($this->moduleViewPrefix().'::purchase-requisitions.show', compact('requisition', 'history'));
     }
 
     public function destroy(Request $request, PurchaseRequisition $purchaseRequisition, AuditLogger $audit): JsonResponse

@@ -11,12 +11,12 @@
                 <p class="text-secondary mb-0">ตรวจสอบสินทรัพย์ตามขอบเขตที่ freeze ไว้ โดยไม่ปรับทะเบียนอัตโนมัติ</p>
             </div>
             @if (auth()->user()->hasPermission('asset.counts.create'))
-                <a class="btn btn-dark" href="{{ route('asset.counts.create') }}">สร้างใบตรวจนับ</a>
+                <a class="btn btn-app-primary" href="{{ route('asset.counts.create') }}">สร้างใบตรวจนับ</a>
             @endif
         </div>
         <div class="card border-0 shadow-sm mb-4">
             <div class="card-body p-4">
-                <h2 class="h6 mb-3">ตัวกรอง</h2>
+                <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3"><div><h2 class="h5 mb-1">ตัวกรอง</h2><p class="small text-secondary mb-0">กรองข้อมูลก่อนค้นหาจากตาราง</p></div><button class="btn btn-sm btn-app-soft" id="count-filter-reset" type="button"><i class="bx bx-reset me-1" aria-hidden="true"></i>ล้างตัวกรอง</button></div>
                 <div class="row g-3">
                     <div class="col-12 col-md-4 col-xl-3"><label class="form-label"
                             for="count-filter-status">สถานะ</label><select class="form-select" id="count-filter-status">
@@ -30,8 +30,7 @@
                             ตั้งแต่</label><input class="form-control" id="count-filter-date-from" type="date"></div>
                     <div class="col-12 col-md-4 col-xl-3"><label class="form-label" for="count-filter-date-to">วัน freeze
                             ถึง</label><input class="form-control" id="count-filter-date-to" type="date"></div>
-                    <div class="col-12 col-xl-2 ms-auto"><label for="count-filter-reset">&nbsp;</label><button class="btn btn-outline-secondary w-100"
-                            id="count-filter-reset" type="button">ล้างตัวกรอง</button></div>
+
                 </div>
             </div>
         </div>
@@ -68,9 +67,9 @@
                     CANCELLED: 'ยกเลิก'
                 },
                 badges = {
-                    DRAFT: 'app-badge-soft',
-                    SUBMITTED: 'app-badge-info',
-                    APPROVED: 'app-badge-success',
+                    DRAFT: 'app-status-neutral',
+                    SUBMITTED: 'app-status-info',
+                    APPROVED: 'app-status-success',
                     CANCELLED: 'app-status-danger'
                 };
             var table = $table.DataTable($.extend(true, {}, window.erpDataTableDefaults, {
@@ -104,14 +103,15 @@
                         }
                     },
                     {
-                        data: 'show_url',
+                        data: null,
                         orderable: false,
                         searchable: false,
                         className: 'text-end',
-                        render: function(value, type) {
-                            return type === 'display' ?
-                                '<a class="btn btn-sm btn-outline-dark" href="' + text.display(
-                                    value) + '">ดู</a>' : value;
+                        render: function(value, type, row) {
+                            if (type !== 'display') return '';
+                            var actions = ['<a class="btn btn-sm btn-app-soft" href="' + text.display(row.show_url) + '" title="ดูรายละเอียด" aria-label="ดูรายละเอียด"><i class="bx bx-file-find" aria-hidden="true"></i></a>'];
+                            if (row.delete_url) actions.push('<button class="btn btn-sm btn-app-danger js-delete-count" data-url="' + text.display(row.delete_url) + '" type="button" title="ลบร่าง" aria-label="ลบร่าง"><i class="bx bx-trash" aria-hidden="true"></i></button>');
+                            return actions.join(' ');
                         }
                     }
                 ]
@@ -123,6 +123,7 @@
                 $('#count-filter-status, #count-filter-date-from, #count-filter-date-to').val('');
                 table.ajax.reload();
             });
+            window.erpAjaxDelete({button:'.js-delete-count',reload:'#counts-table',confirm:'ยืนยันการลบใบตรวจนับร่างนี้หรือไม่?'});
         });
     </script>
 @endpush

@@ -197,6 +197,10 @@ class RoleController extends Controller
 
     private function applyTableSearch(Builder $query, Request $request): void
     {
+        if (in_array($request->input('is_active'), ['0', '1'], true)) {
+            $query->where('roles.is_active', $request->boolean('is_active'));
+        }
+
         $search = trim((string) $request->input('search.value', ''));
 
         if ($search !== '') {

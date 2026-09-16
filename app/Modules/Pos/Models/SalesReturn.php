@@ -11,10 +11,11 @@ use App\Modules\Finance\Models\BankAccount;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 class SalesReturn extends Model
 {
-    use HasDocumentBranch;
+    use HasDocumentBranch, SoftDeletes;
 
     protected $table = 'pos_sales_returns';
 

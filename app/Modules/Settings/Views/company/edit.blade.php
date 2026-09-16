@@ -225,11 +225,11 @@
                             </div>
 
                             <div class="d-flex justify-content-between align-items-center mt-4">
-                                <a class="btn btn-outline-dark" href="{{ route('programs.index') }}">
+                                <a class="btn btn-app-soft" href="{{ route('programs.index') }}">
                                     <i class="bx bx-arrow-back me-1" aria-hidden="true"></i>กลับหน้าโปรแกรม
                                 </a>
                                 @if ($canUpdate)
-                                    <button class="btn btn-dark" type="submit" data-busy-text="กำลังบันทึก...">
+                                    <button class="btn btn-app-primary" type="submit" data-busy-text="กำลังบันทึก...">
                                         <i class="bx bx-save me-1" aria-hidden="true"></i>บันทึกการตั้งค่า
                                     </button>
                                 @endif

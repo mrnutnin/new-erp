@@ -24,7 +24,9 @@ final class EmployeeAdvanceController extends Controller
     public function data(Request $request): JsonResponse
     {
         $query = EmployeeAdvance::query()->with(['employee', 'bankAccount'])->where('warehouse_id', $this->warehouse($request)->id)
-            ->when($request->filled('status'), fn (Builder $q) => $q->where('status', $request->string('status')));
+            ->when($request->filled('status'), fn (Builder $q) => $q->where('status', $request->string('status')))
+            ->when($request->filled('date_from'), fn (Builder $q) => $q->whereDate('document_date', '>=', $request->string('date_from')))
+            ->when($request->filled('date_to'), fn (Builder $q) => $q->whereDate('document_date', '<=', $request->string('date_to')));
 
         return DataTables::eloquent($query)->order(fn (Builder $q) => $q->reorder('document_date', 'desc')->orderByDesc('id'))
             ->addColumn('employee_label', fn (EmployeeAdvance $a) => ($a->employee?->employee_code ?: '—').' · '.($a->employee?->name ?: '—'))
@@ -34,6 +36,7 @@ final class EmployeeAdvanceController extends Controller
             ->addColumn('status_class', fn (EmployeeAdvance $a) => $this->statusClass($a->status))
             ->addColumn('show_url', fn (EmployeeAdvance $a) => route('finance.employee-advances.show', $a))
             ->addColumn('edit_url', fn (EmployeeAdvance $a) => $a->status === 'DRAFT' && $request->user()->hasPermission('finance.employee-advances.update') ? route('finance.employee-advances.edit', $a) : null)
+            ->addColumn('delete_url', fn (EmployeeAdvance $a) => $a->status === 'DRAFT' && $request->user()->hasPermission('finance.employee-advances.delete') ? route('finance.employee-advances.destroy', $a) : null)
             ->toJson();
     }
 
@@ -70,7 +73,7 @@ final class EmployeeAdvanceController extends Controller
     public function submit(PettyCashActionRequest $request, EmployeeAdvance $advance, EmployeeAdvanceService $service): JsonResponse { return $this->action($request, $advance, $service, 'submit'); }
     public function approve(PettyCashActionRequest $request, EmployeeAdvance $advance, EmployeeAdvanceService $service): JsonResponse { return $this->action($request, $advance, $service, 'approve'); }
     public function reject(PettyCashActionRequest $request, EmployeeAdvance $advance, EmployeeAdvanceService $service): JsonResponse { $this->scope($request, $advance); $advance = $service->reject($advance, $this->warehouse($request), (string) $request->validated()['reason'], $request->user(), $request); return response()->json(['status' => true, 'msg' => 'ไม่อนุมัติใบเงินทดรองจ่ายแล้ว', 'data' => $advance]); }
-    public function destroy(Request $request, EmployeeAdvance $advance, EmployeeAdvanceService $service): JsonResponse { $this->scope($request, $advance); $service->deleteDraft($advance, $this->warehouse($request), $request->user(), $request); return response()->json(['status' => true, 'msg' => 'ลบเอกสาร Draft แล้ว', 'redirect' => route('finance.employee-advances.index')]); }
+    public function destroy(Request $request, EmployeeAdvance $advance, EmployeeAdvanceService $service): JsonResponse { $this->scope($request, $advance); $service->deleteDraft($advance, $this->warehouse($request), $request->user(), $request); return response()->json(['status' => true, 'msg' => 'ลบร่างเอกสารแล้ว', 'redirect' => route('finance.employee-advances.index')]); }
     public function void(PettyCashActionRequest $request, EmployeeAdvance $advance, EmployeeAdvanceService $service): JsonResponse { return $this->action($request, $advance, $service, 'void'); }
     public function post(PettyCashActionRequest $request, EmployeeAdvance $advance, EmployeeAdvanceService $service): JsonResponse { return $this->action($request, $advance, $service, 'post'); }
     public function reverse(PettyCashActionRequest $request, EmployeeAdvance $advance, EmployeeAdvanceService $service): JsonResponse { return $this->action($request, $advance, $service, 'reverse'); }

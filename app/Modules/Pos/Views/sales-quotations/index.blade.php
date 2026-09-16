@@ -8,6 +8,7 @@
         ])
         <div class="card border-0 shadow-sm mb-3">
             <div class="card-body p-3 p-lg-4">
+                <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3"><div><h2 class="h5 mb-1">ตัวกรองใบเสนอราคา</h2><p class="text-secondary mb-0 small">กรองก่อนค้นหาจากตาราง</p></div><button id="quotation-reset" type="button" class="btn btn-sm btn-app-soft"><i class="bx bx-reset me-1"></i>ล้างตัวกรอง</button></div>
                 <div class="row g-3 align-items-end">
                     <div class="col-md-3"><label for="quotation-from" class="form-label">วันที่เริ่ม</label><input
                             id="quotation-from" type="date" class="form-control"></div>
@@ -23,15 +24,14 @@
                             <option value="CANCELLED">ยกเลิก</option>
                         </select></div>
                     <div class="col-md-3 d-flex align-items-end"><button id="quotation-filter"
-                            class="btn btn-outline-secondary"><i class="bx bx-filter-alt me-1"></i>กรอง</button></div>
+                            class="btn btn-app-primary"><i class="bx bx-filter-alt me-1"></i>ใช้ตัวกรอง</button></div>
                 </div>
             </div>
         </div>
         <div class="card border-0 shadow-sm">
             <div class="card-body p-3 p-lg-4">
                 <div class="mb-3">
-                    <h2 class="h6 mb-0">รายการใบเสนอราคา</h2>
-
+                    <h2 class="h5 mb-1">รายการใบเสนอราคา</h2><p class="text-secondary mb-0 small">เลือกดูรายละเอียดเพื่อส่ง ตอบรับ หรือสร้างใบสั่งขายตามสถานะเอกสาร</p>
                 </div>
                 <div class="table-responsive">
                     <table id="quotation-table" class="table table-hover align-middle w-100"
@@ -104,10 +104,12 @@
                     data: null,
                     orderable: false,
                     render: (_, __, r) =>
-                        `<a class="btn btn-sm btn-app-soft" title="ดูรายละเอียด" aria-label="ดูรายละเอียด" href="${r.show_url}"><i class="bx bx-show"></i></a> <a class="btn btn-sm btn-app-soft" title="พิมพ์ PDF" aria-label="พิมพ์ PDF" href="${r.pdf_url}"><i class="bx bx-printer"></i></a>${r.order_url?` <a class="btn btn-sm btn-app-soft" title="ดูใบสั่งขาย" aria-label="ดูใบสั่งขาย" href="${r.order_url}"><i class="bx bx-cart"></i></a>`:''}`
+                        `<a class="btn btn-sm btn-app-soft" title="ดูรายละเอียด" aria-label="ดูรายละเอียด" href="${r.show_url}"><i class="bx bx-file-find"></i></a>${r.pdf_url?` <a class="btn btn-sm btn-app-soft" title="พิมพ์ PDF" aria-label="พิมพ์ PDF" href="${r.pdf_url}" target="_blank" rel="noopener"><i class="bx bx-printer"></i></a>`:''}${r.delete_url?` <button class="btn btn-sm btn-app-danger js-delete-quotation" title="ลบร่าง" aria-label="ลบร่าง" type="button" data-url="${r.delete_url}"><i class="bx bx-trash"></i></button>`:''}`
                 }]
             });
             $('#quotation-filter').on('click', () => t.ajax.reload());
+            $('#quotation-reset').on('click', () => { $('#quotation-from,#quotation-to').val(''); $('#quotation-status').val(''); t.ajax.reload(); });
+            window.erpAjaxDelete({button: '.js-delete-quotation', reload: '#quotation-table', confirm: 'ยืนยันการลบร่างใบเสนอราคานี้หรือไม่?', confirmButtonText: 'ลบร่าง', cancelButtonText: 'กลับ'});
         });
     </script>
 @endpush

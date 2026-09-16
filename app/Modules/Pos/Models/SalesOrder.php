@@ -9,10 +9,11 @@ use App\Models\Warehouse;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 class SalesOrder extends Model
 {
-    use HasDocumentBranch;
+    use HasDocumentBranch, SoftDeletes;
 
     protected $fillable = ['warehouse_id', 'branch_id', 'sales_quotation_id', 'sales_rfq_id', 'source_sales_intake_id', 'party_id', 'document_number', 'party_code', 'party_name', 'party_tax_id', 'party_branch_code', 'party_address', 'document_date', 'valid_until', 'status', 'subtotal', 'discount_amount', 'promotion_snapshot', 'promotion_discount_amount', 'total_amount', 'description', 'created_by', 'updated_by', 'confirmed_by', 'confirmed_at', 'cancelled_by', 'cancelled_at', 'cancel_reason'];
 

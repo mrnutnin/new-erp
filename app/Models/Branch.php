@@ -11,7 +11,7 @@ class Branch extends Model
 {
     use SoftDeletes;
 
-    protected $fillable = ['code', 'name', 'is_active'];
+    protected $fillable = ['code', 'name', 'tax_branch_code', 'tax_address', 'is_active'];
 
     protected function casts(): array
     {

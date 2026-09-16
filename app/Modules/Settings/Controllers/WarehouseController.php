@@ -22,7 +22,9 @@ class WarehouseController extends Controller
 {
     public function index(): View
     {
-        return view('Settings::warehouses.index');
+        return view('Settings::warehouses.index', [
+            'branches' => Branch::query()->where('is_active', true)->orderBy('code')->get(['id', 'code', 'name']),
+        ]);
     }
 
     public function data(Request $request): JsonResponse
@@ -182,6 +184,14 @@ class WarehouseController extends Controller
 
     private function applyTableSearch(Builder $query, Request $request): void
     {
+        if (in_array($request->input('is_active'), ['0', '1'], true)) {
+            $query->where('warehouses.is_active', $request->boolean('is_active'));
+        }
+
+        if (ctype_digit((string) $request->input('branch_id'))) {
+            $query->where('warehouses.branch_id', $request->integer('branch_id'));
+        }
+
         $search = trim((string) $request->input('search.value', ''));
 
         if ($search !== '') {

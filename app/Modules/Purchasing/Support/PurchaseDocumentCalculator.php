@@ -21,15 +21,19 @@ final class PurchaseDocumentCalculator
             try {
                 $quantity = BigDecimal::of((string) ($line['quantity'] ?? ''))->strippedOfTrailingZeros();
                 $unitPrice = BigDecimal::of((string) ($line['unit_price'] ?? ''))->strippedOfTrailingZeros();
+                $lineAmount = array_key_exists('line_amount', $line)
+                    ? BigDecimal::of((string) $line['line_amount'])->strippedOfTrailingZeros()
+                    : null;
                 $discount = BigDecimal::of((string) ($line['discount_amount'] ?? '0'))->strippedOfTrailingZeros();
             } catch (\Throwable) {
                 throw new InvalidArgumentException("Line {$index} contains invalid numbers.");
             }
-            if ($quantity->isLessThanOrEqualTo(0) || $quantity->getScale() > $inputDecimals || $unitPrice->isNegative() || $unitPrice->getScale() > $inputDecimals || $discount->isNegative() || $discount->getScale() > $inputDecimals) {
+            if ($quantity->isLessThanOrEqualTo(0) || $quantity->getScale() > $inputDecimals || $unitPrice->isNegative() || $unitPrice->getScale() > $inputDecimals || ($lineAmount !== null && ($lineAmount->isNegative() || $lineAmount->getScale() > 2)) || $discount->isNegative() || $discount->getScale() > $inputDecimals) {
                 throw new InvalidArgumentException("Line {$index} contains invalid precision or negative values.");
             }
 
-            $beforeDiscount = $quantity->multipliedBy($unitPrice)->toScale(2, RoundingMode::HALF_UP);
+            $beforeDiscount = $lineAmount?->toScale(2, RoundingMode::HALF_UP)
+                ?? $quantity->multipliedBy($unitPrice)->toScale(2, RoundingMode::HALF_UP);
             if ($discount->isGreaterThan($beforeDiscount)) {
                 throw new InvalidArgumentException("Line {$index} discount exceeds its amount.");
             }

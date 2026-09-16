@@ -26,7 +26,7 @@ final class ProductionIssueReturnController extends Controller
     public function data(Request $request, GlobalSettings $settings): JsonResponse
     {
         $warehouseId = (int) $request->attributes->get('selectedWarehouse')->id;
-        $labels = ['DRAFT' => 'ร่าง', 'APPROVED' => 'อนุมัติแล้ว', 'POSTED' => 'ลง Stock แล้ว', 'VOID' => 'ยกเลิก', 'REVERSED' => 'กลับรายการแล้ว'];
+        $labels = ['DRAFT' => 'ร่าง', 'APPROVED' => 'อนุมัติแล้ว', 'POSTED' => 'ลง Stock แล้ว', 'VOID' => 'ยกเลิกเอกสาร', 'REVERSED' => 'ยกเลิกเอกสารแล้ว'];
         $query = IssueReturn::query()->with(['issue:id,document_number,issue_type', 'lines'])->where('warehouse_id', $warehouseId)->whereHas('issue', fn ($issue) => $issue->where('issue_type', 'PRODUCTION'))->latest('id');
         if ($request->filled('status')) $query->where('status', $request->string('status')->toString());
         if ($request->filled('date_from')) $query->whereDate('document_date', '>=', $request->date('date_from'));
@@ -37,13 +37,7 @@ final class ProductionIssueReturnController extends Controller
             ->addColumn('quantity', fn ($row) => WmsDecimal::format($row->lines->sum('quantity')))
             ->addColumn('status_label', fn ($row) => $labels[$row->status] ?? $row->status)
             ->addColumn('show_url', fn ($row) => route('wms.production.issue-returns.show', $row))
-            ->addColumn('approve_url', fn ($row) => route('wms.production.issue-returns.approve', $row))
-            ->addColumn('post_url', fn ($row) => route('wms.production.issue-returns.post', $row))
-            ->addColumn('cancel_url', fn ($row) => route('wms.production.issue-returns.cancel', $row))
             ->addColumn('delete_url', fn ($row) => route('wms.production.issue-returns.destroy', $row))
-            ->addColumn('can_approve', fn ($row) => $row->status === 'DRAFT' && $request->user()->hasPermission('wms.issue-returns.approve'))
-            ->addColumn('can_post', fn ($row) => $row->status === 'APPROVED' && $request->user()->hasPermission('wms.issue-returns.post'))
-            ->addColumn('can_cancel', fn ($row) => in_array($row->status, ['DRAFT', 'APPROVED'], true) && $request->user()->hasPermission('wms.issue-returns.approve'))
             ->addColumn('can_delete', fn ($row) => $row->status === 'DRAFT' && $request->user()->hasPermission('wms.issue-returns.delete'))
             ->toJson();
     }

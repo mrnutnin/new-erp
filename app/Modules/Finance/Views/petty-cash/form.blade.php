@@ -21,7 +21,7 @@
 <div class="container-fluid px-3 px-lg-4 py-4">
     <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-end gap-3 mb-4">
         <div><p class="eyebrow mb-2">FINANCE / PETTY CASH</p><h1 class="h3 mb-2">{{ $editing ? 'แก้ไขใบสำคัญเงินสดย่อย' : 'สร้างใบสำคัญเงินสดย่อย' }}</h1><p class="text-secondary mb-0">บันทึกได้เฉพาะ Draft และระบบจะคำนวณ VAT, WHT และยอดจ่ายสุทธิจากรายการ</p></div>
-        <a class="btn btn-outline-secondary" href="{{ $editing ? route('finance.petty-cash.show', $voucher) : route('finance.petty-cash.index') }}">กลับ</a>
+        <a class="btn btn-app-soft" href="{{ $editing ? route('finance.petty-cash.show', $voucher) : route('finance.petty-cash.index') }}"><i class="bx bx-arrow-back me-1" aria-hidden="true"></i>กลับหน้ารายการ</a>
     </div>
 
     <form id="petty-cash-form" method="POST" action="{{ $editing ? route('finance.petty-cash.update', $voucher) : route('finance.petty-cash.store') }}">
@@ -41,7 +41,7 @@
             <div class="d-flex justify-content-between align-items-center gap-2 mb-3"><div><h2 class="h5 mb-1">รายการค่าใช้จ่าย</h2><p class="text-secondary small mb-0">VAT และ WHT จะถูกเก็บเป็น snapshot ของเอกสาร เพื่อไม่เปลี่ยนตาม master data ภายหลัง</p></div><button class="btn btn-sm btn-app-soft" id="add-petty-cash-line" type="button"><i class="bx bx-plus me-1" aria-hidden="true"></i>เพิ่มรายการ</button></div>
             <div class="table-responsive"><table class="table align-middle" id="petty-cash-lines"><thead><tr><th style="min-width:220px">หมวดค่าใช้จ่าย</th><th style="min-width:180px">รายละเอียด</th><th style="min-width:140px">เลขใบเสร็จ</th><th style="min-width:190px">VAT</th><th style="min-width:190px">WHT</th><th class="text-end" style="min-width:140px">ฐานค่าใช้จ่าย</th><th></th></tr></thead><tbody></tbody><tfoot><tr><th colspan="5" class="text-end">ยอดรวม</th><th class="text-end"><div id="petty-cash-total">0.00</div><small class="d-block text-secondary">VAT <span id="petty-cash-vat-total">0.00</span> · WHT <span id="petty-cash-wht-total">0.00</span></small><strong>จ่ายสุทธิ <span id="petty-cash-net-total">0.00</span></strong></th><th></th></tr></tfoot></table></div>
         </div></div>
-        <div class="mt-4 d-flex gap-2"><button class="btn btn-dark" type="submit">{{ $editing ? 'บันทึกการแก้ไข' : 'บันทึกฉบับร่าง' }}</button><a class="btn btn-outline-secondary" href="{{ route('finance.petty-cash.index') }}">ยกเลิก</a></div>
+        <div class="mt-4 d-flex gap-2"><button class="btn btn-app-primary" type="submit">{{ $editing ? 'บันทึกการแก้ไข' : 'บันทึกฉบับร่าง' }}</button><a class="btn btn-app-soft" href="{{ route('finance.petty-cash.index') }}"><i class="bx bx-arrow-back me-1" aria-hidden="true"></i>กลับหน้ารายการ</a></div>
     </form>
 </div>
 
@@ -50,7 +50,7 @@
     <td><input class="form-control" data-name="description" maxlength="500"></td><td><input class="form-control" data-name="receipt_reference" maxlength="100"></td>
     <td><select class="form-select" data-name="tax_code_id"><option value="">ไม่คิด VAT</option>@foreach(($taxCodeOptions ?? []) as $tax)@if(in_array($tax['kind'], ['VAT_IN', 'NONE_VAT'], true))<option value="{{ $tax['id'] }}" data-rate="{{ $tax['rate'] }}">{{ $tax['code'] }} · {{ $tax['name'] }} ({{ $tax['rate'] }}%)</option>@endif @endforeach</select></td>
     <td><select class="form-select" data-name="withholding_tax_code_id"><option value="">ไม่หัก WHT</option>@foreach(($taxCodeOptions ?? []) as $tax)@if($tax['kind'] === 'WHT')<option value="{{ $tax['id'] }}" data-rate="{{ $tax['rate'] }}">{{ $tax['code'] }} · {{ $tax['name'] }} ({{ $tax['rate'] }}%)</option>@endif @endforeach</select></td>
-    <td><input class="form-control text-end js-line-amount" data-name="amount" type="number" min="0.01" step="0.01" required></td><td class="text-end"><button class="btn btn-sm btn-outline-danger js-remove-line" type="button" aria-label="ลบรายการ"><i class="bx bx-trash" aria-hidden="true"></i></button></td>
+    <td><input class="form-control text-end js-line-amount" data-name="amount" type="number" min="0.01" step="0.01" required></td><td class="text-end"><button class="btn btn-sm btn-app-danger js-remove-line" type="button" aria-label="ลบรายการ"><i class="bx bx-trash" aria-hidden="true"></i></button></td>
 </tr></template>
 @endsection
 

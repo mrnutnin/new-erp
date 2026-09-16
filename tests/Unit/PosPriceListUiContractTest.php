@@ -18,7 +18,7 @@ final class PosPriceListUiContractTest extends TestCase
         self::assertStringContainsString('id="price-list-filter"', $index);
         self::assertStringContainsString('app-badge-success', $index);
         self::assertStringContainsString('app-badge-soft', $index);
-        self::assertStringContainsString('ย้อนกลับ', $form);
+        self::assertStringContainsString('กลับหน้ารายการ', $form);
         self::assertStringContainsString('text-danger', $form);
     }
 

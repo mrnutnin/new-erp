@@ -5,12 +5,12 @@ namespace App\Modules\Installer\Services;
 use App\Models\Branch;
 use App\Models\CompanySetting;
 use App\Models\Program;
-use App\Models\Role;
 use App\Models\User;
 use App\Models\Warehouse;
+use App\Modules\Accounting\Models\Account;
+use App\Modules\Accounting\Models\TaxCode;
 use App\Modules\Installer\Models\InstallationSession;
 use App\Modules\Platform\Models\MigrationImportBatch;
-use App\Modules\Accounting\Models\Account;
 use Database\Seeders\SystemDocumentSequenceSeeder;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
@@ -102,7 +102,12 @@ class InstallationValidationService
                 ->whereNull('event_code')
                 ->whereIn('key', ['SALES_AR', 'INVENTORY_DEFAULT', 'COGS_DEFAULT'])
                 ->where('is_active', true)
-                ->count() === 3;
+                ->count() === 3
+            && TaxCode::query()
+                ->where('code', 'VAT7-IN')
+                ->where('kind', 'VAT_IN')
+                ->where('is_active', true)
+                ->exists();
     }
 
     private function hasRequiredDocumentSequences(): bool

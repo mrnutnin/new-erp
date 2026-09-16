@@ -12,10 +12,11 @@ use App\Modules\Finance\Models\PaymentTerm;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 class SalesDocument extends Model
 {
-    use HasDocumentBranch;
+    use HasDocumentBranch, SoftDeletes;
 
     protected $fillable = ['warehouse_id', 'branch_id', 'document_type', 'document_number', 'source_invoice_id', 'party_id', 'payment_term_id', 'journal_entry_id', 'document_date', 'posting_date', 'due_date', 'price_includes_vat', 'tax_decimal_places', 'party_code', 'party_name', 'party_tax_id', 'party_branch_code', 'party_address', 'subtotal', 'discount_amount', 'tax_base', 'tax_amount', 'withholding_tax_code_id', 'withholding_rate', 'withholding_base', 'withholding_amount', 'total_amount', 'status', 'approved_by', 'approved_at', 'approval_reason', 'discount_approval_snapshot', 'posted_by', 'posted_at', 'voided_by', 'voided_at', 'void_reason', 'description', 'created_by', 'updated_by'];
 

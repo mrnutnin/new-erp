@@ -28,7 +28,15 @@ final class AssetMaintenanceScheduleController extends Controller
 
     public function data(Request $request): JsonResponse
     {
-        $query = AssetMaintenanceSchedule::query()->with(['asset:id,asset_number,name', 'responsible:id,name'])->where('branch_id', $this->branchId($request))->when($request->filled('active'), fn ($query) => $query->where('is_active', $request->boolean('active')))->latest('next_due_date')->latest('id');
+        $filters = $request->validate([
+            'date_from' => ['nullable', 'date'],
+            'date_to' => ['nullable', 'date', 'after_or_equal:date_from'],
+        ]);
+        $query = AssetMaintenanceSchedule::query()->with(['asset:id,asset_number,name', 'responsible:id,name'])->where('branch_id', $this->branchId($request))
+            ->when($request->filled('active'), fn ($query) => $query->where('is_active', $request->boolean('active')))
+            ->when($filters['date_from'] ?? null, fn ($query, $date) => $query->whereDate('next_due_date', '>=', $date))
+            ->when($filters['date_to'] ?? null, fn ($query, $date) => $query->whereDate('next_due_date', '<=', $date))
+            ->latest('next_due_date')->latest('id');
 
         return DataTables::eloquent($query)->addColumn('asset_label', fn (AssetMaintenanceSchedule $schedule) => $schedule->asset?->asset_number.' · '.$schedule->asset?->name)->addColumn('responsible_label', fn (AssetMaintenanceSchedule $schedule) => $schedule->responsible?->name ?? '-')->addColumn('next_due_date_label', fn (AssetMaintenanceSchedule $schedule) => $schedule->next_due_date?->format('d/m/Y') ?? '-')->addColumn('due_state', fn (AssetMaintenanceSchedule $schedule) => $schedule->next_due_date->isPast() ? 'OVERDUE' : ($schedule->next_due_date->lessThanOrEqualTo(today()->addDays(7)) ? 'DUE_SOON' : 'UPCOMING'))->addColumn('edit_url', fn (AssetMaintenanceSchedule $schedule) => route('asset.maintenance.schedules.edit', $schedule))->addColumn('complete_url', fn (AssetMaintenanceSchedule $schedule) => $schedule->is_active && $request->user()->hasPermission('asset.maintenance.complete') ? route('asset.maintenance.schedules.complete', $schedule) : null)->toJson();
     }

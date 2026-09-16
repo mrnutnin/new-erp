@@ -23,6 +23,33 @@ use Yajra\DataTables\Facades\DataTables;
 
 final class TransferController extends Controller
 {
+    private const STATUS_LABELS = [
+        'DRAFT' => 'ร่าง',
+        'DISPATCHED' => 'ส่งออกแล้ว',
+        'PARTIALLY_ACCEPTED' => 'รับบางส่วน',
+        'ACCEPTED' => 'รับครบแล้ว',
+        'REJECTED' => 'ปฏิเสธ',
+        'VOID' => 'ยกเลิก',
+    ];
+
+    private const STATUS_CLASSES = [
+        'DRAFT' => 'app-status-neutral',
+        'DISPATCHED' => 'app-status-info',
+        'PARTIALLY_ACCEPTED' => 'app-status-warning',
+        'ACCEPTED' => 'app-status-success',
+        'REJECTED' => 'app-status-danger',
+        'VOID' => 'app-status-danger',
+    ];
+
+    private const RECEIPT_STATUS_LABELS = [
+        'DRAFT' => 'ยังไม่ส่งออก',
+        'DISPATCHED' => 'รอรับเข้าปลายทาง',
+        'PARTIALLY_ACCEPTED' => 'รับเข้าบางส่วน',
+        'ACCEPTED' => 'รับเข้าครบแล้ว',
+        'REJECTED' => 'ปลายทางปฏิเสธ',
+        'VOID' => 'ยกเลิก',
+    ];
+
     public function index(Request $request): View
     {
         $direction = (string) ($request->route('direction') ?: 'all');
@@ -33,6 +60,8 @@ final class TransferController extends Controller
             'warehouse' => $request->attributes->get('selectedWarehouse'),
             'warehouses' => $this->warehouses($request),
             'branches' => $this->branches($request),
+            'transferStatusLabels' => self::STATUS_LABELS,
+            'transferStatusClasses' => self::STATUS_CLASSES,
         ]);
     }
 
@@ -41,7 +70,7 @@ final class TransferController extends Controller
         $warehouseId = (int) $request->attributes->get('selectedWarehouse')->id;
         $direction = (string) ($request->route('direction') ?: $request->query('direction', 'all'));
         $query = Transfer::query()
-            ->with(['sourceWarehouse:id,branch_id,name', 'sourceWarehouse.branch:id,code,name', 'destinationWarehouse:id,branch_id,name', 'destinationWarehouse.branch:id,code,name', 'events:id,transfer_id,event_type,base_quantity'])
+            ->with(['sourceWarehouse:id,branch_id,code,name', 'sourceWarehouse.branch:id,code,name', 'destinationWarehouse:id,branch_id,code,name', 'destinationWarehouse.branch:id,code,name', 'events:id,transfer_id,event_type,base_quantity'])
             ->withSum('lines as planned_base_quantity_total', 'planned_base_quantity')
             ->orderByDesc('document_date')
             ->orderByDesc('id');
@@ -62,25 +91,28 @@ final class TransferController extends Controller
         } else {
             $query->where(fn ($q) => $q->where('source_warehouse_id', $warehouseId)->orWhere('destination_warehouse_id', $warehouseId));
         }
-        $labels = ['DRAFT' => 'ร่าง', 'DISPATCHED' => 'ส่งออกแล้ว', 'PARTIALLY_ACCEPTED' => 'รับบางส่วน', 'ACCEPTED' => 'รับครบแล้ว', 'REJECTED' => 'ปฏิเสธ', 'VOID' => 'ยกเลิก'];
         $table = DataTables::eloquent($query)
             ->addColumn('source_label', fn (Transfer $r) => $this->warehouseLabel($r->sourceWarehouse))
             ->addColumn('destination_label', fn (Transfer $r) => $this->warehouseLabel($r->destinationWarehouse))
-            ->addColumn('status_label', fn (Transfer $r) => $labels[$r->status] ?? $r->status)
+            ->addColumn('status_label', fn (Transfer $r) => self::STATUS_LABELS[$r->status] ?? $r->status)
             ->addColumn('destination_receipt_status', fn (Transfer $r) => $this->receiptStatusLabel($r->status))
             ->addColumn('destination_receipt_summary', function (Transfer $r): string {
+                $dispatched = $r->events->where('event_type', 'DISPATCH')->sum('base_quantity');
                 $accepted = $r->events->where('event_type', 'ACCEPT')->sum('base_quantity');
                 $rejected = $r->events->where('event_type', 'REJECT')->sum('base_quantity');
-                $planned = (string) ($r->planned_base_quantity_total ?? '0');
 
-                return WmsDecimal::format($accepted).' / '.WmsDecimal::format($planned).' รับแล้ว · ปฏิเสธ '.WmsDecimal::format($rejected);
+                return 'ส่งออก '.WmsDecimal::format($dispatched).' · รับแล้ว '.WmsDecimal::format($accepted).' · ปฏิเสธ '.WmsDecimal::format($rejected);
             })
+            ->addColumn('destination_receipt_search', fn (Transfer $r) => $this->receiptStatusLabel($r->status).' '.$this->receiptSearchLabel($r))
             ->editColumn('document_date', fn (Transfer $r) => $r->document_date?->format((string) $settings->value('date_format')) ?: '-')
-            ->addColumn('can_dispatch', fn (Transfer $r) => $request->user()->hasPermission('wms.transfers.dispatch') && $r->status === 'DRAFT' && (int) $r->source_warehouse_id === $warehouseId)
-            ->addColumn('can_complete', fn (Transfer $r) => $request->user()->hasPermission('wms.transfers.complete') && in_array($r->status, ['DISPATCHED', 'PARTIALLY_ACCEPTED'], true) && (int) $r->destination_warehouse_id === $warehouseId)
-            ->addColumn('receive_url', fn (Transfer $r) => $request->user()->hasPermission('wms.transfers.complete') && in_array($r->status, ['DISPATCHED', 'PARTIALLY_ACCEPTED'], true) && (int) $r->destination_warehouse_id === $warehouseId ? route('wms.transfers.receive', $r) : null)
-            ->addColumn('void_url', fn (Transfer $r) => $request->user()->hasPermission('wms.transfers.void') && $r->status === 'REJECTED' && (int) $r->source_warehouse_id === $warehouseId ? route('wms.transfers.void', $r) : null)
-            ->addColumn('detail_url', fn (Transfer $r) => route('wms.transfers.show', $r));
+            ->addColumn('can_delete', fn (Transfer $r) => $request->user()->hasPermission('wms.transfers.delete') && $r->status === 'DRAFT' && (int) $r->source_warehouse_id === $warehouseId && $r->events->isEmpty())
+            ->addColumn('delete_url', fn (Transfer $r) => route('wms.transfers.destroy', $r))
+            ->addColumn('detail_url', fn (Transfer $r) => route('wms.transfers.show', $r))
+            ->filterColumn('document_date', fn ($query, $keyword) => $this->filterDocumentDate($query, $keyword, (string) $settings->value('date_format')))
+            ->filterColumn('source_label', fn ($query, $keyword) => $this->filterWarehouseLabel($query, 'sourceWarehouse', $keyword))
+            ->filterColumn('destination_label', fn ($query, $keyword) => $this->filterWarehouseLabel($query, 'destinationWarehouse', $keyword))
+            ->filterColumn('status_label', fn ($query, $keyword) => $this->filterStatusLabel($query, $keyword, self::STATUS_LABELS))
+            ->filterColumn('destination_receipt_search', fn ($query, $keyword) => $this->filterReceiptSearch($query, $keyword));
 
         return $table->toJson();
     }
@@ -91,11 +123,12 @@ final class TransferController extends Controller
         abort_unless((int) $transfer->source_warehouse_id === $warehouseId || (int) $transfer->destination_warehouse_id === $warehouseId, 404);
 
         $transfer->load([
-            'sourceWarehouse:id,name',
-            'destinationWarehouse:id,name',
+            'sourceWarehouse:id,code,name',
+            'destinationWarehouse:id,code,name',
             'lines:id,transfer_id,planned_base_quantity',
             'events:id,transfer_id,transfer_line_id,event_type,base_quantity,business_date,reason,created_by,created_at',
             'events.creator:id,name',
+            'events.line:id,line_number',
         ]);
 
         $receiptSummary = $this->receiptSummary($transfer);
@@ -105,6 +138,9 @@ final class TransferController extends Controller
             'lines' => $this->linePayloads($transfer, $settings),
             'receiptSummary' => $receiptSummary,
             'dateFormat' => (string) $settings->value('date_format'),
+            'transferStatusLabels' => self::STATUS_LABELS,
+            'transferStatusClasses' => self::STATUS_CLASSES,
+            'receiptStatusLabels' => self::RECEIPT_STATUS_LABELS,
         ]);
     }
 
@@ -117,7 +153,7 @@ final class TransferController extends Controller
         $transfer->delete();
         $audit->record('wms.transfer.deleted', $transfer, $before, [], $request->user(), $request);
 
-        return response()->json(['status' => true, 'msg' => 'ลบร่าง Transfer แล้ว', 'redirect' => route('wms.transfers.outgoing.index')]);
+        return response()->json(['status' => true, 'msg' => 'ลบร่างใบโอนสินค้าแล้ว', 'redirect' => route('wms.transfers.outgoing.index')]);
     }
 
     public function receive(Request $request, Transfer $transfer, GlobalSettings $settings): View
@@ -204,7 +240,7 @@ final class TransferController extends Controller
         $values = $request->validate(['reason' => ['required', 'string', 'max:1000'], 'business_date' => ['nullable', 'date_format:Y-m-d', 'before_or_equal:today']]);
         $service->dispatch($transfer, (int) $request->attributes->get('selectedWarehouse')->id, $request->user(), $values['reason'], $values['business_date'] ?? null);
 
-        return response()->json(['status' => true, 'msg' => 'ส่ง Transfer ออกจากคลังแล้ว']);
+        return response()->json(['status' => true, 'msg' => 'ส่งออกจากคลังแล้ว']);
     }
 
     public function complete(Request $request, Transfer $transfer, TransferMovementService $service): JsonResponse
@@ -222,7 +258,7 @@ final class TransferController extends Controller
         $method = $values['action'] === 'accept' ? 'accept' : 'reject';
         $service->{$method}($transfer, (int) $request->attributes->get('selectedWarehouse')->id, $request->user(), $values['quantities'], $values['command_key'], $values['reason'] ?? '', $values['business_date'] ?? null);
 
-        return response()->json(['status' => true, 'msg' => $method === 'accept' ? 'รับ Transfer แล้ว' : 'ปฏิเสธ Transfer แล้ว']);
+        return response()->json(['status' => true, 'msg' => $method === 'accept' ? 'รับโอนสินค้าแล้ว' : 'ปฏิเสธการรับสินค้าแล้ว']);
     }
 
     public function void(Request $request, Transfer $transfer, TransferMovementService $service): JsonResponse
@@ -230,7 +266,7 @@ final class TransferController extends Controller
         $values = $request->validate(['reason' => ['required', 'string', 'min:10', 'max:1000']]);
         $service->voidRejected($transfer, (int) $request->attributes->get('selectedWarehouse')->id, $request->user(), $values['reason']);
 
-        return response()->json(['status' => true, 'msg' => 'ยกเลิก Transfer ที่ถูกปฏิเสธแล้ว สามารถสร้างรายการใหม่ได้']);
+        return response()->json(['status' => true, 'msg' => 'ยกเลิกเอกสารที่ถูกปฏิเสธแล้ว สามารถสร้างรายการใหม่ได้']);
     }
 
     private function linePayloads(Transfer $transfer, GlobalSettings $settings)
@@ -302,6 +338,7 @@ final class TransferController extends Controller
     private function receiptSummary(Transfer $transfer): array
     {
         $sum = static fn ($events): BigDecimal => $events->reduce(static fn (BigDecimal $total, $event): BigDecimal => $total->plus((string) $event->base_quantity), BigDecimal::zero());
+        $dispatched = $sum($transfer->events->where('event_type', 'DISPATCH'));
         $accepted = $sum($transfer->events->where('event_type', 'ACCEPT'));
         $rejected = $sum($transfer->events->where('event_type', 'REJECT'));
         $planned = $transfer->lines->reduce(static fn (BigDecimal $total, $line): BigDecimal => $total->plus((string) $line->planned_base_quantity), BigDecimal::zero());
@@ -310,13 +347,97 @@ final class TransferController extends Controller
             $remaining = BigDecimal::zero();
         }
 
-        return collect(['planned' => $planned, 'accepted' => $accepted, 'rejected' => $rejected, 'remaining' => $remaining])
+        return collect(['planned' => $planned, 'dispatched' => $dispatched, 'accepted' => $accepted, 'rejected' => $rejected, 'remaining' => $remaining])
             ->map(fn (BigDecimal $value): string => WmsDecimal::format($value->__toString()))
             ->all();
     }
 
     private function receiptStatusLabel(string $status): string
     {
-        return ['DRAFT' => 'ยังไม่ส่งออก', 'DISPATCHED' => 'รอรับเข้าปลายทาง', 'PARTIALLY_ACCEPTED' => 'รับเข้าบางส่วน', 'ACCEPTED' => 'รับเข้าครบแล้ว', 'REJECTED' => 'ปลายทางปฏิเสธ', 'VOID' => 'ยกเลิก'][$status] ?? $status;
+        return self::RECEIPT_STATUS_LABELS[$status] ?? $status;
+    }
+
+    private function receiptSearchLabel(Transfer $transfer): string
+    {
+        $dispatched = $transfer->events->where('event_type', 'DISPATCH')->sum('base_quantity');
+        $accepted = $transfer->events->where('event_type', 'ACCEPT')->sum('base_quantity');
+        $rejected = $transfer->events->where('event_type', 'REJECT')->sum('base_quantity');
+
+        return 'ส่งออก '.WmsDecimal::format($dispatched).' รับแล้ว '.WmsDecimal::format($accepted).' ปฏิเสธ '.WmsDecimal::format($rejected);
+    }
+
+    private function filterDocumentDate($query, string $keyword, string $dateFormat): void
+    {
+        $mysqlFormat = match ($dateFormat) {
+            'Y-m-d' => '%Y-%m-%d',
+            'm/d/Y' => '%m/%d/%Y',
+            default => '%d/%m/%Y',
+        };
+
+        $query->whereRaw("DATE_FORMAT(document_date, '{$mysqlFormat}') LIKE ?", ['%'.trim($keyword).'%']);
+    }
+
+    private function filterWarehouseLabel($query, string $relation, string $keyword): void
+    {
+        $keyword = '%'.trim($keyword).'%';
+
+        $query->whereHas($relation, function ($warehouse) use ($keyword): void {
+            $warehouse->where(function ($match) use ($keyword): void {
+                $match->where('code', 'like', $keyword)
+                    ->orWhere('name', 'like', $keyword)
+                    ->orWhereHas('branch', fn ($branch) => $branch->where('code', 'like', $keyword)->orWhere('name', 'like', $keyword));
+            });
+        });
+    }
+
+    private function filterStatusLabel($query, string $keyword, array $labels): void
+    {
+        $keyword = trim($keyword);
+        $matches = $this->matchingStatuses($labels, $keyword);
+
+        $query->where(function ($match) use ($keyword, $matches): void {
+            $match->where('status', 'like', '%'.$keyword.'%');
+            if ($matches !== []) {
+                $match->orWhereIn('status', $matches);
+            }
+        });
+    }
+
+    private function filterReceiptSearch($query, string $keyword): void
+    {
+        $keyword = trim($keyword);
+        $matches = $this->matchingStatuses(self::RECEIPT_STATUS_LABELS, $keyword);
+        $number = str_replace(',', '', $keyword);
+        $isNumber = preg_match('/^\d+(?:\.\d+)?$/', $number) === 1;
+        $isStaticSummaryLabel = in_array($keyword, ['ส่ง', 'ส่งออก', 'รับ', 'รับแล้ว', 'ปฏิเสธ'], true);
+
+        $query->where(function ($match) use ($keyword, $matches, $number, $isNumber, $isStaticSummaryLabel): void {
+            if ($isStaticSummaryLabel) {
+                // Every rendered summary contains this label, so preserve that visible-search behaviour.
+                $match->whereRaw('1 = 1');
+
+                return;
+            }
+            if ($matches !== []) {
+                $match->orWhereIn('status', $matches);
+            }
+            if ($isNumber) {
+                $match->orWhereHas('events', fn ($events) => $events->whereRaw('CAST(base_quantity AS CHAR) LIKE ?', ['%'.$number.'%']))
+                    ->orWhereHas('lines', fn ($lines) => $lines->whereRaw('CAST(planned_base_quantity AS CHAR) LIKE ?', ['%'.$number.'%']));
+            }
+            if ($matches === [] && ! $isNumber) {
+                $match->whereRaw('1 = 0');
+            }
+        });
+    }
+
+    private function matchingStatuses(array $labels, string $keyword): array
+    {
+        $needle = mb_strtolower($keyword);
+
+        return collect($labels)
+            ->filter(fn (string $label, string $status): bool => str_contains(mb_strtolower($status), $needle) || mb_stripos($label, $keyword) !== false)
+            ->keys()
+            ->all();
     }
 }

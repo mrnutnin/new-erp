@@ -52,8 +52,7 @@ final class SalesReturnController extends Controller
             ->addColumn('status_label', fn (SalesReturn $x) => ['DRAFT' => 'ร่าง', 'POSTED' => 'ลงบัญชีแล้ว', 'VOID' => 'ยกเลิก'][$x->status] ?? $x->status)
             ->addColumn('show_url', fn (SalesReturn $x) => route('pos.sales-returns.show', $x))
             ->addColumn('pdf_url', fn (SalesReturn $x) => $request->user()?->can('pos.sales-returns.print') ? route('pos.sales-returns.pdf', $x) : null)
-            ->addColumn('post_url', fn (SalesReturn $x) => $x->status === 'DRAFT' && $x->sale?->document_type !== 'HS' && $request->user()?->hasPermission('pos.sales-returns.post') ? route('pos.sales-returns.post', $x) : null)
-            ->addColumn('cancel_url', fn (SalesReturn $x) => $x->status === 'DRAFT' && $request->user()?->hasPermission('pos.sales-returns.cancel') ? route('pos.sales-returns.cancel', $x) : null)
+            ->addColumn('delete_url', fn (SalesReturn $x) => $x->status === 'DRAFT' && $request->user()?->hasPermission('pos.sales-returns.delete') ? route('pos.sales-returns.destroy', $x) : null)
             ->toJson();
     }
 
@@ -195,19 +194,32 @@ final class SalesReturnController extends Controller
         return response()->json(['status' => true, 'msg' => "ยกเลิก {$salesReturn->document_number} แล้ว"]);
     }
 
+    public function destroy(Request $request, SalesReturn $salesReturn, AuditLogger $audit): JsonResponse
+    {
+        $this->ensureCurrentBranch($request, $salesReturn);
+        DB::transaction(function () use ($request, $salesReturn, $audit): void {
+            $document = SalesReturn::query()->lockForUpdate()->findOrFail($salesReturn->id);
+            abort_unless($document->status === 'DRAFT', 422, 'ลบได้เฉพาะใบรับคืน/ใบลดหนี้สถานะร่าง');
+            $before = $document->toArray();
+            $document->delete();
+            $audit->record('pos.sales-return.deleted', $document, $before, [], $request->user(), $request);
+        });
+
+        return response()->json(['status' => true, 'msg' => 'ลบร่างใบรับคืน/ใบลดหนี้แล้ว', 'redirect' => route('pos.sales-returns.index')]);
+    }
+
     public function pdf(Request $request, SalesReturn $salesReturn, DocumentPdfRenderer $renderer, GlobalSettings $settings)
     {
         $this->ensureCurrentBranch($request, $salesReturn);
         $salesReturn->load(['sale', 'lines.item', 'lines.uom']);
-        $history = AuditLog::query()->with('user:id,name')->where('subject_type', $salesReturn->getMorphClass())->where('subject_id', $salesReturn->id)->latest('created_at')->latest('id')->get();
         $logoPath = $settings->value('logo_path');
         $logo = $logoPath && Storage::disk('public')->exists($logoPath) ? Storage::disk('public')->path($logoPath) : null;
         $bytes = $renderer->renderView('Pos::pdf.sales-return', [
             'returnDocument' => $salesReturn,
-            'history' => $history,
             'logo' => $logo,
             'companyName' => $settings->value('company_name') ?: 'บริษัท',
             'companyAddress' => $settings->value('company_address'),
+            'companyTaxId' => $settings->value('tax_id'),
             'dateFormat' => (string) ($settings->value('date_format') ?: 'd/m/Y'),
             'decimalPlaces' => (int) ($settings->value('tax_decimal_places') ?? 2),
         ]);

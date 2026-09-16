@@ -50,8 +50,8 @@
                             </div>
 
                             <div class="d-flex justify-content-between align-items-center mt-4">
-                                <a class="btn btn-outline-dark" href="{{ route('settings.warehouses.index') }}"><i class="bx bx-arrow-back me-1" aria-hidden="true"></i>ยกเลิก</a>
-                                <button class="btn btn-dark" type="submit" data-busy-text="กำลังบันทึก..."><i class="bx bx-save me-1" aria-hidden="true"></i>บันทึกคลัง</button>
+                                <a class="btn btn-app-soft" href="{{ route('settings.warehouses.index') }}"><i class="bx bx-arrow-back me-1" aria-hidden="true"></i>กลับหน้ารายการ</a>
+                                <button class="btn btn-app-primary" type="submit" data-busy-text="กำลังบันทึก..."><i class="bx bx-save me-1" aria-hidden="true"></i>บันทึกคลัง</button>
                             </div>
                         </form>
                     </div>

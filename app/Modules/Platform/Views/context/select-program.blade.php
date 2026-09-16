@@ -13,6 +13,7 @@
         @if ($programs->isEmpty())
             <div class="alert alert-light border">บัญชีนี้ยังไม่มีสิทธิ์เข้าใช้งานโปรแกรม</div>
         @else
+            @php($programIcons = ['dashboard' => 'bx-bar-chart-alt-2', 'settings' => 'bx-cog', 'purchasing' => 'bx-cart-alt', 'wms' => 'bx-package', 'pos' => 'bx-store-alt', 'finance' => 'bx-wallet', 'accounting' => 'bx-calculator', 'asset' => 'bx-building-house'])
             <div class="row g-3">
                 @foreach ($programs as $program)
                     <div class="col-12 col-md-6 col-xl-3">
@@ -20,8 +21,7 @@
                             @csrf
                             <input name="program_id" type="hidden" value="{{ $program->id }}">
                             <button class="program-card card h-100 w-100 text-start border-0 shadow-sm" type="submit" data-busy-text="กำลังเลือก...">
-                                @php($programCode = $program->code === 'purchasing' ? 'PU' : ($program->code === 'wms' ? 'WM' : strtoupper(substr($program->code, 0, 2))))
-                                <span class="program-code">{{ $programCode }}</span>
+                                <span class="program-code"><i class="bx {{ $programIcons[$program->code] ?? 'bx-grid-alt' }}" aria-hidden="true"></i></span>
                                 <span class="h5 mt-4 mb-2">{{ $program->name }}</span>
                                 <span class="text-secondary">{{ $program->description }}</span>
                             </button>

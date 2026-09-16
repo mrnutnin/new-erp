@@ -11,7 +11,7 @@
                 <p class="text-secondary mb-0">ข้อมูลผู้ขายและเงื่อนไขการชำระเงินระดับบริษัท</p>
             </div>
             @if (auth()->user()->hasPermission($moduleRoutePrefix.'.suppliers.create'))
-                <a class="btn btn-dark" href="{{ route($moduleRoutePrefix.'.suppliers.create') }}">
+                <a class="btn btn-app-primary" href="{{ route($moduleRoutePrefix.'.suppliers.create') }}">
                     <i class="bx bx-plus me-1" aria-hidden="true"></i>เพิ่ม Supplier
                 </a>
             @endif
@@ -83,8 +83,8 @@
                     render: function (value, type, row) {
                         if (type !== 'display') return '';
                         var actions = [];
-                        if (row.edit_url) actions.push('<a class="btn btn-sm btn-outline-dark" href="' + text.display(row.edit_url) + '">แก้ไข</a>');
-                        if (row.delete_url) actions.push('<button class="btn btn-sm btn-outline-danger js-delete-supplier" data-url="' + text.display(row.delete_url) + '" type="button">ลบ</button>');
+                        if (row.edit_url) actions.push('<a class="btn btn-sm btn-app-soft" href="' + text.display(row.edit_url) + '" title="แก้ไข" aria-label="แก้ไข"><i class="bx bx-edit" aria-hidden="true"></i></a>');
+                        if (row.delete_url) actions.push('<button class="btn btn-sm btn-app-danger js-delete-supplier" data-url="' + text.display(row.delete_url) + '" type="button" title="ลบ" aria-label="ลบ"><i class="bx bx-trash" aria-hidden="true"></i></button>');
                         return actions.join(' ');
                     }
                 });

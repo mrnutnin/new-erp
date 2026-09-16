@@ -29,7 +29,9 @@ final class PurchasingPrPoReceiptBoundaryAuditTest extends TestCase
         $this->assertStringContainsString("route(\$this->moduleRoutePrefix().'.purchase-orders.create', ['purchase_requisition_id' => \$r->id])", $controller);
 
         $index = file_get_contents(base_path('app/Modules/Purchasing/Views/purchase-requisitions/index.blade.php'));
-        $this->assertStringContainsString('href="\'+x.display(r.create_po_url)', $index);
+        $show = file_get_contents(base_path('app/Modules/Purchasing/Views/purchase-requisitions/show.blade.php'));
+        $this->assertStringNotContainsString('create_po_url', $index);
+        $this->assertStringContainsString("route('purchasing.purchase-orders.create'", $show);
         $this->assertStringNotContainsString('pr-po-supplier', $index);
 
         $poController = file_get_contents(base_path('app/Modules/Purchasing/Controllers/PurchaseOrderController.php'));
@@ -243,7 +245,7 @@ final class PurchasingPrPoReceiptBoundaryAuditTest extends TestCase
             $path = base_path('app/Modules/Purchasing/Views/'.$view.'.blade.php');
             $this->assertFileExists($path, $view.' view seam is missing');
             $source = file_get_contents($path);
-            $this->assertStringContainsString("@extends(\$moduleRoutePrefix === 'purchasing'", $source);
+            $this->assertStringContainsString('Purchasing::layout', $source);
         }
     }
 
@@ -263,7 +265,7 @@ final class PurchasingPrPoReceiptBoundaryAuditTest extends TestCase
             'purchase-documents/index', 'purchase-documents/form', 'purchase-documents/show',
         ] as $view) {
             $canonical = file_get_contents(base_path('app/Modules/Purchasing/Views/'.$view.'.blade.php'));
-            $this->assertStringContainsString("@extends(\$moduleRoutePrefix === 'purchasing'", $canonical);
+            $this->assertStringContainsString('Purchasing::layout', $canonical);
             $this->assertFileDoesNotExist(base_path('app/Modules/Wms/Views/'.$view.'.blade.php'));
         }
     }
@@ -272,8 +274,8 @@ final class PurchasingPrPoReceiptBoundaryAuditTest extends TestCase
     {
         $show = file_get_contents(base_path('app/Modules/Purchasing/Views/purchase-orders/show.blade.php'));
 
-        $this->assertStringContainsString("route(\$moduleRoutePrefix.'.purchase-orders.pdf'", $show);
-        $this->assertStringContainsString("route(\$moduleRoutePrefix.'.purchase-orders.index'", $show);
+        $this->assertStringContainsString("route('purchasing.purchase-orders.pdf'", $show);
+        $this->assertStringContainsString("route('purchasing.purchase-orders.index'", $show);
         $this->assertStringNotContainsString("route('wms.purchase-orders.pdf'", $show);
         $this->assertStringNotContainsString("route('wms.purchase-orders.index'", $show);
     }
@@ -282,7 +284,7 @@ final class PurchasingPrPoReceiptBoundaryAuditTest extends TestCase
     {
         $index = file_get_contents(base_path('app/Modules/Purchasing/Views/purchase-requisitions/index.blade.php'));
 
-        $this->assertStringContainsString("route(\$moduleRoutePrefix.'.purchase-requisitions.supplier-options'", $index);
+        $this->assertStringContainsString("route('purchasing.purchase-requisitions.supplier-options'", $index);
         $this->assertStringNotContainsString("route('wms.purchase-requisitions.supplier-options'", $index);
     }
 
@@ -290,7 +292,7 @@ final class PurchasingPrPoReceiptBoundaryAuditTest extends TestCase
     {
         $index = file_get_contents(base_path('app/Modules/Purchasing/Views/purchase-orders/index.blade.php'));
 
-        $this->assertStringContainsString("route(\$moduleRoutePrefix.'.purchase-documents.supplier-options'", $index);
+        $this->assertStringContainsString("route('purchasing.purchase-documents.supplier-options'", $index);
         $this->assertStringNotContainsString("route('wms.purchase-documents.supplier-options'", $index);
     }
 

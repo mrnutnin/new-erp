@@ -7,7 +7,7 @@
         <div class="mb-4">
             <p class="eyebrow mb-2">SETTINGS / BRANCHES</p>
             <h1 class="h3 mb-2">{{ $branch->exists ? 'แก้ไขสาขา' : 'เพิ่มสาขา' }}</h1>
-            <p class="text-secondary mb-0">กำหนดรหัส ชื่อ และสถานะของสาขา</p>
+            <p class="text-secondary mb-0">กำหนดข้อมูลสาขา และข้อมูลผู้ออกใบกำกับภาษีของสาขานี้</p>
         </div>
 
         <div class="row g-4">
@@ -29,6 +29,18 @@
                                     <input class="form-control" id="name" name="name" value="{{ old('name', $branch->name) }}" required>
                                     <div class="invalid-feedback" data-error-for="name"></div>
                                 </div>
+                                <div class="col-12 col-md-4">
+                                    <label class="form-label" for="tax_branch_code">รหัสสาขาภาษี</label>
+                                    <input class="form-control" id="tax_branch_code" name="tax_branch_code" value="{{ old('tax_branch_code', $branch->tax_branch_code) }}" inputmode="numeric" maxlength="5" placeholder="เช่น 00000">
+                                    <div class="form-text">ใช้ 00000 สำหรับสำนักงานใหญ่</div>
+                                    <div class="invalid-feedback" data-error-for="tax_branch_code"></div>
+                                </div>
+                                <div class="col-12">
+                                    <label class="form-label" for="tax_address">ที่อยู่สาขาบนใบกำกับภาษี</label>
+                                    <textarea class="form-control" id="tax_address" name="tax_address" rows="3" maxlength="2000">{{ old('tax_address', $branch->tax_address) }}</textarea>
+                                    <div class="form-text">HS/IV จะใช้ที่อยู่และรหัสสาขานี้เมื่อออกใบเสร็จรับเงิน/ใบกำกับภาษี</div>
+                                    <div class="invalid-feedback" data-error-for="tax_address"></div>
+                                </div>
                                 <div class="col-12">
                                     <input type="hidden" name="is_active" value="0">
                                     <div class="form-check form-switch">
@@ -41,8 +53,8 @@
                             </div>
 
                             <div class="d-flex justify-content-between align-items-center mt-4">
-                                <a class="btn btn-outline-dark" href="{{ route('settings.branches.index') }}"><i class="bx bx-arrow-back me-1" aria-hidden="true"></i>ยกเลิก</a>
-                                <button class="btn btn-dark" type="submit" data-busy-text="กำลังบันทึก..."><i class="bx bx-save me-1" aria-hidden="true"></i>บันทึกสาขา</button>
+                                <a class="btn btn-app-soft" href="{{ route('settings.branches.index') }}"><i class="bx bx-arrow-back me-1" aria-hidden="true"></i>กลับหน้ารายการ</a>
+                                <button class="btn btn-app-primary" type="submit" data-busy-text="กำลังบันทึก..."><i class="bx bx-save me-1" aria-hidden="true"></i>บันทึกสาขา</button>
                             </div>
                         </form>
                     </div>

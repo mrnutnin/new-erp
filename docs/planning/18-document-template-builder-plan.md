@@ -1,5 +1,7 @@
 # Document Template Builder Plan
 
+> Retired (2026-09-15): ยกเลิกการใช้งาน Document Template Builder แล้ว ระบบเอกสารกลับไปใช้ PDF template มาตรฐานของแต่ละ module โดยไม่มีหน้า Settings, route, permission หรือ custom-template runtime integration เอกสารส่วนที่เหลือด้านล่างเก็บไว้เป็นประวัติการออกแบบเท่านั้น
+
 ## Objective
 
 ให้แต่ละบริษัทกำหนดรูปแบบเอกสารของตนเองได้ โดยรองรับข้อมูลบริษัท, ลูกค้า/Supplier, รายการสินค้า, ยอดรวม, ภาษี และลายเซ็น พร้อม Preview และ PDF ที่ใช้ renderer เดียวกัน

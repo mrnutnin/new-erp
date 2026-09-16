@@ -1,5 +1,7 @@
 # Purchasing document print/PDF contract (MVP preparation)
 
+> เอกสารนี้เก็บรายละเอียด Purchasing เดิมไว้เป็นประวัติ การสร้างหรือแก้ PDF ใหม่ให้ใช้ [`PDF_STANDARD.md`](../../PDF_STANDARD.md) เป็นมาตรฐานหลัก หากข้อความขัดกันให้ยึดมาตรฐานหลัก
+
 สถานะ: shared renderer/profile foundation พร้อมแล้ว ยังไม่เปิด document-specific print route
 
 ## ขอบเขตเอกสาร

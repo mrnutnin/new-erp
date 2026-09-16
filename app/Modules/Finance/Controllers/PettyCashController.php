@@ -50,6 +50,8 @@ class PettyCashController extends Controller
             ->where('warehouse_id', $request->attributes->get('selectedWarehouse')->id)
             ->when($request->filled('status'), fn (Builder $query) => $query->where('status', $request->string('status')))
             ->when($request->filled('petty_cash_fund_id'), fn (Builder $query) => $query->where('petty_cash_fund_id', $request->integer('petty_cash_fund_id')))
+            ->when($request->filled('date_from'), fn (Builder $query) => $query->whereDate('document_date', '>=', $request->string('date_from')))
+            ->when($request->filled('date_to'), fn (Builder $query) => $query->whereDate('document_date', '<=', $request->string('date_to')))
             ->orderByDesc('document_date')
             ->orderByDesc('id');
         $table = DataTables::eloquent($query)
@@ -59,6 +61,9 @@ class PettyCashController extends Controller
             ->addColumn('show_url', fn (PettyCashVoucher $voucher) => route('finance.petty-cash.show', $voucher));
         if ($request->user()->hasPermission('finance.petty-cash.update')) {
             $table->addColumn('edit_url', fn (PettyCashVoucher $voucher) => $voucher->status === 'DRAFT' ? route('finance.petty-cash.edit', $voucher) : null);
+        }
+        if ($request->user()->hasPermission('finance.petty-cash.delete')) {
+            $table->addColumn('delete_url', fn (PettyCashVoucher $voucher) => $voucher->status === 'DRAFT' ? route('finance.petty-cash.destroy', $voucher) : null);
         }
         foreach (['submit', 'approve', 'void', 'post', 'reverse'] as $action) {
             if ($request->user()->hasPermission("finance.petty-cash.{$action}")) {
@@ -104,7 +109,7 @@ class PettyCashController extends Controller
         return $this->action($request, $voucher, $service, 'approve');
     }
     public function reject(PettyCashActionRequest $request, PettyCashVoucher $voucher, PettyCashVoucherService $service): JsonResponse { $this->scopeVoucher($request, $voucher); $result = $service->reject($voucher, $request->attributes->get('selectedWarehouse'), (string) $request->validated()['reason'], $request->user(), $request); return response()->json(['status' => true, 'msg' => 'ไม่อนุมัติใบสำคัญแล้ว', 'data' => $result]); }
-    public function destroy(Request $request, PettyCashVoucher $voucher, PettyCashVoucherService $service): JsonResponse { $this->scopeVoucher($request, $voucher); $service->deleteDraft($voucher, $request->attributes->get('selectedWarehouse'), $request->user(), $request); return response()->json(['status' => true, 'msg' => 'ลบเอกสาร Draft แล้ว', 'redirect' => route('finance.petty-cash.index')]); }
+    public function destroy(Request $request, PettyCashVoucher $voucher, PettyCashVoucherService $service): JsonResponse { $this->scopeVoucher($request, $voucher); $service->deleteDraft($voucher, $request->attributes->get('selectedWarehouse'), $request->user(), $request); return response()->json(['status' => true, 'msg' => 'ลบร่างเอกสารแล้ว', 'redirect' => route('finance.petty-cash.index')]); }
 
     public function void(PettyCashActionRequest $request, PettyCashVoucher $voucher, PettyCashVoucherService $service): JsonResponse
     {

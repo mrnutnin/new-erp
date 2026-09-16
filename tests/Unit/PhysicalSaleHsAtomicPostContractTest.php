@@ -21,7 +21,7 @@ final class PhysicalSaleHsAtomicPostContractTest extends TestCase
         $root = dirname(__DIR__, 2);
         $controller = file_get_contents($root.'/app/Modules/Pos/Controllers/PhysicalSaleController.php');
 
-        self::assertStringContainsString('DB::transaction(function () use ($request, $physicalSale, $posting, $warehouse)', $controller);
+        self::assertStringContainsString('DB::transaction(function () use ($request, $physicalSale, $posting, $warehouse, $settings)', $controller);
         self::assertStringContainsString("\$sale = \$posting->post(\$physicalSale, \$request->validated('posting_date'), \$warehouse, \$request->user(), \$request, \$request->validated('tenders', []));", $controller);
         self::assertStringNotContainsString('PhysicalSaleReceiptController', $controller);
         self::assertStringContainsString('}, 3);', $controller);

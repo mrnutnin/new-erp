@@ -25,7 +25,7 @@
                 <div class="row g-3 align-items-end">
                     <div class="col-md-3"><label class="form-label" for="journal-date-from">วันที่เริ่มต้น</label><input class="form-control" id="journal-date-from" type="date"></div>
                     <div class="col-md-3"><label class="form-label" for="journal-date-to">วันที่สิ้นสุด</label><input class="form-control" id="journal-date-to" type="date"></div>
-                    <div class="col-md-3"><label class="form-label" for="journal-status">สถานะ</label><select class="form-select" id="journal-status"><option value="">ทุกสถานะ</option><option value="DRAFT">Draft</option><option value="VALIDATED" @selected(request('status') === 'VALIDATED')>รออนุมัติ</option><option value="POSTED">ลงบัญชีแล้ว</option><option value="REVERSED" @selected(request('status') === 'REVERSED')>กลับรายการแล้ว</option></select></div>
+                    <div class="col-md-3"><label class="form-label" for="journal-status">สถานะ</label><select class="form-select" id="journal-status"><option value="">ทุกสถานะ</option><option value="DRAFT">ร่าง</option><option value="VALIDATED" @selected(request('status') === 'VALIDATED')>รออนุมัติ</option><option value="POSTED">ลงบัญชีแล้ว</option><option value="REVERSED" @selected(request('status') === 'REVERSED')>กลับรายการแล้ว</option></select></div>
                     <div class="col-md-3"><label class="form-label" for="journal-branch">สาขา</label><select class="form-select" id="journal-branch"><option value="">สาขาปัจจุบัน</option><option value="all">ทุกสาขาที่มีสิทธิ์</option>@foreach($branches as $branch)<option value="{{ $branch->id }}">{{ $branch->code }} · {{ $branch->name }}</option>@endforeach</select></div>
                     <div class="col-md-3"><button class="btn btn-dark w-100" id="apply-journal-filters" type="button"><i class="bx bx-filter-alt me-1" aria-hidden="true"></i>กรองรายการ</button></div>
                 </div>
@@ -62,8 +62,8 @@
         $(function () {
             var $table = $('#journal-entries-table');
             var text = $.fn.dataTable.render.text();
-            var statusLabels = { DRAFT: 'Draft', VALIDATED: 'รออนุมัติ', POSTED: 'ลงบัญชีแล้ว', REVERSED: 'กลับรายการแล้ว' };
-            var statusClasses = { DRAFT: 'text-bg-secondary', VALIDATED: 'text-bg-warning', POSTED: 'text-bg-success', REVERSED: 'text-bg-danger' };
+            var statusLabels = { DRAFT: 'ร่าง', VALIDATED: 'รออนุมัติ', POSTED: 'ลงบัญชีแล้ว', REVERSED: 'กลับรายการแล้ว' };
+            var statusClasses = { DRAFT: 'app-status-neutral', VALIDATED: 'app-status-warning', POSTED: 'app-status-success', REVERSED: 'app-status-danger' };
 
             $table.DataTable($.extend(true, {}, window.erpDataTableDefaults, {
                 ajax: { url: $table.data('url'), data: function (data) { data.book_type = @json($selectedBook); data.date_from = $('#journal-date-from').val(); data.date_to = $('#journal-date-to').val(); data.status = $('#journal-status').val(); data.branch_id = $('#journal-branch').val(); } },
@@ -86,9 +86,15 @@
                     {
                         data: null, orderable: false, searchable: false, className: 'text-end',
                         render: function (value, type, row) {
-                            var actions = ['<a class="btn btn-sm btn-outline-dark" href="' + text.display(row.show_url) + '"><i class="bx bx-show me-1" aria-hidden="true"></i>ดู</a>'];
+                            var actions = ['<a class="btn btn-sm btn-app-soft" href="' + text.display(row.show_url) + '" title="ดูรายละเอียด" aria-label="ดูรายละเอียด"><i class="bx bx-file-find" aria-hidden="true"></i></a>'];
                             if (row.edit_url) {
-                                actions.push('<a class="btn btn-sm btn-outline-dark" href="' + text.display(row.edit_url) + '"><i class="bx bx-edit me-1" aria-hidden="true"></i>แก้ไข</a>');
+                                actions.push('<a class="btn btn-sm btn-app-soft" href="' + text.display(row.edit_url) + '" title="แก้ไข" aria-label="แก้ไข"><i class="bx bx-edit" aria-hidden="true"></i></a>');
+                            }
+                            if (row.print_url) {
+                                actions.push('<a class="btn btn-sm btn-app-soft" target="_blank" href="' + text.display(row.print_url) + '" title="พิมพ์" aria-label="พิมพ์"><i class="bx bx-printer" aria-hidden="true"></i></a>');
+                            }
+                            if (row.delete_url) {
+                                actions.push('<button class="btn btn-sm btn-app-danger js-delete-journal" type="button" data-url="' + text.display(row.delete_url) + '" title="ลบร่าง" aria-label="ลบร่าง"><i class="bx bx-trash" aria-hidden="true"></i></button>');
                             }
                             return actions.join(' ');
                         }
@@ -97,6 +103,14 @@
             }));
             $('#apply-journal-filters').on('click', function () { $table.DataTable().ajax.reload(); });
             $('#reset-journal-filters').on('click', function () { $('#journal-date-from,#journal-date-to,#journal-status,#journal-branch').val(''); $table.DataTable().ajax.reload(); });
+            window.erpAjaxDelete({
+                button: '.js-delete-journal',
+                reload: '#journal-entries-table',
+                title: 'ลบร่างรายการบัญชี?',
+                text: 'รายการบัญชีร่างจะถูกลบและไม่สามารถกู้คืนได้',
+                confirmButtonText: 'ลบร่าง',
+                cancelButtonText: 'กลับ'
+            });
         });
     </script>
 @endpush

@@ -52,26 +52,17 @@ class PaymentVoucherController extends Controller
             ->addColumn('party_label', fn (PaymentVoucher $voucher) => $voucher->party_code ? $voucher->party_code.' · '.$voucher->party_name : '—')
             ->addColumn('bank_label', fn (PaymentVoucher $voucher) => $voucher->bank_code ? $voucher->bank_code.' · '.$voucher->bank_name : '—');
 
-        if ($request->user()->hasPermission('finance.payment-vouchers.submit')) {
-            $dataTable->addColumn('submit_url', fn (PaymentVoucher $voucher) => $voucher->status === 'DRAFT' ? route('finance.payment-vouchers.submit', $voucher) : null);
-        }
-        if ($request->user()->hasPermission('finance.payment-vouchers.approve')) {
-            $dataTable->addColumn('approve_url', fn (PaymentVoucher $voucher) => $voucher->status === 'SUBMITTED' ? route('finance.payment-vouchers.approve', $voucher) : null);
-        }
-        if ($request->user()->hasPermission('finance.payment-vouchers.void')) {
-            $dataTable->addColumn('void_url', fn (PaymentVoucher $voucher) => in_array($voucher->status, ['DRAFT', 'SUBMITTED', 'APPROVED'], true) ? route('finance.payment-vouchers.void', $voucher) : null);
-        }
-        if ($request->user()->hasPermission('finance.payment-vouchers.settle')) {
-            $dataTable->addColumn('settle_url', fn (PaymentVoucher $voucher) => $voucher->status === 'APPROVED' && ! $voucher->settlement_id ? route('finance.payment-vouchers.settle', $voucher) : null);
-        }
         $dataTable->addColumn('show_url', fn (PaymentVoucher $voucher) => route('finance.payment-vouchers.show', $voucher));
+        if ($request->user()->hasPermission('finance.payment-vouchers.delete')) {
+            $dataTable->addColumn('delete_url', fn (PaymentVoucher $voucher) => $voucher->status === 'DRAFT' && ! $voucher->commission_request_exists ? route('finance.payment-vouchers.destroy', $voucher) : null);
+        }
 
         return $dataTable->toJson();
     }
 
     public function show(Request $request, PaymentVoucher $voucher, GlobalSettings $settings): View
     {
-        $voucher = PaymentVoucher::query()->withTrashed()->with(['party', 'bankAccount', 'lines.openItem', 'settlement'])->findOrFail($voucher->id);
+        $voucher = PaymentVoucher::query()->withTrashed()->with(['party', 'bankAccount', 'lines.openItem', 'settlement'])->withExists('commissionRequest')->findOrFail($voucher->id);
         $this->scopeVoucher($request, $voucher);
         $history = AuditLog::query()->with('user')->where('subject_type', $voucher->getMorphClass())->where('subject_id', $voucher->id)->latest('created_at')->latest('id')->get();
 
@@ -79,7 +70,30 @@ class PaymentVoucherController extends Controller
             'voucher' => $voucher,
             'history' => $history,
             'dateFormat' => (string) $settings->value('date_format'),
+            'actions' => [
+                'submit' => $voucher->status === 'DRAFT' && $request->user()->hasPermission('finance.payment-vouchers.submit'),
+                'approve' => $voucher->status === 'SUBMITTED' && $request->user()->hasPermission('finance.payment-vouchers.approve'),
+                'settle' => $voucher->status === 'APPROVED' && ! $voucher->settlement_id && $request->user()->hasPermission('finance.payment-vouchers.settle'),
+                'void' => in_array($voucher->status, ['DRAFT', 'SUBMITTED', 'APPROVED'], true) && $request->user()->hasPermission('finance.payment-vouchers.void'),
+                'delete' => $voucher->status === 'DRAFT' && ! $voucher->commission_request_exists && $request->user()->hasPermission('finance.payment-vouchers.delete'),
+            ],
         ]);
+    }
+
+    public function destroy(Request $request, PaymentVoucher $voucher, AuditLogger $audit): JsonResponse
+    {
+        $this->scopeVoucher($request, $voucher);
+        DB::transaction(function () use ($request, $voucher, $audit) {
+            $locked = PaymentVoucher::query()->lockForUpdate()->findOrFail($voucher->id);
+            abort_unless($locked->status === 'DRAFT', 422, 'ลบได้เฉพาะเอกสารร่าง');
+            abort_if($locked->commissionRequest()->exists(), 422, 'ใบสำคัญจ่ายนี้สร้างจากชุดจ่ายคอมมิชชั่น จึงต้องจัดการจากเอกสารต้นทาง');
+            $audit->record('finance.payment_voucher.deleted', $locked, $locked->only(['document_number', 'voucher_type', 'status']), [], $request->user(), $request);
+            $locked->delete();
+        });
+
+        $route = $voucher->voucher_type === 'PRE_PAYMENT' ? 'finance.pre-payment-vouchers.index' : 'finance.payment-vouchers.index';
+
+        return response()->json(['status' => true, 'msg' => 'ลบร่างเอกสารแล้ว', 'redirect' => route($route)]);
     }
 
     public function create(Request $request): View
@@ -260,7 +274,7 @@ class PaymentVoucherController extends Controller
 
     private function query(Request $request): Builder
     {
-        return PaymentVoucher::query()->select('finance_payment_vouchers.*', 'parties.code as party_code', 'parties.name as party_name', 'bank_accounts.code as bank_code', 'bank_accounts.name as bank_name')
+        return PaymentVoucher::query()->select('finance_payment_vouchers.*', 'parties.code as party_code', 'parties.name as party_name', 'bank_accounts.code as bank_code', 'bank_accounts.name as bank_name')->withExists('commissionRequest')
             ->leftJoin('parties', 'parties.id', '=', 'finance_payment_vouchers.party_id')
             ->leftJoin('party_roles', function ($join) {
                 $join->on('party_roles.party_id', '=', 'parties.id')->where('party_roles.role', 'SUPPLIER')->where('party_roles.is_active', true);

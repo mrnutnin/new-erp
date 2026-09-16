@@ -78,6 +78,9 @@ class SettlementController extends Controller
                 ? route('finance.settlements.advance-deposit', $settlement) : null)
             ->addColumn('advance_document_number', fn (Settlement $settlement) => $settlement->advance_document_number);
         $dataTable->addColumn('show_url', fn (Settlement $settlement) => route('finance.settlements.show', $settlement));
+        if ($request->user()->hasPermission('finance.settlements.delete')) {
+            $dataTable->addColumn('delete_url', fn (Settlement $settlement) => $settlement->status === 'DRAFT' && ! $settlement->payment_voucher_exists ? route('finance.settlements.destroy', $settlement) : null);
+        }
 
         if ($request->user()->hasPermission('finance.settlements.approve')) {
             $dataTable->addColumn('approve_url', fn (Settlement $settlement) => $settlement->status === 'DRAFT' ? route('finance.settlements.approve', $settlement) : null);
@@ -98,7 +101,7 @@ class SettlementController extends Controller
 
     public function show(Request $request, Settlement $settlement, GlobalSettings $settings): View
     {
-        $settlement = Settlement::query()->withTrashed()->with(['party', 'bankAccount', 'paymentTerm', 'journalEntry', 'tenders.bankAccount', 'allocationIntents.openItem'])->findOrFail($settlement->id);
+        $settlement = Settlement::query()->withTrashed()->with(['party', 'bankAccount', 'paymentTerm', 'journalEntry', 'tenders.bankAccount', 'allocationIntents.openItem'])->withExists('paymentVoucher')->findOrFail($settlement->id);
         $this->scopeSettlement($request, $settlement);
         $history = AuditLog::query()->with('user')->where('subject_type', $settlement->getMorphClass())->where('subject_id', $settlement->id)->latest('created_at')->latest('id')->get();
 
@@ -108,6 +111,20 @@ class SettlementController extends Controller
             : '0.00';
 
         return view('Finance::settlements.show', ['settlement' => $settlement, 'history' => $history, 'dateFormat' => (string) $settings->value('date_format'), 'allocatedAmount' => $allocatedAmount, 'unappliedAmount' => $unappliedAmount]);
+    }
+
+    public function destroy(Request $request, Settlement $settlement, AuditLogger $audit): JsonResponse
+    {
+        $this->scopeSettlement($request, $settlement);
+        DB::transaction(function () use ($request, $settlement, $audit) {
+            $locked = Settlement::query()->lockForUpdate()->findOrFail($settlement->id);
+            abort_unless($locked->status === 'DRAFT', 422, 'ลบได้เฉพาะเอกสารร่าง');
+            abort_if($locked->paymentVoucher()->exists(), 422, 'Settlement นี้สร้างจากใบสำคัญจ่าย จึงต้องจัดการจากเอกสารต้นทาง');
+            $audit->record('finance.settlement.deleted', $locked, $locked->only(['document_number', 'document_type', 'status']), [], $request->user(), $request);
+            $locked->delete();
+        });
+
+        return response()->json(['status' => true, 'msg' => 'ลบร่างเอกสารแล้ว', 'redirect' => route('finance.settlements.index')]);
     }
 
     public function create(Request $request, OpenItemService $openItems): View
@@ -449,7 +466,8 @@ class SettlementController extends Controller
                 'advance_deposits.document_number as advance_document_number',
             ])
             ->withCount(['allocationIntents as intent_count'])
-            ->withSum(['allocationIntents as intent_amount'], 'amount');
+            ->withSum(['allocationIntents as intent_amount'], 'amount')
+            ->withExists('paymentVoucher');
     }
 
     private function optionFilters(Request $request, bool $requireParty = false): array

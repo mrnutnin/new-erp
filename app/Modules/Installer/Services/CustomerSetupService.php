@@ -81,7 +81,14 @@ class CustomerSetupService
     {
         return DB::transaction(function (): array {
             $branch = Branch::query()->withTrashed()->firstOrNew(['code' => '00000']);
-            $branch->forceFill(['name' => 'สำนักงานใหญ่', 'is_active' => true, 'deleted_at' => null])->save();
+            $company = CompanySetting::query()->find(1);
+            $branch->forceFill([
+                'name' => 'สำนักงานใหญ่',
+                'tax_branch_code' => $branch->tax_branch_code ?: '00000',
+                'tax_address' => $branch->tax_address ?: $company?->company_address,
+                'is_active' => true,
+                'deleted_at' => null,
+            ])->save();
 
             $warehouse = Warehouse::query()->withTrashed()->firstOrNew(['code' => 'WH001']);
             $warehouse->forceFill([

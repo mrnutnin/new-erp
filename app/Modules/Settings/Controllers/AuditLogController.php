@@ -87,6 +87,14 @@ class AuditLogController extends Controller
 
     private function applyTableSearch(Builder $query, Request $request): void
     {
+        if ($request->filled('date_from')) {
+            $query->whereDate('audit_logs.created_at', '>=', $request->date('date_from'));
+        }
+
+        if ($request->filled('date_to')) {
+            $query->whereDate('audit_logs.created_at', '<=', $request->date('date_to'));
+        }
+
         $search = trim((string) $request->input('search.value', ''));
 
         if ($search === '') {

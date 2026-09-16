@@ -90,6 +90,7 @@ Route::middleware(['auth', 'program:asset', 'capability:asset', 'branch'])
         Route::get('/transfers/create', [AssetTransferController::class, 'create'])->middleware('permission:asset.transfers.create')->name('transfers.create');
         Route::post('/transfers', [AssetTransferController::class, 'store'])->middleware('permission:asset.transfers.create')->name('transfers.store');
         Route::get('/transfers/{transfer}', [AssetTransferController::class, 'show'])->middleware('permission:asset.transfers.view')->name('transfers.show');
+        Route::delete('/transfers/{transfer}', [AssetTransferController::class, 'destroy'])->middleware('permission:asset.transfers.create')->name('transfers.destroy');
         Route::post('/transfers/{transfer}/submit', [AssetTransferController::class, 'submit'])->middleware('permission:asset.transfers.create')->name('transfers.submit');
         Route::post('/transfers/{transfer}/approve', [AssetTransferController::class, 'approve'])->middleware('permission:asset.transfers.approve')->name('transfers.approve');
         Route::post('/transfers/{transfer}/post', [AssetTransferController::class, 'post'])->middleware('permission:asset.transfers.post')->name('transfers.post');
@@ -103,6 +104,7 @@ Route::middleware(['auth', 'program:asset', 'capability:asset', 'branch'])
         Route::put('/counts/{count}/lines/{line}', [AssetCountController::class, 'saveLine'])->middleware('permission:asset.counts.create')->name('counts.lines.save');
         Route::post('/counts/{count}/extras', [AssetCountController::class, 'storeExtra'])->middleware('permission:asset.counts.create')->name('counts.extras.store');
         Route::get('/counts/{count}', [AssetCountController::class, 'show'])->middleware('permission:asset.counts.view')->name('counts.show');
+        Route::delete('/counts/{count}', [AssetCountController::class, 'destroy'])->middleware('permission:asset.counts.create')->name('counts.destroy');
         Route::post('/counts/{count}/submit', [AssetCountController::class, 'submit'])->middleware('permission:asset.counts.create')->name('counts.submit');
         Route::post('/counts/{count}/approve', [AssetCountController::class, 'approve'])->middleware('permission:asset.counts.approve')->name('counts.approve');
         Route::post('/counts/{count}/cancel', [AssetCountController::class, 'cancel'])->middleware('permission:asset.counts.create')->name('counts.cancel');
@@ -136,6 +138,7 @@ Route::middleware(['auth', 'program:asset', 'capability:asset', 'branch'])
         Route::get('/depreciations/create', [AssetDepreciationRunController::class, 'create'])->middleware('permission:asset.depreciation.calculate')->name('depreciations.create');
         Route::post('/depreciations', [AssetDepreciationRunController::class, 'store'])->middleware('permission:asset.depreciation.calculate')->name('depreciations.store');
         Route::get('/depreciations/{depreciation}', [AssetDepreciationRunController::class, 'show'])->middleware('permission:asset.depreciation.view')->name('depreciations.show');
+        Route::delete('/depreciations/{depreciation}', [AssetDepreciationRunController::class, 'destroy'])->middleware('permission:asset.depreciation.calculate')->name('depreciations.destroy');
         Route::post('/depreciations/{depreciation}/submit', [AssetDepreciationRunController::class, 'submit'])->middleware('permission:asset.depreciation.submit')->name('depreciations.submit');
         Route::post('/depreciations/{depreciation}/cancel', [AssetDepreciationRunController::class, 'cancel'])->middleware('permission:asset.depreciation.submit')->name('depreciations.cancel');
         Route::post('/depreciations/{depreciation}/approve', [AssetDepreciationRunController::class, 'approve'])->middleware('permission:asset.depreciation.approve')->name('depreciations.approve');
@@ -151,6 +154,7 @@ Route::middleware(['auth', 'program:asset', 'capability:asset', 'branch'])
         Route::post('/depreciation-policies/approve', [AssetDepreciationPolicyChangeController::class, 'approve'])->middleware('permission:asset.depreciation.approve')->name('depreciation-policies.approve');
         Route::post('/depreciation-policies/{policyChange}/cancel', [AssetDepreciationPolicyChangeController::class, 'cancel'])->middleware('permission:asset.depreciation.calculate')->name('depreciation-policies.cancel');
         Route::get('/depreciation-policies/{policyChange}', [AssetDepreciationPolicyChangeController::class, 'show'])->middleware('permission:asset.depreciation.view')->name('depreciation-policies.show');
+        Route::delete('/depreciation-policies/{policyChange}', [AssetDepreciationPolicyChangeController::class, 'destroy'])->middleware('permission:asset.depreciation.calculate')->name('depreciation-policies.destroy');
 
         Route::get('/reports/reconciliation', [AssetReconciliationReportController::class, 'index'])->middleware('permission:asset.reports.view')->name('reports.reconciliation.index');
         Route::get('/reports/reconciliation/data', [AssetReconciliationReportController::class, 'data'])->middleware('permission:asset.reports.view')->name('reports.reconciliation.data');
@@ -166,6 +170,7 @@ Route::middleware(['auth', 'program:asset', 'capability:asset', 'branch'])
         Route::get('/impairments/create', [AssetImpairmentController::class, 'create'])->middleware('permission:asset.impairments.create')->name('impairments.create');
         Route::post('/impairments', [AssetImpairmentController::class, 'store'])->middleware('permission:asset.impairments.create')->name('impairments.store');
         Route::get('/impairments/{impairment}', [AssetImpairmentController::class, 'show'])->middleware('permission:asset.impairments.view')->name('impairments.show');
+        Route::delete('/impairments/{impairment}', [AssetImpairmentController::class, 'destroy'])->middleware('permission:asset.impairments.create')->name('impairments.destroy');
         Route::post('/impairments/{impairment}/submit', [AssetImpairmentController::class, 'submit'])->middleware('permission:asset.impairments.create')->name('impairments.submit');
         Route::post('/impairments/{impairment}/approve', [AssetImpairmentController::class, 'approve'])->middleware('permission:asset.impairments.approve')->name('impairments.approve');
         Route::post('/impairments/{impairment}/post', [AssetImpairmentController::class, 'post'])->middleware('permission:asset.impairments.post')->name('impairments.post');
@@ -178,6 +183,7 @@ Route::middleware(['auth', 'program:asset', 'capability:asset', 'branch'])
         Route::get('/disposals/create', [AssetDisposalController::class, 'create'])->middleware('permission:asset.disposals.create')->name('disposals.create');
         Route::post('/disposals', [AssetDisposalController::class, 'store'])->middleware('permission:asset.disposals.create')->name('disposals.store');
         Route::get('/disposals/{disposal}', [AssetDisposalController::class, 'show'])->middleware('permission:asset.disposals.view')->name('disposals.show');
+        Route::delete('/disposals/{disposal}', [AssetDisposalController::class, 'destroy'])->middleware('permission:asset.disposals.create')->name('disposals.destroy');
         Route::post('/disposals/{disposal}/submit', [AssetDisposalController::class, 'submit'])->middleware('permission:asset.disposals.create')->name('disposals.submit');
         Route::post('/disposals/{disposal}/approve', [AssetDisposalController::class, 'approve'])->middleware('permission:asset.disposals.approve')->name('disposals.approve');
         Route::post('/disposals/{disposal}/post', [AssetDisposalController::class, 'post'])->middleware('permission:asset.disposals.post')->name('disposals.post');

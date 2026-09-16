@@ -10,7 +10,7 @@ final class PosNavigationLabelContractTest extends TestCase
     {
         $layout = file_get_contents(dirname(__DIR__, 2).'/app/Modules/Pos/Views/layout.blade.php');
 
-        self::assertStringContainsString("setLabel(element, 'ย้อนกลับ')", $layout);
+        self::assertStringContainsString("setLabel(element, 'กลับหน้ารายการ')", $layout);
         self::assertStringContainsString("setLabel(element, 'ยกเลิกเอกสาร')", $layout);
         self::assertStringContainsString('new MutationObserver(normalizeLabels)', $layout);
     }

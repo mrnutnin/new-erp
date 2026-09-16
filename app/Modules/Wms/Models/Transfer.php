@@ -11,6 +11,7 @@ use LogicException;
 class Transfer extends Model
 {
     use SoftDeletes;
+
     protected $table = 'wms_transfers';
 
     protected $fillable = [
@@ -43,7 +44,6 @@ class Transfer extends Model
             if ($transfer->isForceDeleting() || $transfer->status !== 'DRAFT' || $transfer->events()->exists()) {
                 throw new LogicException('ลบได้เฉพาะ Transfer ร่างที่ยังไม่มีประวัติการเคลื่อนไหว');
             }
-            $transfer->lines()->delete();
         });
     }
 

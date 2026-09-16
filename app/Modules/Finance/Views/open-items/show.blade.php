@@ -12,7 +12,7 @@
     <div class="container-fluid px-3 px-lg-4 py-4">
         <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-end gap-3 mb-4">
             <div><p class="eyebrow mb-2">FINANCE / {{ $ledgerType }} / OPEN ITEM</p><h1 class="h3 mb-2">รายละเอียดรายการคงค้าง</h1><p class="text-secondary mb-0">{{ $openItem->document_number }} · {{ $isAr ? 'ลูกหนี้' : 'เจ้าหนี้' }}</p></div>
-            <a class="btn btn-outline-dark" href="{{ url()->previous() }}"><i class="bx bx-arrow-back me-1"></i>กลับรายการ</a>
+            <a class="btn btn-app-soft" href="{{ url()->previous() }}"><i class="bx bx-arrow-back me-1"></i>กลับรายการ</a>
         </div>
         <div class="card border-0 shadow-sm mb-4"><div class="card-body p-4"><div class="row g-4">
             <div class="col-6 col-lg-3"><div class="text-secondary small">เอกสาร</div><div class="fw-semibold">{{ $openItem->document_number }}</div><div class="small text-secondary">{{ $openItem->document_type }}</div></div>

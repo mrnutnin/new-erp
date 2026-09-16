@@ -28,7 +28,7 @@ class InternalTransferController extends Controller
         $query = InternalTransfer::query()->with(['sourceBankAccount', 'destinationBankAccount'])->where('warehouse_id', $this->warehouse($request)->id);
         $this->applyFilters($query, $request);
         $query->orderByDesc('document_date')->orderByDesc('id');
-        return DataTables::eloquent($query)->addColumn('source_label', fn (InternalTransfer $t) => $t->sourceBankAccount?->code.' · '.$t->sourceBankAccount?->name)->addColumn('destination_label', fn (InternalTransfer $t) => $t->destinationBankAccount?->code.' · '.$t->destinationBankAccount?->name)->addColumn('date_label', fn (InternalTransfer $t) => $t->document_date?->format('d/m/Y'))->addColumn('show_url', fn (InternalTransfer $t) => route('finance.internal-transfers.show', $t))->toJson();
+        return DataTables::eloquent($query)->addColumn('source_label', fn (InternalTransfer $t) => $t->sourceBankAccount?->code.' · '.$t->sourceBankAccount?->name)->addColumn('destination_label', fn (InternalTransfer $t) => $t->destinationBankAccount?->code.' · '.$t->destinationBankAccount?->name)->addColumn('date_label', fn (InternalTransfer $t) => $t->document_date?->format('d/m/Y'))->addColumn('show_url', fn (InternalTransfer $t) => route('finance.internal-transfers.show', $t))->addColumn('edit_url', fn (InternalTransfer $t) => $t->status === 'DRAFT' && $request->user()->hasPermission('finance.internal-transfers.update') ? route('finance.internal-transfers.edit', $t) : null)->addColumn('delete_url', fn (InternalTransfer $t) => $t->status === 'DRAFT' && $request->user()->hasPermission('finance.internal-transfers.delete') ? route('finance.internal-transfers.destroy', $t) : null)->toJson();
     }
 
     public function create(Request $request): View
@@ -63,7 +63,7 @@ class InternalTransferController extends Controller
     {
         $this->scope($request, $transfer);
         $service->deleteDraft($transfer, $this->warehouse($request), $request->user(), $request);
-        return response()->json(['status' => true, 'msg' => 'ลบเอกสาร Draft แล้ว', 'redirect' => route('finance.internal-transfers.index')]);
+        return response()->json(['status' => true, 'msg' => 'ลบร่างเอกสารแล้ว', 'redirect' => route('finance.internal-transfers.index')]);
     }
 
     public function show(Request $request, InternalTransfer $transfer): View

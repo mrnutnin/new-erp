@@ -8,6 +8,7 @@ use App\Modules\Asset\Requests\StoreAssetCountRequest;
 use App\Modules\Asset\Services\AssetCountService;
 use App\Modules\Finance\Models\DocumentSequence;
 use App\Modules\Finance\Services\DocumentSequenceService;
+use App\Modules\Platform\Services\AuditLogger;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -30,7 +31,8 @@ final class AssetCountController extends Controller
 
         return DataTables::eloquent(AssetCount::query()->withCount('lines')->where('branch_id', $this->branchId($request))->when($request->filled('status'), fn ($query) => $query->where('status', $request->string('status')->toString()))->when($filters['date_from'] ?? null, fn ($query, $date) => $query->whereDate('freeze_date', '>=', $date))->when($filters['date_to'] ?? null, fn ($query, $date) => $query->whereDate('freeze_date', '<=', $date))->latest('freeze_date')->latest('id'))
             ->addColumn('freeze_date_label', fn (AssetCount $count) => $count->freeze_date?->format('d/m/Y') ?? '-')
-            ->addColumn('show_url', fn (AssetCount $count) => route('asset.counts.show', $count))->toJson();
+            ->addColumn('show_url', fn (AssetCount $count) => route('asset.counts.show', $count))
+            ->addColumn('delete_url', fn (AssetCount $count) => $count->status === 'DRAFT' && $request->user()->hasPermission('asset.counts.create') ? route('asset.counts.destroy', $count) : null)->toJson();
     }
 
     public function create(): View
@@ -96,6 +98,22 @@ final class AssetCountController extends Controller
     public function submit(Request $request, AssetCount $count, AssetCountService $service): JsonResponse
     {
         return $this->changed($service->submit($this->scoped($request, $count), $request->user()), 'ส่งใบตรวจนับเพื่ออนุมัติแล้ว');
+    }
+
+    public function destroy(Request $request, AssetCount $count, AuditLogger $audit): JsonResponse
+    {
+        $count = $this->scoped($request, $count);
+        DB::transaction(function () use ($request, $count, $audit): void {
+            $count = AssetCount::query()->lockForUpdate()->findOrFail($count->id);
+            if ($count->status !== 'DRAFT') {
+                throw ValidationException::withMessages(['status' => 'ลบได้เฉพาะใบตรวจนับสถานะร่าง']);
+            }
+            $before = $count->toArray();
+            $count->delete();
+            $audit->record('asset.count.deleted', $count, $before, ['deleted_at' => $count->deleted_at], $request->user(), $request);
+        });
+
+        return response()->json(['status' => true, 'msg' => 'ลบใบตรวจนับร่างแล้ว', 'redirect' => route('asset.counts.index')]);
     }
 
     public function approve(Request $request, AssetCount $count, AssetCountService $service): JsonResponse

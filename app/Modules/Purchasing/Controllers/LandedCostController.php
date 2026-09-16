@@ -3,24 +3,24 @@
 namespace App\Modules\Purchasing\Controllers;
 
 use App\Http\Controllers\Controller;
+use App\Modules\Accounting\Models\Account;
+use App\Modules\Accounting\Models\FiscalPeriod;
 use App\Modules\Finance\Models\DocumentSequence;
 use App\Modules\Finance\Services\DocumentSequenceService;
-use App\Modules\Accounting\Models\Account;
 use App\Modules\Platform\Services\AuditLogger;
+use App\Modules\Purchasing\Models\GoodsReceipt;
 use App\Modules\Purchasing\Models\LandedCost;
 use App\Modules\Purchasing\Requests\SaveLandedCostRequest;
-use App\Modules\Purchasing\Services\LandedCostService;
 use App\Modules\Purchasing\Services\LandedCostPostingService;
-use App\Modules\Purchasing\Models\GoodsReceipt;
-use App\Modules\Wms\Services\InventoryWarehouseReleaseGate;
-use App\Modules\Accounting\Models\FiscalPeriod;
+use App\Modules\Purchasing\Services\LandedCostService;
 use App\Modules\Settings\Services\GlobalSettings;
+use App\Modules\Wms\Services\InventoryWarehouseReleaseGate;
+use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
-use Carbon\Carbon;
 use Yajra\DataTables\Facades\DataTables;
 
 final class LandedCostController extends Controller
@@ -28,6 +28,7 @@ final class LandedCostController extends Controller
     public function index(Request $request): View
     {
         $warehouse = $request->attributes->get('selectedWarehouse');
+
         return view('Purchasing::landed-costs.index', ['warehouse' => $warehouse]);
     }
 
@@ -45,10 +46,8 @@ final class LandedCostController extends Controller
             ->addColumn('basis_label', fn (LandedCost $row) => ['VALUE' => 'ตามมูลค่า', 'QUANTITY' => 'ตามจำนวน', 'WEIGHT' => 'ตามน้ำหนัก'][$row->allocation_basis] ?? $row->allocation_basis)
             ->editColumn('business_date', fn (LandedCost $row) => $row->business_date?->format((string) $settings->value('date_format')) ?: '-')
             ->addColumn('show_url', fn (LandedCost $row) => route('purchasing.landed-costs.show', $row))
-            ->addColumn('can_submit', fn (LandedCost $row) => $row->status === 'DRAFT' && $request->user()->hasPermission('purchasing.landed-costs.submit'))
-            ->addColumn('can_approve', fn (LandedCost $row) => $row->status === 'SUBMITTED' && $request->user()->hasPermission('purchasing.landed-costs.approve'))
-            ->addColumn('can_post', fn (LandedCost $row) => $row->status === 'APPROVED' && $request->user()->hasPermission('purchasing.landed-costs.post'))
-            ->addColumn('can_void', fn (LandedCost $row) => in_array($row->status, ['DRAFT', 'SUBMITTED', 'APPROVED'], true) && $request->user()->hasPermission('purchasing.landed-costs.void'))
+            ->addColumn('print_url', fn (LandedCost $row) => $request->user()->hasPermission('purchasing.landed-costs.print') ? route('purchasing.landed-costs.pdf', $row) : null)
+            ->addColumn('delete_url', fn (LandedCost $row) => $row->status === 'DRAFT' && $request->user()->hasPermission('purchasing.landed-costs.delete') ? route('purchasing.landed-costs.destroy', $row) : null)
             ->toJson();
     }
 
@@ -58,6 +57,7 @@ final class LandedCostController extends Controller
         $baseReceipts = GoodsReceipt::query()->with('supplier')->where('warehouse_id', $warehouse->id)->where('status', 'APPROVED');
         $receipts = (clone $baseReceipts)->whereExists(fn ($query) => $query->selectRaw('1')->from('wms_stock_movements')->whereColumn('wms_stock_movements.source_id', 'goods_receipts.id')->where('wms_stock_movements.source_type', 'GOODS_RECEIPT')->where('wms_stock_movements.status', 'POSTED'))->latest('business_date')->limit(200)->get(['id', 'receipt_number', 'business_date', 'supplier_id']);
         $pendingReceipts = (clone $baseReceipts)->whereNotExists(fn ($query) => $query->selectRaw('1')->from('wms_stock_movements')->whereColumn('wms_stock_movements.source_id', 'goods_receipts.id')->where('wms_stock_movements.source_type', 'GOODS_RECEIPT')->where('wms_stock_movements.status', 'POSTED'))->latest('business_date')->limit(200)->get(['id', 'receipt_number', 'business_date', 'supplier_id']);
+
         return view('Purchasing::landed-costs.form', ['warehouse' => $warehouse, 'receipts' => $receipts, 'pendingReceipts' => $pendingReceipts, 'accounts' => Account::query()->with('type')->where('is_active', true)->where('is_postable', true)->whereHas('type', fn ($query) => $query->where('code', 'EXPENSE'))->orderBy('code')->limit(200)->get(['id', 'code', 'name'])]);
     }
 
@@ -76,20 +76,51 @@ final class LandedCostController extends Controller
             $document = $service->createDraft([...$values, 'warehouse_id' => $warehouse->id, 'document_number' => $number, 'idempotency_key' => 'landed-cost:'.bin2hex(random_bytes(12))], $request->user());
             $sequences->recordIssued($sequence->fresh(), $number, 'purchasing_landed_costs', $document->id, $date, $request->user()->id);
             $audit->record('purchasing.landed_cost.created', $document, [], $document->toArray(), $request->user(), $request);
+
             return $document;
         }, 3);
+
         return response()->json(['status' => true, 'msg' => "สร้างร่าง Landed Cost {$document->document_number} แล้ว", 'redirect' => route('purchasing.landed-costs.show', $document)]);
     }
 
     public function show(Request $request, LandedCost $landedCost): View
     {
         abort_unless((int) $landedCost->warehouse_id === (int) $request->attributes->get('selectedWarehouse')->id, 404);
+
         return view('Purchasing::landed-costs.show', ['document' => $landedCost->load(['lines.account', 'receipts.goodsReceipt', 'allocations.item', 'allocations.uom'])]);
     }
 
-    public function submit(Request $request, LandedCost $landedCost, LandedCostService $service): JsonResponse { return $this->transition($request, $landedCost, fn () => $service->submit($landedCost, $request->user()), 'ส่งอนุมัติแล้ว'); }
-    public function approve(Request $request, LandedCost $landedCost, LandedCostService $service): JsonResponse { return $this->transition($request, $landedCost, fn () => $service->approve($landedCost, $request->user()), 'อนุมัติแล้ว'); }
-    public function void(Request $request, LandedCost $landedCost, LandedCostService $service): JsonResponse { return $this->transition($request, $landedCost, fn () => $service->void($landedCost, $request->user()), 'ยกเลิกแล้ว'); }
+    public function destroy(Request $request, LandedCost $landedCost, AuditLogger $audit): JsonResponse
+    {
+        abort_unless((int) $landedCost->warehouse_id === (int) $request->attributes->get('selectedWarehouse')->id, 404);
+        DB::transaction(function () use ($request, $landedCost, $audit): void {
+            $document = LandedCost::query()->with(['lines', 'receipts', 'allocations'])->lockForUpdate()->findOrFail($landedCost->id);
+            abort_unless((int) $document->warehouse_id === (int) $request->attributes->get('selectedWarehouse')->id, 404);
+            if ($document->status !== 'DRAFT') {
+                throw ValidationException::withMessages(['status' => 'ลบได้เฉพาะ Landed Cost ที่เป็นร่าง']);
+            }
+            $before = $document->toArray();
+            $audit->record('purchasing.landed_cost.deleted', $document, $before, [], $request->user(), $request);
+            $document->delete();
+        });
+
+        return response()->json(['status' => true, 'msg' => 'ลบร่าง Landed Cost แล้ว']);
+    }
+
+    public function submit(Request $request, LandedCost $landedCost, LandedCostService $service): JsonResponse
+    {
+        return $this->transition($request, $landedCost, fn () => $service->submit($landedCost, $request->user()), 'ส่งอนุมัติแล้ว');
+    }
+
+    public function approve(Request $request, LandedCost $landedCost, LandedCostService $service): JsonResponse
+    {
+        return $this->transition($request, $landedCost, fn () => $service->approve($landedCost, $request->user()), 'อนุมัติแล้ว');
+    }
+
+    public function void(Request $request, LandedCost $landedCost, LandedCostService $service): JsonResponse
+    {
+        return $this->transition($request, $landedCost, fn () => $service->void($landedCost, $request->user()), 'ยกเลิกแล้ว');
+    }
 
     public function post(Request $request, LandedCost $landedCost, LandedCostPostingService $posting, InventoryWarehouseReleaseGate $releaseGate, AuditLogger $audit): JsonResponse
     {
@@ -99,6 +130,7 @@ final class LandedCostController extends Controller
         $gate['reconciliation_ready'] = (bool) ($gate['reconciliation_ready'] ?? false);
         $document = $posting->postApproved($landedCost, $gate, $request->user());
         $audit->record('purchasing.landed_cost.posted', $document, ['status' => 'APPROVED'], $document->toArray(), $request->user(), $request);
+
         return response()->json(['status' => true, 'msg' => "Post Landed Cost {$document->document_number} แล้ว"]);
     }
 
@@ -106,6 +138,7 @@ final class LandedCostController extends Controller
     {
         abort_unless((int) $landedCost->warehouse_id === (int) $request->attributes->get('selectedWarehouse')->id, 404);
         $document = $action();
+
         return response()->json(['status' => true, 'msg' => "Landed Cost {$document->document_number} {$message}"]);
     }
 }

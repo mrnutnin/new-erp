@@ -110,10 +110,10 @@
                             @include('Platform::partials.permission-summary', ['effectivePermissions' => $effectivePermissions])
 
                             <div class="d-flex justify-content-between align-items-center mt-4">
-                                <a class="btn btn-outline-dark" href="{{ route('settings.users.index') }}">
-                                    <i class="bx bx-arrow-back me-1" aria-hidden="true"></i>ยกเลิก
+                                <a class="btn btn-app-soft" href="{{ route('settings.users.index') }}">
+                                    <i class="bx bx-arrow-back me-1" aria-hidden="true"></i>กลับหน้ารายการ
                                 </a>
-                                <button class="btn btn-dark" type="submit" data-busy-text="กำลังบันทึก...">
+                                <button class="btn btn-app-primary" type="submit" data-busy-text="กำลังบันทึก...">
                                     <i class="bx bx-save me-1" aria-hidden="true"></i>บันทึกผู้ใช้งาน
                                 </button>
                             </div>

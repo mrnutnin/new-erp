@@ -1,14 +1,38 @@
 @extends('Wms::layout')
+
 @section('title', 'เบิกวัตถุดิบผลิต | WMS')
+
 @section('content')
 <div class="container-fluid px-3 px-lg-4 py-4">
-    <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-end gap-3 mb-4"><div><p class="eyebrow mb-2">WMS / PRODUCTION MATERIAL ISSUE</p><h1 class="h3 mb-2">เบิกวัตถุดิบผลิต</h1><p class="text-secondary mb-0">เอกสารเบิกวัตถุดิบสำหรับการผลิตแบบ Manual · ประเภทเอกสารถูกกำหนดเป็น Production</p></div><a class="btn btn-dark" href="{{ route('wms.production.material-issues.create') }}"><i class="bx bx-plus me-1"></i>สร้างใบเบิกวัตถุดิบ</a></div>
-    @include('Wms::partials.document-filters', ['filterId' => 'production-issue-filters', 'statusOptions' => ['DRAFT' => 'ร่าง', 'APPROVED' => 'อนุมัติแล้ว', 'POSTED' => 'ลง Stock แล้ว', 'VOID' => 'ยกเลิก']])
-    <div class="card border-0 shadow-sm"><div class="card-body p-3 p-lg-4"><div class="table-responsive"><table id="production-issue-table" class="table table-hover align-middle w-100"><thead><tr><th>เลขที่เอกสาร</th><th>วันที่</th><th>รายการ</th><th>จำนวน</th><th>ใบรับผลิตเสร็จ</th><th>เหตุผล</th><th>สถานะ</th><th>จัดการ</th></tr></thead></table></div></div></div>
+    <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-end gap-3 mb-4">
+        <div><p class="eyebrow mb-2">WMS / PRODUCTION MATERIAL ISSUE</p><h1 class="h3 mb-2">เบิกวัตถุดิบผลิต</h1><p class="text-secondary mb-0">เบิกวัตถุดิบเพื่อการผลิต แล้วดำเนินการอนุมัติและลง Stock จากหน้า Detail</p></div>
+        @if(auth()->user()->hasPermission('wms.issues.create'))<a class="btn btn-app-primary" href="{{ route('wms.production.material-issues.create') }}"><i class="bx bx-plus me-1" aria-hidden="true"></i>สร้างใบเบิกวัตถุดิบ</a>@endif
+    </div>
+    @include('Wms::partials.document-filters', ['filterId' => 'production-issue-filters', 'statusOptions' => ['DRAFT' => 'ร่าง', 'APPROVED' => 'อนุมัติแล้ว', 'POSTED' => 'ลง Stock แล้ว', 'VOID' => 'ยกเลิกเอกสาร']])
+    <div class="card border-0 shadow-sm"><div class="card-body p-3 p-lg-4"><div class="mb-3"><h2 class="h5 mb-1">รายการใบเบิกวัตถุดิบ</h2><p class="text-secondary small mb-0">เปิดรายละเอียดเพื่อดำเนินการต่อหรือสร้างเอกสารที่เกี่ยวข้อง</p></div><div class="table-responsive"><table id="production-issue-table" class="table table-hover align-middle w-100"><thead><tr><th>เลขที่เอกสาร</th><th>วันที่</th><th>รายการ</th><th>จำนวน</th><th>ใบรับผลิตเสร็จ</th><th>เหตุผล</th><th>สถานะ</th><th>จัดการ</th></tr></thead></table></div></div></div>
 </div>
 @endsection
+
 @push('scripts')
 <script>
-$(function(){const table=$('#production-issue-table').DataTable($.extend(true,{},window.erpDataTableDefaults,{ajax:{url:'{{ route('wms.production.material-issues.data') }}',data:d=>{const f=$('#production-issue-filters');d.status=f.find('.js-wms-filter-status').val();d.date_from=f.find('.js-wms-filter-from').val();d.date_to=f.find('.js-wms-filter-to').val();}},buttons:[window.erpExcelButton($('#production-issue-table'))],columns:[{data:'document_number',render:$.fn.dataTable.render.text()},{data:'business_date',render:$.fn.dataTable.render.text()},{data:'line_count',render:(v,t)=>t==='display'?$.fn.dataTable.render.text().display(v+' รายการ'):v},{data:'quantity',className:'text-end',render:$.fn.dataTable.render.text()},{data:'finished_receipt_label',render:$.fn.dataTable.render.text()},{data:'reason',render:$.fn.dataTable.render.text()},{data:'status_label',render:(v,t,r)=>t==='display'?'<span class="badge '+(r.status==='POSTED'?'app-status-success':r.status==='APPROVED'?'app-status-info':r.status==='VOID'?'app-status-danger':'app-status-neutral')+'">'+$.fn.dataTable.render.text().display(v)+'</span>':v},{data:null,orderable:false,searchable:false,className:'text-end text-nowrap',render:(v,t,r)=>{if(t!=='display')return '';let h='<a class="btn btn-sm btn-app-soft" href="'+r.show_url+'" title="ดูรายละเอียด"><i class="bx bx-show"></i></a> ';if(r.can_approve)h+='<button class="btn btn-sm btn-dark js-production-action" data-url="'+r.approve_url+'" data-action="approve" title="อนุมัติ"><i class="bx bx-check"></i></button> ';if(r.can_post)h+='<button class="btn btn-sm btn-dark js-production-action" data-url="'+r.post_url+'" data-action="post" title="ลง Stock"><i class="bx bx-send"></i></button> ';if(r.can_cancel)h+='<button class="btn btn-sm btn-app-danger js-production-action" data-url="'+r.cancel_url+'" data-action="cancel" title="ยกเลิก"><i class="bx bx-x-circle"></i></button> ';if(r.can_delete)h+='<button class="btn btn-sm btn-app-danger js-production-action" data-url="'+r.delete_url+'" data-action="delete" title="ลบร่าง"><i class="bx bx-trash"></i></button>';return h;}}]}));const f=$('#production-issue-filters');f.on('click','.js-wms-apply-filter,.js-wms-reset-filter',function(){if($(this).hasClass('js-wms-reset-filter'))f.find('select,input').val('');table.ajax.reload();});$(document).on('click','.js-production-action',function(){const b=$(this),a=b.data('action');Swal.fire({icon:'warning',title:a==='approve'?'อนุมัติใบเบิกวัตถุดิบ?':a==='post'?'ลง Stock ใบเบิกวัตถุดิบ?':a==='cancel'?'ยกเลิกใบเบิกวัตถุดิบ?':'ลบร่างใบเบิก?',input:a==='cancel'?'textarea':undefined,inputLabel:a==='cancel'?'เหตุผลการยกเลิก':undefined,showCancelButton:true,confirmButtonText:'ยืนยัน',cancelButtonText:'ยกเลิก',confirmButtonColor:a==='cancel'||a==='delete'?'#dc3545':undefined}).then(x=>{if(!x.isConfirmed)return;const data={_token:$('meta[name=csrf-token]').attr('content')};if(a==='cancel')data.reason=x.value;$.ajax({url:b.data('url'),type:a==='delete'?'DELETE':'POST',data}).done(r=>{Swal.fire({icon:'success',text:r.msg,timer:1000,showConfirmButton:false});table.ajax.reload(null,false)}).fail(x=>Swal.fire({icon:'error',text:x.responseJSON?.message||'ดำเนินการไม่สำเร็จ'}));});});});
+$(function () {
+    const tableElement = $('#production-issue-table'), filters = $('#production-issue-filters'), text = $.fn.dataTable.render.text();
+    const statuses = {DRAFT:'app-status-neutral', APPROVED:'app-status-info', POSTED:'app-status-success', VOID:'app-status-danger'};
+    const table = tableElement.DataTable($.extend(true, {}, window.erpDataTableDefaults, {
+        processing:true, serverSide:true, order:[[1,'desc']],
+        ajax:{url:'{{ route('wms.production.material-issues.data') }}',data:function(data){data.status=filters.find('.js-wms-filter-status').val();data.date_from=filters.find('.js-wms-filter-from').val();data.date_to=filters.find('.js-wms-filter-to').val();}},
+        buttons:[window.erpExcelButton(tableElement)],
+        columns:[
+            {data:'document_number',name:'document_number',render:text.display}, {data:'business_date',name:'document_date',render:text.display},
+            {data:'line_count',orderable:false,render:function(value,type){return type==='display'?text.display(value+' รายการ'):value;}}, {data:'quantity',orderable:false,className:'text-end',render:text.display},
+            {data:'finished_receipt_label',orderable:false,render:text.display}, {data:'reason',name:'reason',render:text.display},
+            {data:'status_label',name:'status',render:function(value,type,row){return type==='display'?'<span class="badge '+(statuses[row.status]||'app-status-neutral')+'">'+text.display(value)+'</span>':value;}},
+            {data:null,orderable:false,searchable:false,className:'text-end text-nowrap',render:function(value,type,row){if(type!=='display')return '';let html='<a class="btn btn-sm btn-app-soft" href="'+row.show_url+'" title="ดูรายละเอียด" aria-label="ดูรายละเอียด '+text.display(row.document_number)+'"><i class="bx bx-file-find" aria-hidden="true"></i></a>';if(row.can_delete)html+=' <button type="button" class="btn btn-sm btn-app-danger js-production-issue-delete" data-url="'+row.delete_url+'" title="ลบร่าง" aria-label="ลบร่าง '+text.display(row.document_number)+'"><i class="bx bx-trash" aria-hidden="true"></i></button>';return html;}}
+        ]
+    }));
+    filters.on('click','.js-wms-apply-filter',()=>table.ajax.reload());
+    filters.on('click','.js-wms-reset-filter',function(){filters.find('select,input').val('');table.ajax.reload();});
+    window.erpAjaxDelete({button:'.js-production-issue-delete',reload:'#production-issue-table',title:'ลบร่างใบเบิกวัตถุดิบ?',text:'เอกสารร่างจะถูกลบและไม่สามารถกู้คืนได้',confirmButtonText:'ลบร่าง',cancelButtonText:'กลับ'});
+});
 </script>
 @endpush

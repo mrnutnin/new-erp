@@ -32,8 +32,17 @@ final class AssetImportController extends Controller
     public function data(Request $request): JsonResponse
     {
         $branchId = (int) $request->attributes->get('selectedBranch')->id;
+        $filters = $request->validate([
+            'status' => ['nullable', 'in:DRAFT,VALIDATED,COMMITTED'],
+            'cutover_date_from' => ['nullable', 'date'],
+            'cutover_date_to' => ['nullable', 'date', 'after_or_equal:cutover_date_from'],
+        ]);
 
-        return DataTables::eloquent(AssetOpeningBalanceBatch::query()->where('branch_id', $branchId)->withCount('lines')->latest('id'))
+        return DataTables::eloquent(AssetOpeningBalanceBatch::query()->where('branch_id', $branchId)->withCount('lines')
+            ->when($filters['status'] ?? null, fn ($query, $status) => $query->where('status', $status))
+            ->when($filters['cutover_date_from'] ?? null, fn ($query, $date) => $query->whereDate('cutover_date', '>=', $date))
+            ->when($filters['cutover_date_to'] ?? null, fn ($query, $date) => $query->whereDate('cutover_date', '<=', $date))
+            ->latest('cutover_date')->latest('id'))
             ->addColumn('show_url', fn (AssetOpeningBalanceBatch $batch) => route('asset.assets.import.show', $batch))
             ->toJson();
     }

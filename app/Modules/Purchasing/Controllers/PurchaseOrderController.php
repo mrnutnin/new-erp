@@ -6,15 +6,20 @@ use App\Http\Controllers\Controller;
 use App\Models\AuditLog;
 use App\Models\Party;
 use App\Models\Warehouse;
+use App\Modules\Accounting\Models\TaxCode;
 use App\Modules\Finance\Models\DocumentSequence;
 use App\Modules\Finance\Models\PaymentTerm;
 use App\Modules\Finance\Services\DocumentSequenceService;
 use App\Modules\Platform\Services\AuditLogger;
-use App\Modules\Settings\Services\GlobalSettings;
 use App\Modules\Purchasing\Models\GoodsReceipt;
 use App\Modules\Purchasing\Models\PurchaseOrder;
 use App\Modules\Purchasing\Models\PurchaseRequisition;
 use App\Modules\Purchasing\Requests\SavePurchaseOrderRequest;
+use App\Modules\Purchasing\Support\PurchaseDocumentCalculator;
+use App\Modules\Settings\Services\GlobalSettings;
+use App\Modules\Wms\Support\WmsDecimal;
+use Brick\Math\BigDecimal;
+use Brick\Math\RoundingMode;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -66,6 +71,7 @@ class PurchaseOrderController extends Controller
             ->addColumn('expected_date_label', fn (PurchaseOrder $po) => $po->expected_date?->format($format) ?? '—')
             ->addColumn('status_label', fn (PurchaseOrder $po) => ['DRAFT' => 'ร่าง', 'APPROVED' => 'อนุมัติแล้ว', 'VOID' => 'ยกเลิก'][$po->status])
             ->addColumn('show_url', fn (PurchaseOrder $po) => route($this->moduleRoutePrefix().'.purchase-orders.show', $po))
+            ->addColumn('edit_url', fn (PurchaseOrder $po) => $po->status === 'DRAFT' && $request->user()->hasPermission($this->modulePermission('purchase-orders.update')) ? route($this->moduleRoutePrefix().'.purchase-orders.edit', $po) : null)
             ->addColumn('print_url', fn (PurchaseOrder $po) => $request->user()->hasPermission($this->modulePermission('purchase-orders.print')) ? route($this->moduleRoutePrefix().'.purchase-orders.pdf', $po) : null)
             ->addColumn('approve_url', fn (PurchaseOrder $po) => $po->status === 'DRAFT' && $request->user()->hasPermission($this->modulePermission('purchase-orders.approve')) ? route($this->moduleRoutePrefix().'.purchase-orders.approve', $po) : null)
             ->addColumn('void_url', fn (PurchaseOrder $po) => in_array($po->status, ['DRAFT', 'APPROVED'], true) && $request->user()->hasPermission($this->modulePermission('purchase-orders.void')) ? route($this->moduleRoutePrefix().'.purchase-orders.void', $po) : null)
@@ -86,6 +92,7 @@ class PurchaseOrderController extends Controller
             'order' => null,
             'requisition' => $requisition,
             'terms' => PaymentTerm::query()->where('is_active', true)->orderBy('code')->get(),
+            'taxCodes' => TaxCode::query()->where('kind', 'VAT_IN')->where('is_active', true)->orderBy('code')->get(['id', 'code', 'name', 'rate']),
             'warehouse' => $requisition?->warehouse ?? ($this->moduleRoutePrefix() === 'purchasing' ? null : $request->attributes->get('selectedWarehouse')),
             'warehouses' => $this->availableWarehouses($request),
             'moduleRoutePrefix' => $this->moduleRoutePrefix(),
@@ -94,12 +101,13 @@ class PurchaseOrderController extends Controller
 
     public function edit(Request $request, PurchaseOrder $purchaseOrder): View
     {
-        $order = $this->scoped($request, $purchaseOrder)->load(['supplier', 'paymentTerm', 'purchaseRequisition', 'lines.item', 'lines.uom']);
+        $order = $this->scoped($request, $purchaseOrder)->load(['supplier', 'paymentTerm', 'purchaseRequisition', 'lines.item', 'lines.uom', 'lines.taxCode']);
         abort_unless($order->status === 'DRAFT', 404);
 
         return view($this->moduleViewPrefix().'::purchase-orders.form', [
             'order' => $order,
             'terms' => PaymentTerm::query()->where('is_active', true)->orderBy('code')->get(),
+            'taxCodes' => TaxCode::query()->where('kind', 'VAT_IN')->where('is_active', true)->orderBy('code')->get(['id', 'code', 'name', 'rate']),
             'warehouse' => $order->warehouse,
             'warehouses' => $this->availableWarehouses($request),
             'moduleRoutePrefix' => $this->moduleRoutePrefix(),
@@ -144,21 +152,16 @@ class PurchaseOrderController extends Controller
         if (! $term && ! empty($values['payment_term_id'])) {
             throw ValidationException::withMessages(['payment_term_id' => 'เงื่อนไขการชำระเงินไม่ถูกต้อง']);
         }
-        $lines = collect($values['lines'])->values()->map(function (array $line, int $index): array {
-            $quantity = (float) $line['quantity'];
-            $price = (float) $line['unit_price'];
-
-            return [...$line, 'line_number' => $index + 1, 'line_total' => number_format(round($quantity * $price, 2), 2, '.', '')];
-        });
-        $subtotal = $lines->sum(fn (array $line) => (float) $line['line_total']);
-        $po = DB::transaction(function () use ($request, $warehouse, $supplier, $term, $values, $lines, $subtotal, $sequences, $audit, $requisition): PurchaseOrder {
+        $calculation = $this->calculate($values);
+        $lines = collect($calculation['lines']);
+        $po = DB::transaction(function () use ($request, $warehouse, $supplier, $term, $values, $lines, $calculation, $sequences, $audit, $requisition): PurchaseOrder {
             $sequence = DocumentSequence::query()->whereNull('warehouse_id')->where('document_type', 'PURCHASE_ORDER')->where('is_active', true)->lockForUpdate()->first();
             if (! $sequence) {
                 throw ValidationException::withMessages(['document_number' => 'ยังไม่ได้ตั้งค่าเลขเอกสาร Purchase Order']);
             }
             $date = Carbon::createFromFormat('Y-m-d', $values['document_date']);
             $number = $sequences->issueAvailableForBranch($sequence, $warehouse->branch, $date, fn (string $number): bool => PurchaseOrder::query()->where('document_number', $number)->exists());
-            $po = PurchaseOrder::create(['warehouse_id' => $warehouse->id, 'purchase_requisition_id' => $requisition?->id, 'supplier_id' => $supplier->id, 'supplier_code' => $supplier->code, 'supplier_name' => $supplier->name, 'payment_term_id' => $term?->id, 'document_number' => $number, 'document_date' => $values['document_date'], 'expected_date' => $values['expected_date'] ?? null, 'subtotal' => number_format($subtotal, 2, '.', ''), 'total_amount' => number_format($subtotal, 2, '.', ''), 'description' => $values['description'] ?? null, 'created_by' => $request->user()->id, 'updated_by' => $request->user()->id]);
+            $po = PurchaseOrder::create(['warehouse_id' => $warehouse->id, 'purchase_requisition_id' => $requisition?->id, 'supplier_id' => $supplier->id, 'supplier_code' => $supplier->code, 'supplier_name' => $supplier->name, 'payment_term_id' => $term?->id, 'document_number' => $number, 'document_date' => $values['document_date'], 'expected_date' => $values['expected_date'] ?? null, 'tax_treatment' => $values['tax_treatment'], 'prices_include_vat' => $values['prices_include_vat'], 'tax_decimal_places' => WmsDecimal::places(), 'subtotal' => $calculation['subtotal'], 'tax_amount' => $calculation['tax_amount'], 'total_amount' => $calculation['gross_amount'], 'description' => $values['description'] ?? null, 'created_by' => $request->user()->id, 'updated_by' => $request->user()->id]);
             $po->lines()->createMany($lines->all());
             $sequences->recordIssued($sequence, $number, 'purchase_orders', $po->id, $date, $request->user()->id);
             $audit->record('purchasing.purchase_order.created', $po, [], $po->toArray(), $request->user(), $request);
@@ -184,12 +187,8 @@ class PurchaseOrderController extends Controller
         if (! $term && ! empty($values['payment_term_id'])) {
             throw ValidationException::withMessages(['payment_term_id' => 'เงื่อนไขการชำระเงินไม่ถูกต้อง']);
         }
-        $lines = collect($values['lines'])->values()->map(function (array $line, int $index): array {
-            $quantity = (float) $line['quantity'];
-            $price = (float) $line['unit_price'];
-
-            return [...$line, 'line_number' => $index + 1, 'line_total' => number_format(round($quantity * $price, 2), 2, '.', '')];
-        });
+        $calculation = $this->calculate($values);
+        $lines = collect($calculation['lines']);
         if ($po->purchase_requisition_id) {
             $expected = $po->lines->pluck('purchase_requisition_line_id')->map(fn ($id) => (int) $id)->sort()->values()->all();
             $actual = $lines->pluck('purchase_requisition_line_id')->map(fn ($id) => (int) $id)->sort()->values()->all();
@@ -197,8 +196,7 @@ class PurchaseOrderController extends Controller
                 throw ValidationException::withMessages(['lines' => 'PO ที่สร้างจาก PR ต้องคงรายการและการเชื่อมโยงเดิม']);
             }
         }
-        $subtotal = $lines->sum(fn (array $line) => (float) $line['line_total']);
-        DB::transaction(function () use ($request, $po, $supplier, $term, $values, $lines, $subtotal, $audit, $sequences): void {
+        DB::transaction(function () use ($request, $po, $supplier, $term, $values, $lines, $calculation, $audit, $sequences): void {
             $old = $po->toArray();
             $number = $po->document_number;
             if ($po->document_date->toDateString() !== $values['document_date']) {
@@ -212,7 +210,7 @@ class PurchaseOrderController extends Controller
                 }
                 $number = $sequences->replaceDraftNumberForBranch($sequence, $warehouse->branch, $po->document_number, 'purchase_orders', (int) $po->id, Carbon::parse($values['document_date']), $request->user()->id);
             }
-            $po->update(['supplier_id' => $supplier->id, 'supplier_code' => $supplier->code, 'supplier_name' => $supplier->name, 'payment_term_id' => $term?->id, 'document_number' => $number, 'document_date' => $values['document_date'], 'expected_date' => $values['expected_date'] ?? null, 'subtotal' => number_format($subtotal, 2, '.', ''), 'total_amount' => number_format($subtotal, 2, '.', ''), 'description' => $values['description'] ?? null, 'updated_by' => $request->user()->id]);
+            $po->update(['supplier_id' => $supplier->id, 'supplier_code' => $supplier->code, 'supplier_name' => $supplier->name, 'payment_term_id' => $term?->id, 'document_number' => $number, 'document_date' => $values['document_date'], 'expected_date' => $values['expected_date'] ?? null, 'tax_treatment' => $values['tax_treatment'], 'prices_include_vat' => $values['prices_include_vat'], 'tax_decimal_places' => WmsDecimal::places(), 'subtotal' => $calculation['subtotal'], 'tax_amount' => $calculation['tax_amount'], 'total_amount' => $calculation['gross_amount'], 'description' => $values['description'] ?? null, 'updated_by' => $request->user()->id]);
             $po->lines()->delete();
             $po->lines()->createMany($lines->all());
             $audit->record('purchasing.purchase_order.updated', $po, $old, $po->fresh()->load('lines')->toArray(), $request->user(), $request);
@@ -225,7 +223,7 @@ class PurchaseOrderController extends Controller
     {
         abort_unless((int) $purchaseOrder->{$this->purchasingScopeColumn()} === $this->purchasingScopeId($request) && in_array((int) $purchaseOrder->warehouse_id, $this->authorizedWarehouseIds($request), true), 404);
 
-        $order = $purchaseOrder->load(['supplier', 'paymentTerm', 'purchaseRequisition', 'lines.item', 'lines.uom']);
+        $order = $purchaseOrder->load(['supplier', 'warehouse', 'paymentTerm', 'purchaseRequisition', 'lines.item', 'lines.uom', 'lines.taxCode']);
         $history = AuditLog::query()->with('user')->where('subject_type', $order->getMorphClass())->where('subject_id', $order->id)->latest('created_at')->latest('id')->get();
 
         return view($this->moduleViewPrefix().'::purchase-orders.show', ['order' => $order, 'history' => $history, 'dateFormat' => (string) app(GlobalSettings::class)->value('date_format'), 'moduleRoutePrefix' => $this->moduleRoutePrefix()]);
@@ -283,6 +281,46 @@ class PurchaseOrderController extends Controller
         abort_unless((int) $po->{$this->purchasingScopeColumn()} === $this->purchasingScopeId($request) && in_array((int) $po->warehouse_id, $this->authorizedWarehouseIds($request), true), 404);
 
         return PurchaseOrder::query()->lockForUpdate()->findOrFail($po->id);
+    }
+
+    /** @return array{lines: array<int, array<string, mixed>>, subtotal: string, tax_amount: string, gross_amount: string} */
+    private function calculate(array $values): array
+    {
+        $vat = $values['tax_treatment'] === 'VAT_IN';
+        $ids = collect($values['lines'])->pluck('tax_code_id')->filter()->map(fn ($id): int => (int) $id)->unique();
+        $codes = TaxCode::query()->whereIn('id', $ids)->where('kind', 'VAT_IN')->where('is_active', true)->get()->keyBy('id');
+        if ($vat && ($ids->count() !== $codes->count() || collect($values['lines'])->contains(fn (array $line): bool => empty($line['tax_code_id'])))) {
+            throw ValidationException::withMessages(['lines' => 'VAT ซื้อ ต้องเลือก Tax Code ที่เปิดใช้งานครบทุกบรรทัด']);
+        }
+        if (! $vat && $ids->isNotEmpty()) {
+            throw ValidationException::withMessages(['tax_treatment' => 'เอกสารไม่มี VAT ต้องไม่ระบุ Tax Code']);
+        }
+
+        $calculation = PurchaseDocumentCalculator::calculate(
+            collect($values['lines'])->values()->map(function (array $line, int $index) use ($vat, $codes): array {
+                $line['unit_price'] = BigDecimal::of((string) $line['line_amount'])
+                    ->dividedBy((string) $line['quantity'], 4, RoundingMode::HALF_UP)
+                    ->__toString();
+
+                return [
+                    ...$line,
+                    'line_number' => $index + 1,
+                    'discount_amount' => '0',
+                    'tax_code_id' => $vat ? (int) $line['tax_code_id'] : null,
+                    'tax_rate' => $vat ? (string) $codes->get((int) $line['tax_code_id'])->rate : '0',
+                ];
+            })->all(),
+            $values['tax_treatment'],
+            (bool) $values['prices_include_vat'],
+            WmsDecimal::places(),
+            4,
+        );
+        $calculation['lines'] = collect($calculation['lines'])->map(fn (array $line): array => [
+            ...collect($line)->except(['discount_amount', 'net_amount', 'line_amount'])->all(),
+            'line_total' => $line['tax_base'],
+        ])->all();
+
+        return $calculation;
     }
 
     private function purchasingScopeColumn(): string

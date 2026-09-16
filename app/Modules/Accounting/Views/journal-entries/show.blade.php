@@ -4,8 +4,8 @@
 @section('title', $journalEntry->entry_number.' | New ERP')
 
 @section('content')
-    @php($statusLabels = ['DRAFT' => 'Draft', 'VALIDATED' => 'รออนุมัติ', 'POSTED' => 'ลงบัญชีแล้ว', 'REVERSED' => 'กลับรายการแล้ว'])
-    @php($statusClasses = ['DRAFT' => 'text-bg-secondary', 'VALIDATED' => 'text-bg-warning', 'POSTED' => 'text-bg-success', 'REVERSED' => 'text-bg-danger'])
+    @php($statusLabels = ['DRAFT' => 'ร่าง', 'VALIDATED' => 'รออนุมัติ', 'POSTED' => 'ลงบัญชีแล้ว', 'REVERSED' => 'กลับรายการแล้ว'])
+    @php($statusClasses = ['DRAFT' => 'app-status-neutral', 'VALIDATED' => 'app-status-warning', 'POSTED' => 'app-status-success', 'REVERSED' => 'app-status-danger'])
     @php($postingMetadata = (array) ($journalEntry->posting_metadata ?? []))
     @php($metadataAccounts = collect($postingMetadata['accounts'] ?? []))
     @php($accountsById = $journalEntry->lines->mapWithKeys(fn ($line) => [$line->account_id => $line->account]))
@@ -21,6 +21,12 @@
                 <a class="btn btn-outline-dark" href="{{ route('accounting.journal-entries.index') }}"><i class="bx bx-arrow-back me-1" aria-hidden="true"></i>กลับหน้ารายการ</a>
                 @if ($journalEntry->status === 'DRAFT' && auth()->user()->hasPermission('accounting.journal-entries.update'))
                     <a class="btn btn-dark" href="{{ route('accounting.journal-entries.edit', $journalEntry) }}"><i class="bx bx-edit me-1" aria-hidden="true"></i>แก้ไข Draft</a>
+                @endif
+                @if (auth()->user()->hasPermission('accounting.journal-entries.print'))
+                    <a class="btn btn-app-soft" target="_blank" href="{{ route('accounting.journal-entries.pdf', $journalEntry) }}"><i class="bx bx-printer me-1" aria-hidden="true"></i>พิมพ์</a>
+                @endif
+                @if ($journalEntry->status === 'DRAFT' && $journalEntry->source_type === 'MANUAL' && auth()->user()->hasPermission('accounting.journal-entries.delete'))
+                    <button class="btn btn-app-danger js-delete-journal" type="button" data-url="{{ route('accounting.journal-entries.destroy', $journalEntry) }}"><i class="bx bx-trash me-1" aria-hidden="true"></i>ลบร่าง</button>
                 @endif
             </div>
         </div>
@@ -199,6 +205,14 @@
             window.erpAjaxForm({ form: '#submit-journal-form', reload: true });
             window.erpAjaxForm({ form: '#approve-journal-form', reload: true });
             window.erpAjaxForm({ form: '#reverse-journal-form', redirect: true });
+            window.erpAjaxDelete({
+                button: '.js-delete-journal',
+                redirect: @json(route('accounting.journal-entries.index')),
+                title: 'ลบร่างรายการบัญชี?',
+                text: 'รายการบัญชีร่างจะถูกลบและไม่สามารถกู้คืนได้',
+                confirmButtonText: 'ลบร่าง',
+                cancelButtonText: 'กลับ'
+            });
         });
     </script>
 @endpush

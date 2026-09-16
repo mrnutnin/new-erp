@@ -35,9 +35,9 @@
     window.erpExcelButton = function ($table) {
         return {
             extend: 'excelHtml5',
-            text: '<i class="bx bx-download me-1" aria-hidden="true"></i>ส่งออก Excel',
+            text: '<i class="bx bx-download me-1" aria-hidden="true"></i>ส่งออก Excel (หน้านี้)',
             className: 'btn btn-app-soft dt-export-excel',
-            titleAttr: 'ส่งออกข้อมูลที่แสดงในตาราง',
+            titleAttr: 'ส่งออกเฉพาะรายการที่แสดงในหน้าปัจจุบัน',
             exportOptions: {
                 columns: ':visible'
             }

@@ -14,39 +14,41 @@
                 <span class="badge {{ $classes[$clearing->status] ?? 'app-status-neutral' }}">{{ $labels[$clearing->status] ?? $clearing->status }}</span>
             </div>
             <div class="d-flex flex-wrap gap-2">
-                <a class="btn btn-outline-secondary" href="{{ route('finance.petty-cash-clearings.index') }}">กลับ</a>
+                <a class="btn btn-app-soft" href="{{ route('finance.petty-cash-clearings.index') }}"><i class="bx bx-arrow-back me-1" aria-hidden="true"></i>กลับหน้ารายการ</a>
 
                 @if($clearing->journalEntry && auth()->user()->hasPermission('accounting.journal-entries.view'))
                     <button class="btn btn-app-soft" type="button" data-journal-preview-url="{{ route('accounting.journal-preview.show', $clearing->journalEntry) }}"><i class="bx bx-book-open me-1" aria-hidden="true"></i>ดู GL</button>
                 @endif
                 @if($clearing->reversalJournalEntry && auth()->user()->hasPermission('accounting.journal-entries.view'))
-                    <button class="btn btn-outline-danger" type="button" data-journal-preview-url="{{ route('accounting.journal-preview.show', $clearing->reversalJournalEntry) }}"><i class="bx bx-undo me-1" aria-hidden="true"></i>ดู GL ยกเลิก</button>
+                    <button class="btn btn-app-soft" type="button" data-journal-preview-url="{{ route('accounting.journal-preview.show', $clearing->reversalJournalEntry) }}"><i class="bx bx-book-open me-1" aria-hidden="true"></i>ดู GL รายการยกเลิก</button>
                 @endif
 
                 @if($clearing->status === 'DRAFT' && auth()->user()->hasPermission('finance.petty-cash-clearings.update'))
-                    <a class="btn btn-outline-dark" href="{{ route('finance.petty-cash-clearings.edit', $clearing) }}">แก้ไข</a>
-                    <form method="POST" action="{{ route('finance.petty-cash-clearings.destroy', $clearing) }}" class="d-inline" onsubmit="event.preventDefault(); var form=this; Swal.fire({icon:'warning',title:'ลบเอกสาร Draft?',text:'เอกสารจะถูกลบออกจากรายการ',showCancelButton:true,confirmButtonText:'ลบเอกสาร',cancelButtonText:'ยกเลิก',confirmButtonColor:'#dc3545'}).then(function(result){if(!result.isConfirmed)return; $.ajax({url:form.action,method:'DELETE',data:{_token:$('meta[name=csrf-token]').attr('content')},headers:{Accept:'application/json'}}).done(function(response){Swal.fire({icon:'success',text:response.msg||'ลบเอกสารแล้ว'}).then(function(){window.location.href=response.redirect;});}).fail(function(xhr){Swal.fire({icon:'error',text:xhr.responseJSON?.message||'ไม่สามารถลบเอกสารได้'});});});">@csrf @method('DELETE')<button class="btn btn-outline-danger" type="submit">ลบ Draft</button></form>
+                    <a class="btn btn-app-soft" href="{{ route('finance.petty-cash-clearings.edit', $clearing) }}">แก้ไข</a>
+                @endif
+                @if($clearing->status === 'DRAFT' && auth()->user()->hasPermission('finance.petty-cash-clearings.delete'))
+                    <button class="btn btn-app-danger js-delete-clearing" type="button" data-url="{{ route('finance.petty-cash-clearings.destroy', $clearing) }}"><i class="bx bx-trash me-1" aria-hidden="true"></i>ลบร่าง</button>
                 @endif
 
                 @if($clearing->status === 'DRAFT' && auth()->user()->hasPermission('finance.petty-cash-clearings.submit'))
-                    <button class="btn btn-dark js-action" data-url="{{ route('finance.petty-cash-clearings.submit', $clearing) }}">ส่งอนุมัติ</button>
+                    <button class="btn btn-app-primary js-action" data-url="{{ route('finance.petty-cash-clearings.submit', $clearing) }}">ส่งอนุมัติ</button>
                 @endif
 
                 @if($clearing->status === 'SUBMITTED' && auth()->user()->hasPermission('finance.petty-cash-clearings.approve'))
-                    <button class="btn btn-dark js-action" data-url="{{ route('finance.petty-cash-clearings.approve', $clearing) }}">อนุมัติ</button>
-                    <button class="btn btn-outline-danger js-void" data-url="{{ route('finance.petty-cash-clearings.reject', $clearing) }}">ไม่อนุมัติ</button>
+                    <button class="btn btn-app-primary js-action" data-url="{{ route('finance.petty-cash-clearings.approve', $clearing) }}">อนุมัติ</button>
+                    <button class="btn btn-app-danger js-void" data-url="{{ route('finance.petty-cash-clearings.reject', $clearing) }}">ไม่อนุมัติ</button>
                 @endif
 
                 @if($clearing->status === 'APPROVED' && auth()->user()->hasPermission('finance.petty-cash-clearings.post'))
-                    <button class="btn btn-dark js-action" data-method="POST" data-url="{{ route('finance.petty-cash-clearings.post', $clearing) }}">ลงบัญชี</button>
+                    <button class="btn btn-app-primary js-action" data-method="POST" data-url="{{ route('finance.petty-cash-clearings.post', $clearing) }}">ลงบัญชี</button>
                 @endif
 
                 @if($clearing->status === 'POSTED' && auth()->user()->hasPermission('finance.petty-cash-clearings.reverse'))
-                    <button class="btn btn-outline-danger js-reverse" data-url="{{ route('finance.petty-cash-clearings.reverse', $clearing) }}">ยกเลิกรายการ</button>
+                    <button class="btn btn-app-danger js-reverse" data-url="{{ route('finance.petty-cash-clearings.reverse', $clearing) }}">ยกเลิกรายการ</button>
                 @endif
 
                 @if(in_array($clearing->status, ['SUBMITTED', 'APPROVED'], true) && auth()->user()->hasPermission('finance.petty-cash-clearings.void'))
-                    <button class="btn btn-outline-danger js-void" data-url="{{ route('finance.petty-cash-clearings.void', $clearing) }}">ยกเลิก</button>
+                    <button class="btn btn-app-danger js-void" data-url="{{ route('finance.petty-cash-clearings.void', $clearing) }}">ยกเลิก</button>
                 @endif
             </div>
         </div>
@@ -68,6 +70,8 @@
         <div class="card border-0 shadow-sm mt-4"><div class="card-body p-3 p-lg-4"><h2 class="h5 mb-3">ประวัติเอกสาร</h2>@forelse($history ?? [] as $event)<div class="d-flex gap-3 border-bottom py-2"><div class="small text-secondary text-nowrap">{{ $event->created_at?->format('d/m/Y H:i') }}</div><div><strong>{{ $event->action }}</strong><div class="small text-secondary">{{ $event->user?->name ?? 'ระบบ' }}</div>@if($event->reason)<div class="small mt-1"><span class="text-secondary">รายละเอียด:</span> {{ $event->reason }}</div>@endif</div></div>@empty<p class="text-secondary mb-0">ยังไม่มีประวัติเอกสาร</p>@endforelse</div></div>
     </div>
 @endsection
+
+@push('scripts')<script>$(function(){window.erpAjaxDelete({button:'.js-delete-clearing',redirect:@json(route('finance.petty-cash-clearings.index')),confirm:'ยืนยันการลบเอกสารเคลียร์เงินสดย่อยฉบับร่างนี้หรือไม่?',confirmButtonText:'ลบร่าง',cancelButtonText:'กลับ'});});</script>@endpush
 
 @push('scripts')
     <script>

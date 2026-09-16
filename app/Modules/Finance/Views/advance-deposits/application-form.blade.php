@@ -18,7 +18,7 @@
                     <div class="col-md-3"><label class="form-label">วันที่ตัด</label><input class="form-control" type="date" name="application_date" value="{{ today()->format('Y-m-d') }}" required></div>
                 <div class="col-md-3"><label class="form-label">จำนวนเงิน</label><input class="form-control" type="number" min="0.01" step="0.01" name="amount" required><div class="form-text" id="amount-hint">กรุณาเลือกเอกสารก่อนกรอกจำนวนเงิน</div></div>
                 </div>
-                <div class="mt-4"><button class="btn btn-dark" type="submit" @disabled($options->isEmpty())>บันทึกการตัด</button> <a class="btn btn-outline-secondary" href="{{ route('finance.advance-deposits.index') }}">ยกเลิก</a></div>
+                <div class="mt-4"><button class="btn btn-app-primary" type="submit" @disabled($options->isEmpty())>บันทึกการตัด</button> <a class="btn btn-app-soft" href="{{ route('finance.advance-deposits.index') }}"><i class="bx bx-arrow-back me-1" aria-hidden="true"></i>กลับหน้ารายการ</a></div>
             </form>
         </div>
     </div>

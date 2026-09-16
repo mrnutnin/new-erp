@@ -15,26 +15,26 @@ use App\Modules\Finance\Models\PaymentTerm;
 use App\Modules\Finance\Services\DocumentSequenceService;
 use App\Modules\Finance\Support\PaymentDueDate;
 use App\Modules\Platform\Services\AuditLogger;
-use App\Modules\Settings\Services\GlobalSettings;
 use App\Modules\Purchasing\Models\GoodsReceipt;
 use App\Modules\Purchasing\Models\GoodsReceiptLine;
-use App\Modules\Wms\Models\Item;
 use App\Modules\Purchasing\Models\PurchaseDocument;
 use App\Modules\Purchasing\Models\PurchaseOrderLine;
-use App\Modules\Wms\Models\Uom;
-use App\Modules\Wms\Models\UomConversion;
 use App\Modules\Purchasing\Requests\ChangePurchaseDocumentStatusRequest;
 use App\Modules\Purchasing\Requests\PostPurchaseDocumentRequest;
 use App\Modules\Purchasing\Requests\PurchaseVarianceDecisionRequest;
 use App\Modules\Purchasing\Requests\SavePurchaseDocumentRequest;
-use App\Modules\Wms\Services\CreditPurchaseInventoryReversalAdapter;
-use App\Modules\Wms\Services\InventoryPurchaseLiveReversalAdapter;
-use App\Modules\Wms\Services\InventoryPurchaseProductionAdapter;
-use App\Modules\Wms\Services\PurchaseDocumentPostingService;
 use App\Modules\Purchasing\Services\PurchaseVarianceApprovalService;
 use App\Modules\Purchasing\Support\PurchaseDocumentCalculator;
 use App\Modules\Purchasing\Support\PurchaseDocumentState;
 use App\Modules\Purchasing\Support\PurchaseThreeWayMatchGate;
+use App\Modules\Settings\Services\GlobalSettings;
+use App\Modules\Wms\Models\Item;
+use App\Modules\Wms\Models\Uom;
+use App\Modules\Wms\Models\UomConversion;
+use App\Modules\Wms\Services\CreditPurchaseInventoryReversalAdapter;
+use App\Modules\Wms\Services\InventoryPurchaseLiveReversalAdapter;
+use App\Modules\Wms\Services\InventoryPurchaseProductionAdapter;
+use App\Modules\Wms\Services\PurchaseDocumentPostingService;
 use App\Modules\Wms\Support\WmsDecimal;
 use Brick\Math\BigDecimal;
 use Brick\Math\RoundingMode;
@@ -164,11 +164,11 @@ class PurchaseDocumentController extends Controller
         $values = $request->validate(['q' => ['nullable', 'string', 'max:100'], 'page' => ['nullable', 'integer', 'min:1', 'max:100000'], 'item_type' => ['nullable', 'in:GOODS,SERVICE']]);
         $search = trim((string) ($values['q'] ?? ''));
         $page = (int) ($values['page'] ?? 1);
-        $items = Item::query()->where('is_active', true)->where('item_type', $values['item_type'] ?? 'GOODS')->when(($values['item_type'] ?? 'GOODS') === 'GOODS', fn (Builder $query) => $query->where('is_stock_item', true))
+        $items = Item::query()->with('baseUom:id,code,name,is_active')->where('is_active', true)->where('item_type', $values['item_type'] ?? 'GOODS')->when(($values['item_type'] ?? 'GOODS') === 'GOODS', fn (Builder $query) => $query->where('is_stock_item', true))
             ->when($search !== '', fn (Builder $query) => $query->where(fn (Builder $query) => $query->where('code', 'like', "%{$search}%")->orWhere('name', 'like', "%{$search}%")))
-            ->orderBy('code')->forPage($page, 31)->get(['id', 'code', 'name']);
+            ->orderBy('code')->forPage($page, 31)->get(['id', 'code', 'name', 'base_uom_id']);
 
-        return response()->json(['results' => $items->take(30)->map(fn (Item $item) => ['id' => $item->id, 'text' => $item->code.' · '.$item->name])->values(), 'pagination' => ['more' => $items->count() > 30]]);
+        return response()->json(['results' => $items->take(30)->map(fn (Item $item) => ['id' => $item->id, 'text' => $item->code.' · '.$item->name, 'uom_id' => $item->baseUom?->is_active ? $item->base_uom_id : null, 'uom_text' => $item->baseUom?->is_active ? $item->baseUom->code.' · '.$item->baseUom->name : null])->values(), 'pagination' => ['more' => $items->count() > 30]]);
     }
 
     public function uomOptions(Request $request): JsonResponse
@@ -219,11 +219,12 @@ class PurchaseDocumentController extends Controller
             ->where('warehouse_id', $request->attributes->get('selectedWarehouse')->id)
             ->where('supplier_id', $values['supplier_id'])->where('document_type', 'INVOICE')->where('status', 'POSTED')
             ->when($search !== '', fn (Builder $query) => $query->where('document_number', 'like', "%{$search}%"))
-            ->orderByDesc('document_date')->orderByDesc('id')->forPage($page, 31)->get(['id', 'document_number', 'gross_amount']);
+            ->orderByDesc('document_date')->orderByDesc('id')->forPage($page, 31)->get(['id', 'document_number', 'gross_amount', 'tax_treatment', 'prices_include_vat']);
 
         return response()->json([
             'results' => $documents->take(30)->map(fn (PurchaseDocument $document) => [
                 'id' => $document->id, 'text' => $document->document_number.' · '.WmsDecimal::format($document->gross_amount),
+                'tax_calculation' => $document->tax_treatment === 'NONE_VAT' ? 'NONE' : ($document->prices_include_vat ? 'VAT_INCLUSIVE' : 'VAT_EXCLUSIVE'),
             ])->values(),
             'pagination' => ['more' => $documents->count() > 30],
         ]);
@@ -331,10 +332,29 @@ class PurchaseDocumentController extends Controller
     {
         $type = strtoupper((string) $request->query('document_type', 'INVOICE'));
         $type = in_array($type, ['INVOICE', 'CREDIT_NOTE'], true) ? $type : 'INVOICE';
-        $data = $this->formData(new PurchaseDocument([
+        $document = new PurchaseDocument([
             'warehouse_id' => $request->attributes->get('selectedWarehouse')->id,
             'document_type' => $type, 'document_date' => today(), 'tax_treatment' => 'NONE_VAT', 'prices_include_vat' => false, 'status' => 'DRAFT',
-        ]));
+        ]);
+        $prefillLines = null;
+        if ($type === 'CREDIT_NOTE' && $request->filled('original_document_id')) {
+            $original = PurchaseDocument::query()->with('lines')
+                ->whereKey($request->integer('original_document_id'))
+                ->where('warehouse_id', $request->attributes->get('selectedWarehouse')->id)
+                ->where($this->purchasingScopeColumn(), $this->purchasingScopeId($request))
+                ->where('document_type', 'INVOICE')->where('status', 'POSTED')->firstOrFail();
+            $document->forceFill([
+                'supplier_id' => $original->supplier_id, 'original_document_id' => $original->id,
+                'tax_treatment' => $original->tax_treatment, 'prices_include_vat' => $original->prices_include_vat,
+            ]);
+            $document->setRelation('lines', $original->lines);
+            $prefillLines = $original->lines->map(fn ($line): array => [
+                ...$line->only(['description', 'item_id', 'uom_id', 'purchase_order_line_id', 'account_id', 'tax_code_id', 'quantity', 'unit_price', 'discount_amount']),
+                'receipt_allocations' => [],
+            ])->all();
+        }
+        $data = $this->formData($document);
+        $data['prefillLines'] = $prefillLines;
         $data['documentTypeLocked'] = true;
 
         $data['moduleRoutePrefix'] = $this->moduleRoutePrefix();
@@ -784,13 +804,34 @@ class PurchaseDocumentController extends Controller
         if (($values['document_type'] ?? null) !== 'CREDIT_NOTE') {
             return;
         }
-        $original = PurchaseDocument::query()->whereKey($values['original_document_id'])->where('warehouse_id', $warehouseId)
+        $original = PurchaseDocument::query()->with('lines')->whereKey($values['original_document_id'])->where('warehouse_id', $warehouseId)
             ->where('supplier_id', $values['supplier_id'])->where('document_type', 'INVOICE')->where('status', 'POSTED')->lockForUpdate()->first();
         if (! $original) {
             throw ValidationException::withMessages(['original_document_id' => 'ใบลดหนี้ต้องอ้าง invoice ที่ Post แล้วของ Supplier และ Warehouse เดียวกัน']);
         }
         if ($values['document_date'] < $original->document_date->format('Y-m-d')) {
             throw ValidationException::withMessages(['document_date' => 'วันที่ใบลดหนี้ต้องไม่ก่อน invoice ต้นทาง']);
+        }
+        if ($values['tax_treatment'] !== $original->tax_treatment || (bool) $values['prices_include_vat'] !== (bool) $original->prices_include_vat) {
+            throw ValidationException::withMessages(['tax_calculation' => 'รูปแบบภาษีของใบลดหนี้ต้องตรงกับใบตั้งหนี้ซื้อที่อ้างอิง']);
+        }
+        $sourceTaxCodeIds = $original->lines->pluck('tax_code_id')->map(fn ($id) => (int) $id)->unique()->values();
+        foreach ($values['lines'] as $index => $line) {
+            $submittedTaxCodeId = (int) ($line['tax_code_id'] ?? 0);
+            $candidates = $original->lines->filter(function ($sourceLine) use ($line): bool {
+                if (! empty($line['purchase_order_line_id'])) {
+                    return (int) $sourceLine->purchase_order_line_id === (int) $line['purchase_order_line_id'];
+                }
+
+                return (int) $sourceLine->item_id === (int) ($line['item_id'] ?? 0)
+                    && (int) $sourceLine->account_id === (int) ($line['account_id'] ?? 0);
+            });
+            $allowedTaxCodeIds = $candidates->isNotEmpty()
+                ? $candidates->pluck('tax_code_id')->map(fn ($id) => (int) $id)->unique()->values()
+                : $sourceTaxCodeIds;
+            if ($allowedTaxCodeIds->count() !== 1 || $submittedTaxCodeId !== (int) $allowedTaxCodeIds->first()) {
+                throw ValidationException::withMessages(["lines.{$index}.tax_code_id" => 'Tax Code ของใบลดหนี้ต้องตรงกับบรรทัดในใบตั้งหนี้ซื้อที่อ้างอิง']);
+            }
         }
         $credits = PurchaseDocument::query()->where('original_document_id', $original->id)->where('document_type', 'CREDIT_NOTE')
             ->where('status', '!=', 'VOID')->when($ignoreId, fn (Builder $query) => $query->whereKeyNot($ignoreId))
@@ -1021,6 +1062,10 @@ class PurchaseDocumentController extends Controller
             ->where('purchase_documents.'.$this->purchasingScopeColumn(), $this->purchasingScopeId($request))
             ->whereIn('purchase_documents.warehouse_id', $this->authorizedWarehouseIds($request))
             ->when(in_array($request->query('document_type'), ['INVOICE', 'CREDIT_NOTE'], true), fn (Builder $query) => $query->where('purchase_documents.document_type', $request->query('document_type')))
+            ->when($request->filled('document_date_from'), fn (Builder $query) => $query->whereDate('purchase_documents.document_date', '>=', $request->input('document_date_from')))
+            ->when($request->filled('document_date_to'), fn (Builder $query) => $query->whereDate('purchase_documents.document_date', '<=', $request->input('document_date_to')))
+            ->when($request->filled('supplier_id'), fn (Builder $query) => $query->where('purchase_documents.supplier_id', (int) $request->input('supplier_id')))
+            ->when($request->filled('status'), fn (Builder $query) => $query->where('purchase_documents.status', $request->input('status')))
             ->select(['purchase_documents.*', 'originals.document_number as original_number'])
             ->withCount('lines')
             ->with(['lines.item:id,item_type', 'lines.receiptAllocations:id,purchase_document_line_id']);

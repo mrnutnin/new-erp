@@ -60,7 +60,7 @@
                     { data: 'description', name: 'description', render: text.display },
                     { data: 'debit_total', name: 'debit_total', orderable: false, searchable: false, className: 'text-end', render: text.display },
                     { data: 'credit_total', name: 'credit_total', orderable: false, searchable: false, className: 'text-end', render: text.display },
-                    { data: null, orderable: false, searchable: false, className: 'text-end', render: function (value, type, row) { return '<a class="btn btn-sm btn-outline-dark" href="' + text.display(row.show_url) + '"><i class="bx bx-show me-1" aria-hidden="true"></i>ตรวจสอบ</a>'; } }
+                    { data: null, orderable: false, searchable: false, className: 'text-end', render: function (value, type, row) { return '<a class="btn btn-sm btn-outline-dark" href="' + text.display(row.show_url) + '"><i class="bx bx-file-find me-1" aria-hidden="true"></i>ตรวจสอบ</a>'; } }
                 ]
             }));
             $('#apply-approval-filters').on('click', function () { $table.DataTable().ajax.reload(); });

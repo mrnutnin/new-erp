@@ -8,6 +8,7 @@ use App\Modules\Asset\Models\AssetDisposal;
 use App\Modules\Asset\Services\AssetDisposalService;
 use App\Modules\Finance\Models\DocumentSequence;
 use App\Modules\Finance\Services\DocumentSequenceService;
+use App\Modules\Platform\Services\AuditLogger;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -25,7 +26,7 @@ final class AssetDisposalController extends Controller
 
     public function data(Request $request): JsonResponse
     {
-        return DataTables::eloquent(AssetDisposal::query()->withCount('lines')->where('branch_id', $this->branchId($request))->when($request->filled('status'), fn ($q) => $q->where('status', $request->string('status')))->when($request->filled('disposal_type'), fn ($q) => $q->where('disposal_type', $request->string('disposal_type')))->when($request->filled('disposal_date_from'), fn ($q) => $q->whereDate('disposal_date', '>=', $request->date('disposal_date_from')->toDateString()))->when($request->filled('disposal_date_to'), fn ($q) => $q->whereDate('disposal_date', '<=', $request->date('disposal_date_to')->toDateString()))->latest('disposal_date')->latest('id'))->addColumn('show_url', fn (AssetDisposal $row) => route('asset.disposals.show', $row))->toJson();
+        return DataTables::eloquent(AssetDisposal::query()->withCount('lines')->where('branch_id', $this->branchId($request))->when($request->filled('status'), fn ($q) => $q->where('status', $request->string('status')))->when($request->filled('disposal_type'), fn ($q) => $q->where('disposal_type', $request->string('disposal_type')))->when($request->filled('disposal_date_from'), fn ($q) => $q->whereDate('disposal_date', '>=', $request->date('disposal_date_from')->toDateString()))->when($request->filled('disposal_date_to'), fn ($q) => $q->whereDate('disposal_date', '<=', $request->date('disposal_date_to')->toDateString()))->latest('disposal_date')->latest('id'))->addColumn('show_url', fn (AssetDisposal $row) => route('asset.disposals.show', $row))->addColumn('delete_url', fn (AssetDisposal $row) => $row->status === 'DRAFT' && $request->user()->hasPermission('asset.disposals.create') ? route('asset.disposals.destroy', $row) : null)->toJson();
     }
 
     public function create(): View
@@ -72,6 +73,22 @@ final class AssetDisposalController extends Controller
     public function submit(Request $request, AssetDisposal $disposal, AssetDisposalService $service): JsonResponse
     {
         return $this->changed('ส่งอนุมัติเอกสารจำหน่ายแล้ว', $service->submit($this->scoped($request, $disposal), $request->user()));
+    }
+
+    public function destroy(Request $request, AssetDisposal $disposal, AuditLogger $audit): JsonResponse
+    {
+        $disposal = $this->scoped($request, $disposal);
+        DB::transaction(function () use ($request, $disposal, $audit): void {
+            $disposal = AssetDisposal::query()->lockForUpdate()->findOrFail($disposal->id);
+            if ($disposal->status !== 'DRAFT') {
+                throw ValidationException::withMessages(['status' => 'ลบได้เฉพาะเอกสารจำหน่ายสถานะร่าง']);
+            }
+            $before = $disposal->toArray();
+            $disposal->delete();
+            $audit->record('asset.disposal.deleted', $disposal, $before, ['deleted_at' => $disposal->deleted_at], $request->user(), $request);
+        });
+
+        return response()->json(['status' => true, 'msg' => 'ลบเอกสารจำหน่ายร่างแล้ว', 'redirect' => route('asset.disposals.index')]);
     }
 
     public function approve(Request $request, AssetDisposal $disposal, AssetDisposalService $service): JsonResponse

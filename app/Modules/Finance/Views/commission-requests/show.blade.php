@@ -7,16 +7,16 @@
     <h1 class="h3 mb-2">{{ $commissionRequest->document_number }}</h1>
     <p class="text-secondary mb-4">ใบขอจ่ายคอมมิชชั่น · ชุด {{ $commissionRequest->paymentBatch->document_number }}</p>
     <div class="d-flex justify-content-end gap-2 mb-3">
-        <a class="btn btn-outline-secondary" href="{{ route('finance.commission-payouts.show', $commissionRequest->paymentBatch) }}">ย้อนกลับ</a>
+        <a class="btn btn-app-soft" href="{{ route('finance.commission-payouts.show', $commissionRequest->paymentBatch) }}"><i class="bx bx-arrow-back me-1" aria-hidden="true"></i>กลับหน้ารายการ</a>
         @if($commissionRequest->status === 'DRAFT')
-            <button class="btn btn-dark js-action" data-url="{{ route('finance.commission-requests.submit', $commissionRequest) }}">ส่งอนุมัติ</button>
+            <button class="btn btn-app-primary js-action" data-url="{{ route('finance.commission-requests.submit', $commissionRequest) }}">ส่งอนุมัติ</button>
         @elseif($commissionRequest->status === 'SUBMITTED')
-            <button class="btn btn-primary js-action" data-url="{{ route('finance.commission-requests.approve', $commissionRequest) }}">อนุมัติ</button>
+            <button class="btn btn-app-primary js-action" data-url="{{ route('finance.commission-requests.approve', $commissionRequest) }}">อนุมัติ</button>
         @elseif($commissionRequest->status === 'APPROVED' && ! $commissionRequest->voucher && auth()->user()->hasPermission('finance.payment-vouchers.create'))
-            <a class="btn btn-dark" href="{{ route('finance.payment-vouchers.create', ['commission_request_id' => $commissionRequest->id]) }}">สร้างใบสำคัญจ่าย</a>
+            <a class="btn btn-app-primary" href="{{ route('finance.payment-vouchers.create', ['commission_request_id' => $commissionRequest->id]) }}">สร้างใบสำคัญจ่าย</a>
         @endif
         @if(in_array($commissionRequest->status, ['DRAFT', 'SUBMITTED', 'APPROVED'], true) && auth()->user()->hasPermission('finance.commission-payouts.void'))
-            <button class="btn btn-outline-danger js-cancel-request" data-url="{{ route('finance.commission-requests.cancel', $commissionRequest) }}" @disabled($commissionRequest->voucher && $commissionRequest->voucher->status !== 'VOID') title="{{ $commissionRequest->voucher && $commissionRequest->voucher->status !== 'VOID' ? 'ต้องยกเลิกใบสำคัญจ่ายก่อน' : '' }}">ยกเลิกเอกสาร</button>
+            <button class="btn btn-app-danger js-cancel-request" data-url="{{ route('finance.commission-requests.cancel', $commissionRequest) }}" @disabled($commissionRequest->voucher && $commissionRequest->voucher->status !== 'VOID') title="{{ $commissionRequest->voucher && $commissionRequest->voucher->status !== 'VOID' ? 'ต้องยกเลิกใบสำคัญจ่ายก่อน' : '' }}">ยกเลิกเอกสาร</button>
         @endif
     </div>
     <div class="card border-0 shadow-sm mb-3"><div class="card-body p-3 p-lg-4"><div class="row g-3"><div class="col-md-4"><div class="small text-secondary">พนักงาน</div><strong>{{ $commissionRequest->recipient->name }}</strong></div><div class="col-md-4"><div class="small text-secondary">Supplier</div><strong>{{ $commissionRequest->supplier->code }} · {{ $commissionRequest->supplier->name }}</strong></div><div class="col-md-4 text-md-end"><div class="small text-secondary">ยอดขอจ่าย</div><strong class="h4">{{ number_format((float) $commissionRequest->amount, 2) }}</strong></div></div><hr><span class="badge {{ $commissionRequest->status === 'CANCELLED' ? 'app-status-danger' : ($commissionRequest->status === 'APPROVED' ? 'app-badge-success' : ($commissionRequest->status === 'SUBMITTED' ? 'app-badge-info' : 'app-badge-soft')) }}">{{ $requestLabels[$commissionRequest->status] ?? $commissionRequest->status }}</span></div></div>

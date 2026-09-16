@@ -76,6 +76,7 @@ class JournalPostingMetadataTest extends TestCase
             $table->unsignedBigInteger('reversed_by')->nullable();
             $table->string('reversal_reason')->nullable();
             $table->timestamps();
+            $table->softDeletes();
         });
         Schema::create('journal_entry_lines', function (Blueprint $table) {
             $table->id();

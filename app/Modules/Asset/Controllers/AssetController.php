@@ -46,7 +46,9 @@ class AssetController extends Controller
             ->addColumn('category_label', fn (Asset $asset) => $asset->category?->code.' · '.$asset->category?->name)
             ->addColumn('location_label', fn (Asset $asset) => $asset->location ? $asset->location->code.' · '.$asset->location->name : '-')
             ->addColumn('custodian_label', fn (Asset $asset) => $asset->custodian?->name ?? '-')
+            ->addColumn('show_url', fn (Asset $asset) => route('asset.assets.show', $asset))
             ->addColumn('edit_url', fn (Asset $asset) => $request->user()->hasPermission('asset.register.update') && $asset->status === 'DRAFT' ? route('asset.assets.edit', $asset) : null)
+            ->addColumn('delete_url', fn (Asset $asset) => $request->user()->hasPermission('asset.register.update') && $asset->status === 'DRAFT' ? route('asset.assets.destroy', $asset) : null)
             ->toJson();
     }
 

@@ -24,6 +24,7 @@ Route::middleware(['auth', 'program:purchasing', 'warehouse'])
         Route::get('/dashboard/data/{section}', [EntryController::class, 'data'])->middleware('permission:purchasing.dashboard.view')->name('dashboard.data');
         Route::get('/workflow', [WorkflowController::class, 'index'])->name('workflow.index');
         Route::get('/reports', [OperationalReportController::class, 'index'])->middleware('permission:purchasing.reports.view')->name('reports.index');
+        Route::get('/reports/pdf', [OperationalReportController::class, 'pdf'])->middleware('permission:purchasing.reports.view')->name('reports.pdf');
 
         Route::get('/suppliers', [SupplierController::class, 'index'])->middleware('permission:purchasing.suppliers.view')->name('suppliers.index');
         Route::get('/suppliers/data', [SupplierController::class, 'data'])->middleware('permission:purchasing.suppliers.view')->name('suppliers.data');
@@ -41,6 +42,7 @@ Route::middleware(['auth', 'program:purchasing', 'warehouse'])
         Route::get('/purchase-requisitions/uom-options', [PurchaseRequisitionController::class, 'uomOptions'])->middleware('permission:purchasing.purchase-requisitions.view')->name('purchase-requisitions.uom-options');
         Route::get('/purchase-requisitions/create', [PurchaseRequisitionController::class, 'create'])->middleware('permission:purchasing.purchase-requisitions.create')->name('purchase-requisitions.create');
         Route::post('/purchase-requisitions', [PurchaseRequisitionController::class, 'store'])->middleware('permission:purchasing.purchase-requisitions.create')->name('purchase-requisitions.store');
+        Route::get('/purchase-requisitions/{purchaseRequisition}', [PurchaseRequisitionController::class, 'show'])->middleware('permission:purchasing.purchase-requisitions.view')->name('purchase-requisitions.show');
         Route::get('/purchase-requisitions/{purchaseRequisition}/edit', [PurchaseRequisitionController::class, 'edit'])->middleware('permission:purchasing.purchase-requisitions.update')->name('purchase-requisitions.edit');
         Route::get('/purchase-requisitions/{purchaseRequisition}/pdf', [PurchaseDocumentPdfController::class, 'requisition'])->middleware('permission:purchasing.purchase-requisitions.print')->name('purchase-requisitions.pdf');
         Route::put('/purchase-requisitions/{purchaseRequisition}', [PurchaseRequisitionController::class, 'update'])->middleware('permission:purchasing.purchase-requisitions.update')->name('purchase-requisitions.update');
@@ -67,12 +69,14 @@ Route::middleware(['auth', 'program:purchasing', 'warehouse'])
         Route::get('/purchase-receipts/data', [PurchaseReceiptController::class, 'data'])->middleware('permission:purchasing.purchase-receipts.view')->name('purchase-receipts.data');
         Route::get('/purchase-receipts/supplier-options', [PurchaseReceiptController::class, 'supplierOptions'])->middleware('permission:purchasing.purchase-receipts.view')->name('purchase-receipts.supplier-options');
         Route::get('/purchase-receipts/create', [PurchaseReceiptController::class, 'create'])->middleware('permission:purchasing.purchase-receipts.create')->name('purchase-receipts.create');
+        Route::get('/purchase-receipts/{purchaseReceipt}', [PurchaseReceiptController::class, 'show'])->middleware('permission:purchasing.purchase-receipts.view')->name('purchase-receipts.show');
         Route::get('/purchase-receipts/{purchaseReceipt}/edit', [PurchaseReceiptController::class, 'edit'])->middleware('permission:purchasing.purchase-receipts.update')->name('purchase-receipts.edit');
         Route::get('/purchase-receipts/{purchaseReceipt}/pdf', [PurchaseDocumentPdfController::class, 'receipt'])->middleware('permission:purchasing.purchase-receipts.print')->name('purchase-receipts.pdf');
         Route::get('/purchase-receipts/purchase-options', [PurchaseReceiptController::class, 'purchaseOptions'])->middleware('permission:purchasing.purchase-receipts.create')->name('purchase-receipts.purchase-options');
         Route::get('/purchase-receipts/line-options', [PurchaseReceiptController::class, 'lineOptions'])->middleware('permission:purchasing.purchase-receipts.create')->name('purchase-receipts.line-options');
         Route::post('/purchase-receipts', [PurchaseReceiptController::class, 'store'])->middleware('permission:purchasing.purchase-receipts.create')->name('purchase-receipts.store');
         Route::put('/purchase-receipts/{purchaseReceipt}', [PurchaseReceiptController::class, 'update'])->middleware('permission:purchasing.purchase-receipts.update')->name('purchase-receipts.update');
+        Route::delete('/purchase-receipts/{purchaseReceipt}', [PurchaseReceiptController::class, 'destroy'])->middleware('permission:purchasing.purchase-receipts.delete')->name('purchase-receipts.destroy');
         Route::post('/purchase-receipts/{purchaseReceipt}/approve', [PurchaseReceiptController::class, 'approve'])->middleware('permission:purchasing.purchase-receipts.approve')->name('purchase-receipts.approve');
         Route::post('/purchase-receipts/{purchaseReceipt}/void', [PurchaseReceiptController::class, 'void'])->middleware('permission:purchasing.purchase-receipts.void')->name('purchase-receipts.void');
 
@@ -80,7 +84,9 @@ Route::middleware(['auth', 'program:purchasing', 'warehouse'])
         Route::get('/landed-costs/data', [LandedCostController::class, 'data'])->middleware('permission:purchasing.landed-costs.view')->name('landed-costs.data');
         Route::get('/landed-costs/create', [LandedCostController::class, 'create'])->middleware('permission:purchasing.landed-costs.create')->name('landed-costs.create');
         Route::post('/landed-costs', [LandedCostController::class, 'store'])->middleware('permission:purchasing.landed-costs.create')->name('landed-costs.store');
+        Route::get('/landed-costs/{landedCost}/pdf', [PurchaseDocumentPdfController::class, 'landedCost'])->middleware('permission:purchasing.landed-costs.print')->name('landed-costs.pdf');
         Route::get('/landed-costs/{landedCost}', [LandedCostController::class, 'show'])->middleware('permission:purchasing.landed-costs.view')->name('landed-costs.show');
+        Route::delete('/landed-costs/{landedCost}', [LandedCostController::class, 'destroy'])->middleware('permission:purchasing.landed-costs.delete')->name('landed-costs.destroy');
         Route::post('/landed-costs/{landedCost}/submit', [LandedCostController::class, 'submit'])->middleware('permission:purchasing.landed-costs.submit')->name('landed-costs.submit');
         Route::post('/landed-costs/{landedCost}/approve', [LandedCostController::class, 'approve'])->middleware('permission:purchasing.landed-costs.approve')->name('landed-costs.approve');
         Route::post('/landed-costs/{landedCost}/post', [LandedCostController::class, 'post'])->middleware('permission:purchasing.landed-costs.post')->name('landed-costs.post');

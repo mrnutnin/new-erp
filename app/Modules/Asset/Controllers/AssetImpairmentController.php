@@ -8,6 +8,7 @@ use App\Modules\Asset\Models\AssetImpairment;
 use App\Modules\Asset\Services\AssetImpairmentService;
 use App\Modules\Finance\Models\DocumentSequence;
 use App\Modules\Finance\Services\DocumentSequenceService;
+use App\Modules\Platform\Services\AuditLogger;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -27,7 +28,8 @@ final class AssetImpairmentController extends Controller
     {
         return DataTables::eloquent(AssetImpairment::query()->with('asset:id,asset_number,name')->where('branch_id', $this->branchId($request))->when($request->filled('status'), fn ($query) => $query->where('status', $request->string('status')->toString()))->when($request->filled('assessment_date_from'), fn ($query) => $query->whereDate('assessment_date', '>=', $request->string('assessment_date_from')->toString()))->when($request->filled('assessment_date_to'), fn ($query) => $query->whereDate('assessment_date', '<=', $request->string('assessment_date_to')->toString()))->latest('assessment_date')->latest('id'))
             ->addColumn('asset_label', fn (AssetImpairment $row) => $row->asset?->asset_number.' · '.$row->asset?->name)
-            ->addColumn('show_url', fn (AssetImpairment $row) => route('asset.impairments.show', $row))->toJson();
+            ->addColumn('show_url', fn (AssetImpairment $row) => route('asset.impairments.show', $row))
+            ->addColumn('delete_url', fn (AssetImpairment $row) => $row->status === 'DRAFT' && $request->user()->hasPermission('asset.impairments.create') ? route('asset.impairments.destroy', $row) : null)->toJson();
     }
 
     public function create(): View
@@ -71,6 +73,22 @@ final class AssetImpairmentController extends Controller
     public function submit(Request $request, AssetImpairment $impairment): JsonResponse
     {
         return $this->transition($request, $impairment, 'DRAFT', 'SUBMITTED', ['submitted_by' => $request->user()->id, 'submitted_at' => now()]);
+    }
+
+    public function destroy(Request $request, AssetImpairment $impairment, AuditLogger $audit): JsonResponse
+    {
+        $impairment = $this->scoped($request, $impairment);
+        DB::transaction(function () use ($request, $impairment, $audit): void {
+            $impairment = AssetImpairment::query()->lockForUpdate()->findOrFail($impairment->id);
+            if ($impairment->status !== 'DRAFT') {
+                throw ValidationException::withMessages(['status' => 'ลบได้เฉพาะเอกสารด้อยค่าสถานะร่าง']);
+            }
+            $before = $impairment->toArray();
+            $impairment->delete();
+            $audit->record('asset.impairment.deleted', $impairment, $before, ['deleted_at' => $impairment->deleted_at], $request->user(), $request);
+        });
+
+        return response()->json(['status' => true, 'msg' => 'ลบเอกสารด้อยค่าร่างแล้ว', 'redirect' => route('asset.impairments.index')]);
     }
 
     public function approve(Request $request, AssetImpairment $impairment): JsonResponse

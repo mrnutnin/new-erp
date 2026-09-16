@@ -12,6 +12,7 @@ use App\Modules\Asset\Requests\StoreAssetDepreciationRunRequest;
 use App\Modules\Asset\Services\AssetDepreciationRunService;
 use App\Modules\Finance\Models\DocumentSequence;
 use App\Modules\Finance\Services\DocumentSequenceService;
+use App\Modules\Platform\Services\AuditLogger;
 use App\Modules\Settings\Services\GlobalSettings;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -45,6 +46,7 @@ class AssetDepreciationRunController extends Controller
             ->when($filters['book_type'] ?? null, fn ($query, $bookType) => $query->where('book_type', $bookType))
             ->latest('run_through_date')->latest('id'))
             ->addColumn('show_url', fn (AssetDepreciationRun $run) => route('asset.depreciations.show', $run))
+            ->addColumn('delete_url', fn (AssetDepreciationRun $run) => $run->status === 'DRAFT' && $request->user()->hasPermission('asset.depreciation.calculate') ? route('asset.depreciations.destroy', $run) : null)
             ->toJson();
     }
 
@@ -95,6 +97,22 @@ class AssetDepreciationRunController extends Controller
     public function submit(Request $request, AssetDepreciationRun $depreciation, AssetDepreciationRunService $service): JsonResponse
     {
         return $this->changed('ส่งชุดคำนวณค่าเสื่อมเพื่ออนุมัติแล้ว', $service->submit($this->scoped($request, $depreciation), $request->user()));
+    }
+
+    public function destroy(Request $request, AssetDepreciationRun $depreciation, AuditLogger $audit): JsonResponse
+    {
+        $run = $this->scoped($request, $depreciation);
+        DB::transaction(function () use ($request, $run, $audit): void {
+            $run = AssetDepreciationRun::query()->lockForUpdate()->findOrFail($run->id);
+            if ($run->status !== 'DRAFT') {
+                throw ValidationException::withMessages(['status' => 'ลบได้เฉพาะชุดคำนวณค่าเสื่อมสถานะร่าง']);
+            }
+            $before = $run->toArray();
+            $audit->record('asset.depreciation.deleted', $run, $before, [], $request->user(), $request);
+            $run->delete();
+        });
+
+        return response()->json(['status' => true, 'msg' => 'ลบชุดคำนวณค่าเสื่อมร่างแล้ว', 'redirect' => route('asset.depreciations.index')]);
     }
 
     public function approve(Request $request, AssetDepreciationRun $depreciation, AssetDepreciationRunService $service): JsonResponse

@@ -60,7 +60,7 @@ Route::middleware(['auth', 'program:finance', 'warehouse'])->prefix('finance')->
     Route::post('/employee-advances/{advance}/submit', [EmployeeAdvanceController::class, 'submit'])->middleware('permission:finance.employee-advances.submit')->name('employee-advances.submit');
     Route::post('/employee-advances/{advance}/approve', [EmployeeAdvanceController::class, 'approve'])->middleware('permission:finance.employee-advances.approve')->name('employee-advances.approve');
     Route::post('/employee-advances/{advance}/reject', [EmployeeAdvanceController::class, 'reject'])->middleware('permission:finance.employee-advances.approve')->name('employee-advances.reject');
-    Route::delete('/employee-advances/{advance}', [EmployeeAdvanceController::class, 'destroy'])->middleware('permission:finance.employee-advances.update')->name('employee-advances.destroy');
+    Route::delete('/employee-advances/{advance}', [EmployeeAdvanceController::class, 'destroy'])->middleware('permission:finance.employee-advances.delete')->name('employee-advances.destroy');
     Route::post('/employee-advances/{advance}/void', [EmployeeAdvanceController::class, 'void'])->middleware('permission:finance.employee-advances.void')->name('employee-advances.void');
     Route::post('/employee-advances/{advance}/post', [EmployeeAdvanceController::class, 'post'])->middleware('permission:finance.employee-advances.post')->name('employee-advances.post');
     Route::post('/employee-advances/{advance}/reverse', [EmployeeAdvanceController::class, 'reverse'])->middleware('permission:finance.employee-advances.reverse')->name('employee-advances.reverse');
@@ -74,7 +74,7 @@ Route::middleware(['auth', 'program:finance', 'warehouse'])->prefix('finance')->
     Route::post('/employee-advance-clearings/{clearing}/submit', [EmployeeAdvanceClearingController::class, 'submit'])->middleware('permission:finance.employee-advance-clearings.submit')->name('employee-advance-clearings.submit');
     Route::post('/employee-advance-clearings/{clearing}/approve', [EmployeeAdvanceClearingController::class, 'approve'])->middleware('permission:finance.employee-advance-clearings.approve')->name('employee-advance-clearings.approve');
     Route::post('/employee-advance-clearings/{clearing}/reject', [EmployeeAdvanceClearingController::class, 'reject'])->middleware('permission:finance.employee-advance-clearings.approve')->name('employee-advance-clearings.reject');
-    Route::delete('/employee-advance-clearings/{clearing}', [EmployeeAdvanceClearingController::class, 'destroy'])->middleware('permission:finance.employee-advance-clearings.update')->name('employee-advance-clearings.destroy');
+    Route::delete('/employee-advance-clearings/{clearing}', [EmployeeAdvanceClearingController::class, 'destroy'])->middleware('permission:finance.employee-advance-clearings.delete')->name('employee-advance-clearings.destroy');
     Route::post('/employee-advance-clearings/{clearing}/void', [EmployeeAdvanceClearingController::class, 'void'])->middleware('permission:finance.employee-advance-clearings.void')->name('employee-advance-clearings.void');
     Route::post('/employee-advance-clearings/{clearing}/post', [EmployeeAdvanceClearingController::class, 'post'])->middleware('permission:finance.employee-advance-clearings.post')->name('employee-advance-clearings.post');
     Route::post('/employee-advance-clearings/{clearing}/reverse', [EmployeeAdvanceClearingController::class, 'reverse'])->middleware('permission:finance.employee-advance-clearings.reverse')->name('employee-advance-clearings.reverse');
@@ -116,7 +116,7 @@ Route::middleware(['auth', 'program:finance', 'warehouse'])->prefix('finance')->
     Route::put('/petty-cash/clearings/{clearing}/submit', [PettyCashClearingController::class, 'submit'])->middleware('permission:finance.petty-cash-clearings.submit')->name('petty-cash-clearings.submit');
     Route::put('/petty-cash/clearings/{clearing}/approve', [PettyCashClearingController::class, 'approve'])->middleware('permission:finance.petty-cash-clearings.approve')->name('petty-cash-clearings.approve');
     Route::put('/petty-cash/clearings/{clearing}/reject', [PettyCashClearingController::class, 'reject'])->middleware('permission:finance.petty-cash-clearings.approve')->name('petty-cash-clearings.reject');
-    Route::delete('/petty-cash/clearings/{clearing}', [PettyCashClearingController::class, 'destroy'])->middleware('permission:finance.petty-cash-clearings.update')->name('petty-cash-clearings.destroy');
+    Route::delete('/petty-cash/clearings/{clearing}', [PettyCashClearingController::class, 'destroy'])->middleware('permission:finance.petty-cash-clearings.delete')->name('petty-cash-clearings.destroy');
     Route::post('/petty-cash/clearings/{clearing}/post', [PettyCashClearingController::class, 'post'])->middleware('permission:finance.petty-cash-clearings.post')->name('petty-cash-clearings.post');
     Route::put('/petty-cash/clearings/{clearing}/reverse', [PettyCashClearingController::class, 'reverse'])->middleware('permission:finance.petty-cash-clearings.reverse')->name('petty-cash-clearings.reverse');
     Route::put('/petty-cash/clearings/{clearing}/void', [PettyCashClearingController::class, 'void'])->middleware('permission:finance.petty-cash-clearings.void')->name('petty-cash-clearings.void');
@@ -137,7 +137,7 @@ Route::middleware(['auth', 'program:finance', 'warehouse'])->prefix('finance')->
     Route::put('/petty-cash/top-ups/{topUp}/submit', [PettyCashTopUpController::class, 'submit'])->middleware('permission:finance.petty-cash-top-ups.submit')->name('petty-cash-top-ups.submit');
     Route::put('/petty-cash/top-ups/{topUp}/approve', [PettyCashTopUpController::class, 'approve'])->middleware('permission:finance.petty-cash-top-ups.approve')->name('petty-cash-top-ups.approve');
     Route::put('/petty-cash/top-ups/{topUp}/reject', [PettyCashTopUpController::class, 'reject'])->middleware('permission:finance.petty-cash-top-ups.approve')->name('petty-cash-top-ups.reject');
-    Route::delete('/petty-cash/top-ups/{topUp}', [PettyCashTopUpController::class, 'destroy'])->middleware('permission:finance.petty-cash-top-ups.update')->name('petty-cash-top-ups.destroy');
+    Route::delete('/petty-cash/top-ups/{topUp}', [PettyCashTopUpController::class, 'destroy'])->middleware('permission:finance.petty-cash-top-ups.delete')->name('petty-cash-top-ups.destroy');
     Route::put('/petty-cash/top-ups/{topUp}/void', [PettyCashTopUpController::class, 'void'])->middleware('permission:finance.petty-cash-top-ups.void')->name('petty-cash-top-ups.void');
     Route::post('/petty-cash/top-ups/{topUp}/post', [PettyCashTopUpController::class, 'post'])->middleware('permission:finance.petty-cash-top-ups.post')->name('petty-cash-top-ups.post');
     Route::put('/petty-cash/top-ups/{topUp}/reverse', [PettyCashTopUpController::class, 'reverse'])->middleware('permission:finance.petty-cash-top-ups.reverse')->name('petty-cash-top-ups.reverse');
@@ -155,7 +155,7 @@ Route::middleware(['auth', 'program:finance', 'warehouse'])->prefix('finance')->
     Route::put('/petty-cash/{voucher}/submit', [PettyCashController::class, 'submit'])->middleware('permission:finance.petty-cash.submit')->name('petty-cash.submit');
     Route::put('/petty-cash/{voucher}/approve', [PettyCashController::class, 'approve'])->middleware('permission:finance.petty-cash.approve')->name('petty-cash.approve');
     Route::put('/petty-cash/{voucher}/reject', [PettyCashController::class, 'reject'])->middleware('permission:finance.petty-cash.approve')->name('petty-cash.reject');
-    Route::delete('/petty-cash/{voucher}', [PettyCashController::class, 'destroy'])->middleware('permission:finance.petty-cash.update')->name('petty-cash.destroy');
+    Route::delete('/petty-cash/{voucher}', [PettyCashController::class, 'destroy'])->middleware('permission:finance.petty-cash.delete')->name('petty-cash.destroy');
     Route::put('/petty-cash/{voucher}/void', [PettyCashController::class, 'void'])->middleware('permission:finance.petty-cash.void')->name('petty-cash.void');
     Route::post('/petty-cash/{voucher}/post', [PettyCashController::class, 'post'])->middleware('permission:finance.petty-cash.post')->name('petty-cash.post');
     Route::put('/petty-cash/{voucher}/reverse', [PettyCashController::class, 'reverse'])->middleware('permission:finance.petty-cash.reverse')->name('petty-cash.reverse');
@@ -192,6 +192,7 @@ Route::middleware(['auth', 'program:finance', 'warehouse'])->prefix('finance')->
     Route::get('/settlements/create', [SettlementController::class, 'create'])->middleware('permission:finance.settlements.create')->name('settlements.create');
     Route::post('/settlements', [SettlementController::class, 'store'])->middleware('permission:finance.settlements.create')->name('settlements.store');
     Route::get('/settlements/{settlement}', [SettlementController::class, 'show'])->middleware('permission:finance.settlements.view')->name('settlements.show');
+    Route::delete('/settlements/{settlement}', [SettlementController::class, 'destroy'])->middleware('permission:finance.settlements.delete')->name('settlements.destroy');
     Route::put('/settlements/{settlement}/approve', [SettlementController::class, 'approve'])->middleware('permission:finance.settlements.approve')->name('settlements.approve');
     Route::put('/settlements/{settlement}/void', [SettlementController::class, 'void'])->middleware('permission:finance.settlements.void')->name('settlements.void');
     Route::post('/settlements/{settlement}/post', [SettlementController::class, 'post'])->middleware('permission:finance.settlements.post')->name('settlements.post');
@@ -239,6 +240,7 @@ Route::middleware(['auth', 'program:finance', 'warehouse'])->prefix('finance')->
     Route::get('/payment-vouchers/create', [PaymentVoucherController::class, 'create'])->middleware('permission:finance.payment-vouchers.create')->name('payment-vouchers.create');
     Route::post('/payment-vouchers', [PaymentVoucherController::class, 'store'])->middleware('permission:finance.payment-vouchers.create')->name('payment-vouchers.store');
     Route::get('/payment-vouchers/{voucher}', [PaymentVoucherController::class, 'show'])->middleware('permission:finance.payment-vouchers.view')->name('payment-vouchers.show');
+    Route::delete('/payment-vouchers/{voucher}', [PaymentVoucherController::class, 'destroy'])->middleware('permission:finance.payment-vouchers.delete')->name('payment-vouchers.destroy');
     Route::put('/payment-vouchers/{voucher}/submit', [PaymentVoucherController::class, 'submit'])->middleware('permission:finance.payment-vouchers.submit')->name('payment-vouchers.submit');
     Route::put('/payment-vouchers/{voucher}/approve', [PaymentVoucherController::class, 'approve'])->middleware('permission:finance.payment-vouchers.approve')->name('payment-vouchers.approve');
     Route::put('/payment-vouchers/{voucher}/void', [PaymentVoucherController::class, 'void'])->middleware('permission:finance.payment-vouchers.void')->name('payment-vouchers.void');

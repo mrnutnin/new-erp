@@ -5,7 +5,7 @@
 @section('content')
 @php
     $labels = ['DRAFT' => 'ร่าง', 'SUBMITTED' => 'รออนุมัติ', 'APPROVED' => 'พร้อมลงรายการ', 'POSTED' => 'ลงรายการแล้ว', 'CANCELLED' => 'ยกเลิก'];
-    $badges = ['DRAFT' => 'app-badge-soft', 'SUBMITTED' => 'app-badge-info', 'APPROVED' => 'app-badge-info', 'POSTED' => 'app-badge-success', 'CANCELLED' => 'app-status-danger'];
+    $badges = ['DRAFT' => 'app-status-neutral', 'SUBMITTED' => 'app-status-info', 'APPROVED' => 'app-status-info', 'POSTED' => 'app-status-success', 'CANCELLED' => 'app-status-danger'];
     $auditTrail = collect([
         ['สร้างใบโอน', $transfer->created_at, $transfer->createdBy?->name, null],
         ['ส่งอนุมัติ', $transfer->submitted_at, $transfer->submittedBy?->name, null],
@@ -18,11 +18,12 @@
     <div class="d-flex flex-column flex-xl-row justify-content-between align-items-xl-end gap-3 mb-4">
         <div><p class="eyebrow mb-2">ASSET / TRANSFER</p><h1 class="h3 mb-2">{{ $transfer->document_number }} <span class="badge {{ $badges[$transfer->status] }} fs-6 align-middle">{{ $labels[$transfer->status] }}</span></h1><p class="text-secondary mb-0">{{ $transfer->sourceBranch?->name }} → {{ $transfer->destinationBranch?->name }} · วันที่ {{ optional($transfer->document_date)->format('d/m/Y') }}</p></div>
         <div class="d-flex flex-wrap gap-2">
-            @if($transfer->status === 'DRAFT' && auth()->user()->hasPermission('asset.transfers.create'))<button class="btn btn-dark js-transfer-action" data-url="{{ route('asset.transfers.submit', $transfer) }}" data-title="ส่งอนุมัติใบโอน?" data-text="ตรวจสอบรายการก่อนส่งอนุมัติ">ส่งอนุมัติ</button>@endif
-            @if($transfer->status === 'SUBMITTED' && auth()->user()->hasPermission('asset.transfers.approve'))<button class="btn btn-primary js-transfer-action" data-url="{{ route('asset.transfers.approve', $transfer) }}" data-title="อนุมัติใบโอน?" data-text="เมื่ออนุมัติแล้วจึงสามารถลงรายการได้">อนุมัติ</button>@endif
-            @if($transfer->status === 'APPROVED' && auth()->user()->hasPermission('asset.transfers.post'))<button class="btn btn-success js-transfer-action" data-url="{{ route('asset.transfers.post', $transfer) }}" data-title="ลงรายการโอนสินทรัพย์?" data-text="ระบบจะปรับสาขา สถานที่ และผู้ดูแลของสินทรัพย์">ลงรายการ</button>@endif
-            @if(in_array($transfer->status, ['DRAFT', 'SUBMITTED', 'APPROVED'], true) && auth()->user()->hasPermission('asset.transfers.create'))<button class="btn btn-outline-danger js-transfer-cancel" data-url="{{ route('asset.transfers.cancel', $transfer) }}">ยกเลิก</button>@endif
-            <a class="btn btn-outline-dark" href="{{ route('asset.transfers.index') }}">รายการทั้งหมด</a>
+            <a class="btn btn-app-soft" href="{{ route('asset.transfers.index') }}"><i class="bx bx-arrow-back me-1" aria-hidden="true"></i>กลับหน้ารายการ</a>
+            @if($transfer->status === 'DRAFT' && auth()->user()->hasPermission('asset.transfers.create'))<button class="btn btn-app-primary js-transfer-action" data-url="{{ route('asset.transfers.submit', $transfer) }}" data-title="ส่งอนุมัติใบโอน?" data-text="ตรวจสอบรายการก่อนส่งอนุมัติ"><i class="bx bx-send me-1" aria-hidden="true"></i>ส่งอนุมัติ</button>@endif
+            @if($transfer->status === 'SUBMITTED' && auth()->user()->hasPermission('asset.transfers.approve'))<button class="btn btn-app-primary js-transfer-action" data-url="{{ route('asset.transfers.approve', $transfer) }}" data-title="อนุมัติใบโอน?" data-text="เมื่ออนุมัติแล้วจึงสามารถลงรายการได้"><i class="bx bx-check me-1" aria-hidden="true"></i>อนุมัติ</button>@endif
+            @if($transfer->status === 'APPROVED' && auth()->user()->hasPermission('asset.transfers.post'))<button class="btn btn-app-primary js-transfer-action" data-url="{{ route('asset.transfers.post', $transfer) }}" data-title="ลงรายการโอนสินทรัพย์?" data-text="ระบบจะปรับสาขา สถานที่ และผู้ดูแลของสินทรัพย์"><i class="bx bx-send me-1" aria-hidden="true"></i>ลงรายการ</button>@endif
+            @if(in_array($transfer->status, ['DRAFT', 'SUBMITTED', 'APPROVED'], true) && auth()->user()->hasPermission('asset.transfers.create'))<button class="btn btn-app-danger js-transfer-cancel" data-url="{{ route('asset.transfers.cancel', $transfer) }}"><i class="bx bx-x-circle me-1" aria-hidden="true"></i>ยกเลิกเอกสาร</button>@endif
+            @if($transfer->status === 'DRAFT' && (int) $transfer->source_branch_id === (int) request()->attributes->get('selectedBranch')->id && auth()->user()->hasPermission('asset.transfers.create'))<button class="btn btn-app-danger js-delete-transfer" type="button" data-url="{{ route('asset.transfers.destroy', $transfer) }}"><i class="bx bx-trash me-1" aria-hidden="true"></i>ลบร่าง</button>@endif
         </div>
     </div>
     <div class="alert alert-info border-0 shadow-sm">การโอนระหว่างสาขาเดียวกันของนิติบุคคล เป็นการย้ายความรับผิดชอบของสินทรัพย์และไม่สร้าง Journal Entry</div>
@@ -34,6 +35,7 @@
 @push('scripts')
 <script>
 $(function(){
+    window.erpAjaxDelete({button:'.js-delete-transfer',redirect:@json(route('asset.transfers.index')),confirm:'ยืนยันการลบใบโอนสินทรัพย์ร่างนี้หรือไม่?'});
     $('.js-transfer-action').on('click',function(){var button=$(this);Swal.fire({icon:'question',title:button.data('title'),text:button.data('text'),showCancelButton:true,confirmButtonText:'ยืนยัน',cancelButtonText:'กลับ'}).then(function(result){if(!result.isConfirmed)return;button.prop('disabled',true);$.post(button.data('url'),{_token:'{{ csrf_token() }}'}).done(function(response){Swal.fire({icon:'success',title:response.msg}).then(function(){window.location=response.redirect;});}).fail(function(xhr){window.erpAjaxError(xhr);}).always(function(){button.prop('disabled',false);});});});
     $('.js-transfer-cancel').on('click',function(){var button=$(this);Swal.fire({icon:'warning',title:'ยกเลิกใบโอน?',input:'textarea',inputLabel:'เหตุผล',inputPlaceholder:'ระบุเหตุผลอย่างน้อย 10 ตัวอักษร',showCancelButton:true,confirmButtonText:'ยืนยันยกเลิก',cancelButtonText:'กลับ',preConfirm:function(value){if(!value||value.trim().length<10){Swal.showValidationMessage('กรุณาระบุเหตุผลอย่างน้อย 10 ตัวอักษร');}}}).then(function(result){if(!result.isConfirmed)return;button.prop('disabled',true);$.post(button.data('url'),{_token:'{{ csrf_token() }}',cancellation_reason:result.value}).done(function(response){Swal.fire({icon:'success',title:response.msg}).then(function(){window.location=response.redirect;});}).fail(function(xhr){window.erpAjaxError(xhr);}).always(function(){button.prop('disabled',false);});});});
 });

@@ -103,7 +103,7 @@
                         </div>
                     </div>
 
-                    <div class="mt-4"><div class="d-flex justify-content-between align-items-center mb-2"><div><h2 class="h5 mb-1">ช่องทางรับ/จ่ายเงิน</h2><p class="text-secondary mb-0">ผลรวมต้องเท่ากับยอดสุทธิหลังหัก ณ ที่จ่าย@if($posReceiptMode ?? false) · ระบบจะแสดง IV ตามคลังของบัญชีที่เลือก@endif</p></div><div><span class="badge text-bg-info" id="tender-summary">0.00</span><button class="btn btn-sm btn-app-soft ms-2" id="add-tender" type="button"><i class="bx bx-plus me-1" aria-hidden="true"></i>เพิ่มช่องทาง</button></div></div><div class="table-responsive"><table class="table align-middle mb-0"><thead><tr><th>บัญชีเงินสด/ธนาคาร</th><th class="text-end">จำนวนเงิน</th><th>เลขอ้างอิง</th><th></th></tr></thead><tbody id="tender-rows"><tr class="js-tender-row"><td><select class="form-select" name="tenders[0][bank_account_id]" required><option value="">เลือกบัญชี</option>@foreach($bankAccounts as $bankAccount)<option value="{{ $bankAccount->id }}">{{ $bankAccount->code }} · {{ $bankAccount->name }}@if(($posReceiptMode ?? false) && $bankAccount->relationLoaded('warehouse')) · {{ $bankAccount->warehouse->name }}@endif</option>@endforeach</select></td><td><input class="form-control text-end js-tender-amount" type="number" min="0.01" step="0.01" name="tenders[0][amount]" value="{{ old('net_amount', $settlement->net_amount) }}" required></td><td><input class="form-control" maxlength="100" name="tenders[0][reference]" placeholder="เช่น เลขสลิป"></td><td class="text-end"><button class="btn btn-sm btn-outline-danger js-remove-tender" type="button" disabled>ลบ</button></td></tr></tbody></table></div><div class="invalid-feedback d-block" data-error-for="tenders"></div></div>
+                    <div class="mt-4"><div class="d-flex justify-content-between align-items-center mb-2"><div><h2 class="h5 mb-1">ช่องทางรับ/จ่ายเงิน</h2><p class="text-secondary mb-0">ผลรวมต้องเท่ากับยอดสุทธิหลังหัก ณ ที่จ่าย@if($posReceiptMode ?? false) · ระบบจะแสดง IV ตามคลังของบัญชีที่เลือก@endif</p></div><div><span class="badge text-bg-info" id="tender-summary">0.00</span><button class="btn btn-sm btn-app-soft ms-2" id="add-tender" type="button"><i class="bx bx-plus me-1" aria-hidden="true"></i>เพิ่มช่องทาง</button></div></div><div class="table-responsive"><table class="table align-middle mb-0"><thead><tr><th>บัญชีเงินสด/ธนาคาร</th><th class="text-end">จำนวนเงิน</th><th>เลขอ้างอิง</th><th></th></tr></thead><tbody id="tender-rows"><tr class="js-tender-row"><td><select class="form-select" name="tenders[0][bank_account_id]" required><option value="">เลือกบัญชี</option>@foreach($bankAccounts as $bankAccount)<option value="{{ $bankAccount->id }}">{{ $bankAccount->code }} · {{ $bankAccount->name }}@if(($posReceiptMode ?? false) && $bankAccount->relationLoaded('warehouse')) · {{ $bankAccount->warehouse->name }}@endif</option>@endforeach</select></td><td><input class="form-control text-end js-tender-amount" type="number" min="0.01" step="0.01" name="tenders[0][amount]" value="{{ old('net_amount', $settlement->net_amount) }}" required></td><td><input class="form-control" maxlength="100" name="tenders[0][reference]" placeholder="เช่น เลขสลิป"></td><td class="text-end"><button class="btn btn-sm btn-app-danger js-remove-tender" type="button" disabled>ลบ</button></td></tr></tbody></table></div><div class="invalid-feedback d-block" data-error-for="tenders"></div></div>
 
                     <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-2 mt-4 mb-3">
                         <div>
@@ -135,7 +135,7 @@
                                             <input class="form-control text-end js-allocation-amount" type="number" min="0.01" max="9999999999999999.99" step="0.01" name="allocations[{{ $index }}][amount]" value="{{ $allocation['amount'] ?? '' }}" required>
                                             <div class="invalid-feedback d-block" data-error-for="allocations.{{ $index }}.amount"></div>
                                         </td>
-                                        <td class="text-end"><button class="btn btn-sm btn-outline-danger js-remove-allocation" type="button"><i class="bx bx-trash me-1" aria-hidden="true"></i>ลบ</button></td>
+                                        <td class="text-end"><button class="btn btn-sm btn-app-danger js-remove-allocation" type="button"><i class="bx bx-trash me-1" aria-hidden="true"></i>ลบ</button></td>
                                     </tr>
                                 @endforeach
                             </tbody>
@@ -143,8 +143,8 @@
                     </div>
 
                     <div class="mt-4">
-                        <button class="btn btn-dark" type="submit">บันทึกร่าง</button>
-                        <a class="btn btn-outline-secondary" href="{{ $backUrl ?? route('finance.settlements.index') }}">ย้อนกลับ</a>
+                        <button class="btn btn-app-primary" type="submit">บันทึกร่าง</button>
+                        <a class="btn btn-app-soft" href="{{ $backUrl ?? route('finance.settlements.index') }}"><i class="bx bx-arrow-back me-1" aria-hidden="true"></i>กลับหน้ารายการ</a>
                     </div>
                 </form>
             </div>
@@ -155,7 +155,7 @@
         <tr class="js-allocation-row">
             <td><select class="form-select js-open-item" name="allocations[__INDEX__][open_item_id]" required></select><div class="invalid-feedback d-block" data-error-for="allocations.__INDEX__.open_item_id"></div></td>
             <td><input class="form-control text-end js-allocation-amount" type="number" min="0.01" max="9999999999999999.99" step="0.01" name="allocations[__INDEX__][amount]" required><div class="invalid-feedback d-block" data-error-for="allocations.__INDEX__.amount"></div></td>
-            <td class="text-end"><button class="btn btn-sm btn-outline-danger js-remove-allocation" type="button"><i class="bx bx-trash me-1" aria-hidden="true"></i>ลบ</button></td>
+            <td class="text-end"><button class="btn btn-sm btn-app-danger js-remove-allocation" type="button"><i class="bx bx-trash me-1" aria-hidden="true"></i>ลบ</button></td>
         </tr>
     </template>
 @endsection
@@ -280,7 +280,7 @@
 
             var tenderIndex = 1;
             function syncTenders() { var total = 0; $('#tender-rows .js-tender-amount').each(function () { total += parseFloat($(this).val()) || 0; }); $('#tender-summary').text(total.toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })); }
-            $('#add-tender').on('click', function () { var i = tenderIndex++; $('#tender-rows').append('<tr class="js-tender-row"><td><select class="form-select" name="tenders['+i+'][bank_account_id]" required><option value="">เลือกบัญชี</option>@foreach($bankAccounts as $bankAccount)<option value="{{ $bankAccount->id }}">{{ $bankAccount->code }} · {{ $bankAccount->name }}</option>@endforeach</select></td><td><input class="form-control text-end js-tender-amount" type="number" min="0.01" step="0.01" name="tenders['+i+'][amount]" required></td><td><input class="form-control" maxlength="100" name="tenders['+i+'][reference]" placeholder="เช่น เลขสลิป"></td><td class="text-end"><button class="btn btn-sm btn-outline-danger js-remove-tender" type="button">ลบ</button></td></tr>'); });
+            $('#add-tender').on('click', function () { var i = tenderIndex++; $('#tender-rows').append('<tr class="js-tender-row"><td><select class="form-select" name="tenders['+i+'][bank_account_id]" required><option value="">เลือกบัญชี</option>@foreach($bankAccounts as $bankAccount)<option value="{{ $bankAccount->id }}">{{ $bankAccount->code }} · {{ $bankAccount->name }}</option>@endforeach</select></td><td><input class="form-control text-end js-tender-amount" type="number" min="0.01" step="0.01" name="tenders['+i+'][amount]" required></td><td><input class="form-control" maxlength="100" name="tenders['+i+'][reference]" placeholder="เช่น เลขสลิป"></td><td class="text-end"><button class="btn btn-sm btn-app-danger js-remove-tender" type="button">ลบ</button></td></tr>'); });
             $(document).on('click', '.js-remove-tender', function () { $(this).closest('tr').remove(); syncTenders(); }).on('input', '.js-tender-amount', syncTenders);
             syncPartyType(); syncTenders();
             updateSummary();

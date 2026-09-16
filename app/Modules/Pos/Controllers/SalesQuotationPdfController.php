@@ -14,7 +14,7 @@ class SalesQuotationPdfController extends Controller
     public function show(Request $request, SalesQuotation $salesQuotation, DocumentPdfRenderer $renderer, GlobalSettings $settings)
     {
         abort_unless((int) $salesQuotation->branch_id === (int) $request->attributes->get('selectedBranch')->id, 404);
-        $salesQuotation->load(['lines', 'rfq.sourceIntake.preparedBy', 'sourceIntake.preparedBy', 'party']);
+        $salesQuotation->load(['branch', 'lines', 'rfq.sourceIntake.preparedBy', 'sourceIntake.preparedBy', 'party']);
         $logoPath = $settings->value('logo_path');
         $logo = $logoPath && Storage::disk('public')->exists($logoPath) ? Storage::disk('public')->path($logoPath) : null;
         $bytes = $renderer->renderView('Pos::pdf.sales-quotation', [
@@ -23,7 +23,9 @@ class SalesQuotationPdfController extends Controller
             'sourceLabel' => $salesQuotation->rfq?->document_number,
             'logo' => $logo,
             'companyName' => $settings->value('company_name'),
-            'companyAddress' => $settings->value('company_address'),
+            'companyAddress' => $salesQuotation->branch?->tax_address ?: $settings->value('company_address'),
+            'companyTaxId' => $settings->value('tax_id'),
+            'companyTaxBranchCode' => $salesQuotation->branch?->tax_branch_code,
             'dateFormat' => (string) ($settings->value('date_format') ?: 'd/m/Y'),
             'decimalPlaces' => (int) ($settings->value('tax_decimal_places') ?? 2),
         ]);

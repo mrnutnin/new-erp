@@ -3,8 +3,8 @@
 namespace App\Modules\Accounting\Controllers;
 
 use App\Http\Controllers\Controller;
-use App\Models\CompanySetting;
 use App\Models\Branch;
+use App\Models\CompanySetting;
 use App\Modules\Accounting\Models\Account;
 use App\Modules\Accounting\Models\JournalEntry;
 use App\Modules\Accounting\Models\TaxCode;
@@ -13,15 +13,20 @@ use App\Modules\Accounting\Requests\SaveJournalEntryRequest;
 use App\Modules\Accounting\Services\JournalEntryWriter;
 use App\Modules\Finance\Models\AdvanceDeposit;
 use App\Modules\Platform\Services\AuditLogger;
+use App\Modules\Platform\Services\DocumentPdfRenderer;
 use App\Modules\Pos\Models\CommissionPayoutBatch;
 use App\Modules\Pos\Models\PhysicalSale;
 use App\Modules\Pos\Models\SalesDocument;
 use App\Modules\Pos\Models\SalesReturn;
+use App\Modules\Settings\Services\GlobalSettings;
+use Brick\Math\BigDecimal;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\View\View;
+use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 use Yajra\DataTables\Facades\DataTables;
 
@@ -83,6 +88,8 @@ class JournalEntryController extends Controller
     public function data(Request $request): JsonResponse
     {
         $canUpdate = $request->user()->hasPermission('accounting.journal-entries.update');
+        $canDelete = $request->user()->hasPermission('accounting.journal-entries.delete');
+        $canPrint = $request->user()->hasPermission('accounting.journal-entries.print');
         $decimalPlaces = max(0, min(4, (int) (CompanySetting::query()->value('tax_decimal_places') ?? 2)));
 
         return DataTables::eloquent($this->entriesQuery($request))
@@ -94,6 +101,8 @@ class JournalEntryController extends Controller
             ->addColumn('debit_total', fn (JournalEntry $entry) => number_format((float) $entry->debit_total, $decimalPlaces, '.', ','))
             ->addColumn('show_url', fn (JournalEntry $entry) => route('accounting.journal-entries.show', $entry))
             ->addColumn('edit_url', fn (JournalEntry $entry) => $canUpdate && $entry->status === 'DRAFT' ? route('accounting.journal-entries.edit', $entry) : null)
+            ->addColumn('print_url', fn (JournalEntry $entry) => $canPrint ? route('accounting.journal-entries.pdf', $entry) : null)
+            ->addColumn('delete_url', fn (JournalEntry $entry) => $canDelete && $entry->status === 'DRAFT' && $entry->source_type === 'MANUAL' ? route('accounting.journal-entries.destroy', $entry) : null)
             ->toJson();
     }
 
@@ -144,6 +153,36 @@ class JournalEntryController extends Controller
         return view('Accounting::journal-entries.show', compact('journalEntry', 'sourceDocument'));
     }
 
+    public function pdf(Request $request, JournalEntry $journalEntry, DocumentPdfRenderer $renderer, GlobalSettings $settings): Response
+    {
+        $this->ensureWarehouseScope($request, $journalEntry);
+        $journalEntry->load([
+            'book', 'period.fiscalYear', 'branch', 'warehouse', 'lines.account', 'lines.taxCode',
+            'createdBy', 'validatedBy', 'postedBy', 'reversedBy', 'reversalOf', 'reversal',
+        ]);
+        $logoPath = $settings->value('logo_path');
+        $debitTotal = $journalEntry->lines->reduce(fn (BigDecimal $total, $line) => $total->plus((string) $line->debit), BigDecimal::zero());
+        $creditTotal = $journalEntry->lines->reduce(fn (BigDecimal $total, $line) => $total->plus((string) $line->credit), BigDecimal::zero());
+        $bytes = $renderer->renderView('Accounting::pdf.journal-voucher', [
+            'journalEntry' => $journalEntry,
+            'logo' => $logoPath && Storage::disk('public')->exists($logoPath) ? Storage::disk('public')->path($logoPath) : null,
+            'companyName' => (string) ($settings->value('company_name') ?: config('app.name')),
+            'companyAddress' => (string) ($journalEntry->branch?->tax_address ?: $settings->value('company_address')),
+            'companyTaxId' => (string) ($settings->value('tax_id') ?: ''),
+            'companyTaxBranchCode' => $journalEntry->branch?->tax_branch_code,
+            'dateFormat' => (string) ($settings->value('date_format') ?: 'd/m/Y'),
+            'decimalPlaces' => max(0, min(4, (int) ($settings->value('tax_decimal_places') ?? 2))),
+            'debitTotal' => $debitTotal,
+            'creditTotal' => $creditTotal,
+            'difference' => $debitTotal->minus($creditTotal),
+        ]);
+
+        return response($bytes, 200, [
+            'Content-Type' => 'application/pdf',
+            'Content-Disposition' => 'inline; filename="'.rawurlencode($journalEntry->entry_number).'.pdf"',
+        ]);
+    }
+
     public function preview(Request $request, JournalEntry $journalEntry): JsonResponse
     {
         $this->ensureWarehouseScope($request, $journalEntry);
@@ -188,6 +227,33 @@ class JournalEntryController extends Controller
         });
 
         return response()->json(['status' => true, 'msg' => 'บันทึก Draft แล้ว']);
+    }
+
+    public function destroy(Request $request, JournalEntry $journalEntry, AuditLogger $audit): JsonResponse
+    {
+        $this->ensureWarehouseScope($request, $journalEntry);
+
+        DB::transaction(function () use ($request, $journalEntry, $audit) {
+            $entry = JournalEntry::query()->lockForUpdate()->findOrFail($journalEntry->id);
+            abort_unless($entry->status === 'DRAFT', 422, 'ลบได้เฉพาะรายการบัญชีสถานะร่าง');
+            abort_unless($entry->source_type === 'MANUAL', 422, 'รายการบัญชีจากเอกสารต้นทางต้องจัดการจากเอกสารต้นทาง');
+
+            $audit->record(
+                'accounting.journal_entry.deleted',
+                $entry,
+                $entry->only(['entry_number', 'entry_date', 'description', 'source_type', 'status']),
+                [],
+                $request->user(),
+                $request,
+            );
+            $entry->delete();
+        });
+
+        return response()->json([
+            'status' => true,
+            'msg' => 'ลบร่างรายการบัญชีแล้ว',
+            'redirect' => route('accounting.journal-entries.index'),
+        ]);
     }
 
     public function submit(ChangeJournalEntryStatusRequest $request, JournalEntry $journalEntry, JournalEntryWriter $writer, AuditLogger $audit): JsonResponse

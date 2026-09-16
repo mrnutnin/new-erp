@@ -11,13 +11,13 @@
                 <p class="text-secondary mb-0">ตรวจสอบ baseline และผลที่ขอ ก่อนอนุมัติให้มีผลในอนาคต</p>
             </div>
             @if (auth()->user()->hasPermission('asset.depreciation.calculate'))
-                <a class="btn btn-dark" href="{{ route('asset.depreciation-policies.create') }}"><i class="bx bx-plus me-1"
+                <a class="btn btn-app-primary" href="{{ route('asset.depreciation-policies.create') }}"><i class="bx bx-plus me-1"
                         aria-hidden="true"></i>สร้างคำขอ</a>
             @endif
         </div>
         <div class="card border-0 shadow-sm mb-4">
             <div class="card-body p-4">
-                <h2 class="h6 mb-3">ตัวกรอง</h2>
+                <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3"><div><h2 class="h5 mb-1">ตัวกรอง</h2><p class="small text-secondary mb-0">กรองข้อมูลก่อนค้นหาจากตาราง</p></div><button class="btn btn-sm btn-app-soft" id="policy-filter-reset" type="button"><i class="bx bx-reset me-1" aria-hidden="true"></i>ล้างตัวกรอง</button></div>
                 <div class="row g-3">
                     <div class="col-12 col-md-2"><label class="form-label" for="policy-filter-date-from">วันมีผล
                             ตั้งแต่</label><input class="form-control" id="policy-filter-date-from" type="date"></div>
@@ -41,8 +41,7 @@
                             <option value="APPROVED">อนุมัติแล้ว</option>
                             <option value="VOID">ยกเลิก</option>
                         </select></div>
-                    <div class="col-12 col-md-1 d-flex align-items-end"><button class="btn btn-outline-secondary w-100"
-                            id="policy-filter-reset" type="button">ล้างตัวกรอง</button></div>
+
                 </div>
             </div>
         </div>
@@ -79,8 +78,8 @@
                     VOID: 'ยกเลิก'
                 },
                 classes = {
-                    DRAFT: 'app-badge-info',
-                    APPROVED: 'app-badge-success',
+                    DRAFT: 'app-status-info',
+                    APPROVED: 'app-status-success',
                     VOID: 'app-status-danger'
                 };
             $('#policy-filter-requester').select2({
@@ -151,7 +150,7 @@
                     name: 'status',
                     render: function(v, t) {
                         return t === 'display' ? '<span class="badge ' + (classes[v] ||
-                                'app-badge-soft') + '">' + text.display(labels[v] || v) +
+                                'app-status-neutral') + '">' + text.display(labels[v] || v) +
                             '</span>' : v;
                     }
                 }, {
@@ -160,11 +159,10 @@
                     searchable: false,
                     className: 'text-end',
                     render: function(v, t, row) {
-                        return t === 'display' ?
-                            '<a class="btn btn-sm btn-outline-dark" href="' + text.display(
-                                row.show_url) +
-                            '"><i class="bx bx-show me-1" aria-hidden="true"></i>ตรวจสอบ</a>' :
-                            '';
+                        if (t !== 'display') return '';
+                        var actions = ['<a class="btn btn-sm btn-app-soft" href="' + text.display(row.show_url) + '" title="ดูรายละเอียด" aria-label="ดูรายละเอียด"><i class="bx bx-file-find" aria-hidden="true"></i></a>'];
+                        if (row.delete_url) actions.push('<button class="btn btn-sm btn-app-danger js-delete-policy" data-url="' + text.display(row.delete_url) + '" type="button" title="ลบร่าง" aria-label="ลบร่าง"><i class="bx bx-trash" aria-hidden="true"></i></button>');
+                        return actions.join(' ');
                     }
                 }]
             }));
@@ -178,6 +176,7 @@
                 $('#policy-filter-requester').val(null).trigger('change.select2');
                 table.ajax.reload();
             });
+            window.erpAjaxDelete({button:'.js-delete-policy',reload:'#policy-changes-table',confirm:'ยืนยันการลบคำขอเปลี่ยนนโยบายร่างนี้หรือไม่?'});
         });
     </script>
 @endpush

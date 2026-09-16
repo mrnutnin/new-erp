@@ -3,6 +3,8 @@
 namespace App\Modules\Wms\Support;
 
 use App\Modules\Settings\Services\GlobalSettings;
+use Brick\Math\BigDecimal;
+use Brick\Math\RoundingMode;
 
 /**
  * Presentation/input precision for WMS.
@@ -24,7 +26,14 @@ final class WmsDecimal
             return '-';
         }
 
-        return number_format((float) $value, $places ?? self::places(), '.', ',');
+        $scaled = ($value instanceof BigDecimal ? $value : BigDecimal::of((string) $value))
+            ->toScale($places ?? self::places(), RoundingMode::HALF_UP)
+            ->__toString();
+        [$whole, $fraction] = array_pad(explode('.', $scaled, 2), 2, '');
+        $negative = str_starts_with($whole, '-');
+        $grouped = preg_replace('/\B(?=(\d{3})+(?!\d))/', ',', ltrim($whole, '-'));
+
+        return ($negative ? '-' : '').$grouped.($fraction !== '' ? '.'.$fraction : '');
     }
 
     public static function rule(string $field = 'numeric'): array

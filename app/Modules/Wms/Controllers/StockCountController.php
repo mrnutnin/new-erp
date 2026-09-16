@@ -49,6 +49,7 @@ final class StockCountController extends Controller
             ->addColumn('line_count', fn ($r) => $r->lines->count())
             ->addColumn('variance_label', fn ($r) => WmsDecimal::format($r->lines->sum('variance_quantity')))
             ->addColumn('show_url', fn ($r) => route('wms.stock-counts.show', $r))
+            ->addColumn('delete_url', fn ($r) => route('wms.stock-counts.destroy', $r))
             ->addColumn('can_approve', fn ($r) => in_array($r->status, ['DRAFT', 'COUNTED'], true) && $request->user()->hasPermission('wms.stock-counts.approve'))
             ->addColumn('can_edit', fn ($r) => $r->status === 'DRAFT' && $request->user()->hasPermission('wms.stock-counts.update'))
             ->addColumn('can_delete', fn ($r) => $r->status === 'DRAFT' && $request->user()->hasPermission('wms.stock-counts.delete'))
@@ -167,7 +168,7 @@ final class StockCountController extends Controller
         $document->delete();
         $audit->record('wms.stock_count.deleted', $document, $before, [], $request->user(), $request);
 
-        return response()->json(['status' => true, 'msg' => 'ลบร่างเอกสารตรวจนับแล้ว']);
+        return response()->json(['status' => true, 'msg' => 'ลบร่างเอกสารตรวจนับแล้ว', 'redirect' => route('wms.stock-counts.index')]);
     }
 
     public function itemOptions(Request $request): JsonResponse

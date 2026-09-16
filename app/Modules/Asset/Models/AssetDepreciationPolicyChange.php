@@ -5,9 +5,12 @@ namespace App\Modules\Asset\Models;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 class AssetDepreciationPolicyChange extends Model
 {
+    use SoftDeletes;
+
     protected $fillable = [
         'asset_depreciation_book_id', 'effective_date', 'status', 'profile_snapshot', 'reason', 'approved_by', 'approved_at', 'cancelled_by', 'cancelled_at', 'cancellation_reason', 'created_by', 'updated_by',
     ];

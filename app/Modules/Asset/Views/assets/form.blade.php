@@ -60,16 +60,16 @@
                 </div>
 
                 <div class="d-flex flex-column flex-sm-row justify-content-between gap-2 mt-4">
-                    <a class="btn btn-outline-dark" href="{{ route('asset.assets.index') }}"><i class="bx bx-arrow-back me-1" aria-hidden="true"></i>กลับ</a>
+                    <a class="btn btn-app-soft" href="{{ route('asset.assets.index') }}"><i class="bx bx-arrow-back me-1" aria-hidden="true"></i>กลับ</a>
                     <div class="d-flex gap-2">
                         @if ($asset->exists && $asset->status === 'DRAFT' && auth()->user()->hasPermission('asset.capitalizations.create'))
-                            <a class="btn btn-outline-dark" href="{{ route('asset.capitalizations.create', ['source_type' => 'MANUAL_RECLASS', 'asset_id' => $asset->id]) }}"><i class="bx bx-book-add me-1" aria-hidden="true"></i>ตั้งทุนและลงบัญชี</a>
+                            <a class="btn btn-app-soft" href="{{ route('asset.capitalizations.create', ['source_type' => 'MANUAL_RECLASS', 'asset_id' => $asset->id]) }}"><i class="bx bx-book-add me-1" aria-hidden="true"></i>ตั้งทุนและลงบัญชี</a>
                         @endif
                         @if ($asset->exists && $asset->status === 'DRAFT' && auth()->user()->hasPermission('asset.register.update'))
-                            <button class="btn btn-outline-danger js-delete-asset" type="button" data-url="{{ route('asset.assets.destroy', $asset) }}"><i class="bx bx-trash me-1" aria-hidden="true"></i>ลบ</button>
+                            <button class="btn btn-app-danger js-delete-asset" type="button" data-url="{{ route('asset.assets.destroy', $asset) }}"><i class="bx bx-trash me-1" aria-hidden="true"></i>ลบร่าง</button>
                         @endif
                         @if (! $asset->exists || ($asset->status === 'DRAFT' && auth()->user()->hasPermission('asset.register.update')))
-                            <button class="btn btn-dark" type="submit" data-busy-text="กำลังบันทึก..."><i class="bx bx-save me-1" aria-hidden="true"></i>บันทึกทะเบียนสินทรัพย์</button>
+                            <button class="btn btn-app-primary" type="submit" data-busy-text="กำลังบันทึก..."><i class="bx bx-save me-1" aria-hidden="true"></i>บันทึกทะเบียนสินทรัพย์</button>
                         @endif
                     </div>
                 </div>

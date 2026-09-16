@@ -156,7 +156,9 @@
             method: 'DELETE',
             reload: false,
             redirect: false,
-            confirm: 'ยืนยันการลบข้อมูลนี้หรือไม่?'
+            confirm: 'ยืนยันการลบข้อมูลนี้หรือไม่?',
+            confirmButtonText: 'ยืนยัน',
+            cancelButtonText: 'ยกเลิก'
         }, options);
 
         if (!settings.button) {
@@ -174,8 +176,8 @@
                 icon: 'warning',
                 text: $button.data('confirm-message') || settings.confirm,
                 showCancelButton: true,
-                confirmButtonText: 'ยืนยัน',
-                cancelButtonText: 'ยกเลิก'
+                confirmButtonText: settings.confirmButtonText,
+                cancelButtonText: settings.cancelButtonText
             }).then(function (result) {
                 if (!result.isConfirmed) {
                     return;
@@ -240,8 +242,41 @@
         }).select2(settings);
     };
 
+    window.erpStandardizeFilterResets = function (root) {
+        (root || document).querySelectorAll('button').forEach(function (button) {
+            if (button.textContent.trim() !== 'ล้างตัวกรอง') {
+                return;
+            }
+
+            var cardBody = button.closest('.card-body');
+            var filterArea = button.closest('form, .row');
+            if (!cardBody || !filterArea) {
+                return;
+            }
+
+            var header = Array.prototype.find.call(cardBody.children, function (child) {
+                return child.classList.contains('d-flex') && child.classList.contains('justify-content-between');
+            });
+            if (!header) {
+                header = document.createElement('div');
+                header.className = 'd-flex flex-wrap justify-content-between align-items-center gap-2 mb-3';
+                header.innerHTML = '<div><h2 class="h5 mb-1">ตัวกรอง</h2><p class="text-secondary mb-0 small">กรองข้อมูลก่อนค้นหาจากตาราง</p></div>';
+                cardBody.insertBefore(header, filterArea);
+            } else {
+                header.classList.add('flex-wrap', 'align-items-center', 'gap-2', 'mb-3');
+            }
+
+            button.className = 'btn btn-sm btn-app-soft';
+            if (!button.querySelector('.bx-reset')) {
+                button.insertAdjacentHTML('afterbegin', '<i class="bx bx-reset me-1" aria-hidden="true"></i>');
+            }
+            header.append(button);
+        });
+    };
+
     $(function () {
         window.erpInitSelect2('.js-select2');
+        window.erpStandardizeFilterResets();
     });
 })(jQuery);
 

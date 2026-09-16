@@ -62,9 +62,9 @@ class SalesOrderController extends Controller
             ->addColumn('physical_sale_status', fn (SalesOrder $row) => $row->physicalSales->contains(fn (PhysicalSale $sale) => $sale->status !== 'VOID') ? 'CREATED' : ($row->physicalSales->isNotEmpty() ? 'VOIDED' : 'NONE'))
             ->addColumn('physical_sale_label', fn (SalesOrder $row) => $row->physicalSales->where('status', '!=', 'VOID')->map(fn (PhysicalSale $sale) => "{$sale->document_type} · {$sale->document_number}")->implode(', ') ?: '—')
             ->addColumn('physical_sale_url', fn (SalesOrder $row) => ($sale = $row->physicalSales->first(fn (PhysicalSale $item) => $item->status !== 'VOID')) ? route('pos.physical-sales.show', $sale) : null)
-            ->addColumn('physical_sale_create_url', fn (SalesOrder $row) => $row->status === 'CONFIRMED' && $row->physicalSales->every(fn (PhysicalSale $sale) => $sale->status === 'VOID') && $request->user()->hasPermission('pos.physical-sales.create') ? route('pos.physical-sales.create', ['sales_order_id' => $row->id]) : null)
             ->addColumn('show_url', fn (SalesOrder $row) => route('pos.sales-orders.show', $row))
-            ->addColumn('pdf_url', fn (SalesOrder $row) => route('pos.sales-orders.pdf', $row))
+            ->addColumn('pdf_url', fn (SalesOrder $row) => $request->user()->hasPermission('pos.sales-orders.print') ? route('pos.sales-orders.pdf', $row) : null)
+            ->addColumn('delete_url', fn (SalesOrder $row) => $row->status === 'DRAFT' && $request->user()->hasPermission('pos.sales-orders.delete') ? route('pos.sales-orders.destroy', $row) : null)
             ->toJson();
     }
 
@@ -176,6 +176,25 @@ class SalesOrderController extends Controller
         $this->transition($request, $salesOrder, $audit, 'cancel');
 
         return response()->json(['status' => true, 'msg' => 'ยกเลิกใบสั่งขายแล้ว']);
+    }
+
+    public function destroy(Request $request, SalesOrder $salesOrder, AuditLogger $audit): JsonResponse
+    {
+        $this->scope($request, $salesOrder);
+        DB::transaction(function () use ($request, $salesOrder, $audit): void {
+            $order = SalesOrder::query()->with('physicalSales')->lockForUpdate()->findOrFail($salesOrder->id);
+            abort_unless($order->status === 'DRAFT', 422, 'ลบได้เฉพาะใบสั่งขายสถานะร่าง');
+            abort_if($order->physicalSales->isNotEmpty(), 422, 'ใบสั่งขายนี้มี HS/IV แล้ว');
+            $before = $order->toArray();
+            $intake = $order->source_sales_intake_id ? SalesIntake::query()->lockForUpdate()->find($order->source_sales_intake_id) : null;
+            $order->delete();
+            if ($intake?->status === 'COMPLETED') {
+                $intake->update(['status' => 'DRAFT']);
+            }
+            $audit->record('pos.sales-order.deleted', $order, $before, [], $request->user(), $request);
+        });
+
+        return response()->json(['status' => true, 'msg' => 'ลบร่างใบสั่งขายแล้ว', 'redirect' => route('pos.sales-orders.index')]);
     }
 
     public function fromRfq(Request $request, SalesRfq $salesRfq, DocumentSequenceService $sequences, AuditLogger $audit): JsonResponse|RedirectResponse

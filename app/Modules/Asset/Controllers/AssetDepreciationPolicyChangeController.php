@@ -11,9 +11,12 @@ use App\Modules\Asset\Requests\ApproveAssetDepreciationPolicyChangeRequest;
 use App\Modules\Asset\Requests\CancelAssetDepreciationPolicyChangeRequest;
 use App\Modules\Asset\Requests\StoreAssetDepreciationPolicyChangeRequest;
 use App\Modules\Asset\Services\AssetDepreciationPolicyChangeService;
+use App\Modules\Platform\Services\AuditLogger;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
 use Yajra\DataTables\Facades\DataTables;
 
@@ -46,6 +49,7 @@ class AssetDepreciationPolicyChangeController extends Controller
             ->addColumn('book_type', fn (AssetDepreciationPolicyChange $change) => $change->depreciationBook?->book_type)
             ->addColumn('created_by_name', fn (AssetDepreciationPolicyChange $change) => $change->createdBy?->name)
             ->addColumn('show_url', fn (AssetDepreciationPolicyChange $change) => route('asset.depreciation-policies.show', $change))
+            ->addColumn('delete_url', fn (AssetDepreciationPolicyChange $change) => $change->status === 'DRAFT' && $request->user()->hasPermission('asset.depreciation.calculate') ? route('asset.depreciation-policies.destroy', $change) : null)
             ->toJson();
     }
 
@@ -110,6 +114,22 @@ class AssetDepreciationPolicyChangeController extends Controller
     public function show(Request $request, AssetDepreciationPolicyChange $policyChange): View
     {
         return view('Asset::depreciation-policies.show', ['change' => $this->scoped($request, $policyChange)->load(['depreciationBook.asset.category', 'createdBy', 'approvedBy', 'cancelledBy'])]);
+    }
+
+    public function destroy(Request $request, AssetDepreciationPolicyChange $policyChange, AuditLogger $audit): JsonResponse
+    {
+        $change = $this->scoped($request, $policyChange);
+        DB::transaction(function () use ($request, $change, $audit): void {
+            $change = AssetDepreciationPolicyChange::query()->lockForUpdate()->findOrFail($change->id);
+            if ($change->status !== 'DRAFT') {
+                throw ValidationException::withMessages(['status' => 'ลบได้เฉพาะคำขอเปลี่ยนนโยบายสถานะร่าง']);
+            }
+            $before = $change->toArray();
+            $audit->record('asset.depreciation_policy.deleted', $change, $before, [], $request->user(), $request);
+            $change->delete();
+        });
+
+        return response()->json(['status' => true, 'msg' => 'ลบคำขอเปลี่ยนนโยบายร่างแล้ว', 'redirect' => route('asset.depreciation-policies.index')]);
     }
 
     private function scoped(Request $request, AssetDepreciationPolicyChange $change): AssetDepreciationPolicyChange

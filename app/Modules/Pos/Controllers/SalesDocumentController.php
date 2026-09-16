@@ -62,6 +62,7 @@ class SalesDocumentController extends Controller
             ->addColumn('document_date_label', fn (SalesDocument $document) => $document->document_date->format($format))
             ->addColumn('due_date_label', fn (SalesDocument $document) => $document->due_date?->format($format) ?? '—')
             ->addColumn('party_label', fn (SalesDocument $document) => $document->party_code.' · '.$document->party_name)
+            ->addColumn('pdf_url', fn (SalesDocument $document) => $request->user()->hasPermission('pos.sales-documents.view') ? route('pos.sales-documents.pdf', $document) : null)
             ->addColumn('status_label', fn (SalesDocument $document) => match ($document->status) {
                 'DRAFT' => 'ร่าง',
                 'APPROVED' => 'อนุมัติแล้ว',
@@ -86,14 +87,8 @@ class SalesDocumentController extends Controller
         if ($request->user()->hasPermission('pos.sales-documents.update')) {
             $table->addColumn('edit_url', fn (SalesDocument $document) => $document->status === 'DRAFT' ? route('pos.sales-documents.edit', $document) : null);
         }
-        if ($request->user()->hasPermission('pos.sales-documents.approve')) {
-            $table->addColumn('approve_url', fn (SalesDocument $document) => $document->status === 'DRAFT' ? route('pos.sales-documents.approve', $document) : null);
-        }
-        if ($request->user()->hasPermission('pos.sales-documents.void')) {
-            $table->addColumn('void_url', fn (SalesDocument $document) => in_array($document->status, ['DRAFT', 'APPROVED'], true) ? route('pos.sales-documents.void', $document) : null);
-        }
-        if ($request->user()->hasPermission('pos.sales-documents.post')) {
-            $table->addColumn('post_url', fn (SalesDocument $document) => $document->status === 'APPROVED' ? route('pos.sales-documents.post', $document) : null);
+        if ($request->user()->hasPermission('pos.sales-documents.delete')) {
+            $table->addColumn('delete_url', fn (SalesDocument $document) => $document->status === 'DRAFT' ? route('pos.sales-documents.destroy', $document) : null);
         }
 
         return $table->toJson();
@@ -264,6 +259,20 @@ class SalesDocumentController extends Controller
         $this->transition($request, $salesDocument, $audit, 'void');
 
         return response()->json(['status' => true, 'msg' => 'ยกเลิกเอกสารแล้ว']);
+    }
+
+    public function destroy(Request $request, SalesDocument $salesDocument, AuditLogger $audit): JsonResponse
+    {
+        $this->scoped($request, $salesDocument);
+        DB::transaction(function () use ($request, $salesDocument, $audit): void {
+            $document = SalesDocument::query()->lockForUpdate()->findOrFail($salesDocument->id);
+            abort_unless($document->status === 'DRAFT', 422, 'ลบได้เฉพาะเอกสารขายสถานะร่าง');
+            $before = $this->auditValues($document->load('lines'));
+            $document->delete();
+            $audit->record('pos.sales_document.deleted', $document, $before, [], $request->user(), $request);
+        });
+
+        return response()->json(['status' => true, 'msg' => 'ลบร่างเอกสารขายแล้ว', 'redirect' => route('pos.sales-documents.index')]);
     }
 
     public function post(PostSalesDocumentRequest $request, SalesDocument $salesDocument, SalesDocumentPostingService $posting): JsonResponse

@@ -18,6 +18,7 @@ final class PostPhysicalSaleRequest extends FormRequest
     {
         return [
             'posting_date' => ['required', 'date_format:Y-m-d'],
+            'tax_invoice_type' => ['nullable', 'in:ABBREVIATED,FULL'],
             'withholding_tax_code_id' => ['nullable', 'integer', Rule::exists('tax_codes', 'id')->where(fn ($query) => $query->where('kind', 'WHT')->where('is_active', true))],
             'withholding_base' => ['nullable', 'numeric', 'decimal:0,2', 'min:0'],
             'tenders' => ['nullable', 'array', 'min:1', 'max:20'], 'tenders.*.bank_account_id' => ['required_with:tenders', 'integer', 'min:1'], 'tenders.*.amount' => ['required_with:tenders', 'numeric', 'decimal:0,2', 'gt:0'], 'tenders.*.reference' => ['nullable', 'string', 'max:100'],
@@ -35,6 +36,9 @@ final class PostPhysicalSaleRequest extends FormRequest
             }
             if ($validator->errors()->isEmpty() && $sale instanceof PhysicalSale && $sale->document_type === 'HS' && (float) $sale->total_amount > 0 && $this->input('tenders') === null && $this->input('advance_allocations') === null) {
                 $validator->errors()->add('tenders', 'ขายสดต้องระบุช่องทางรับเงินก่อนยืนยันขาย');
+            }
+            if ($validator->errors()->isEmpty() && $sale instanceof PhysicalSale && $sale->document_type === 'HS' && ! in_array($this->input('tax_invoice_type'), ['ABBREVIATED', 'FULL'], true)) {
+                $validator->errors()->add('tax_invoice_type', 'กรุณาเลือกประเภทใบกำกับภาษีก่อนยืนยันขาย');
             }
         }];
     }

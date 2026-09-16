@@ -9,9 +9,12 @@ use App\Modules\Accounting\Models\JournalEntry;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 class AssetDepreciationRun extends Model
 {
+    use SoftDeletes;
+
     protected $fillable = [
         'document_number', 'branch_id', 'fiscal_period_id', 'book_type', 'run_through_date', 'status', 'asset_count',
         'total_depreciation', 'total_catch_up_adjustment', 'calculation_hash', 'progress_percent', 'error_message',

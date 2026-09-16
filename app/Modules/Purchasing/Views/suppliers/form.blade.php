@@ -94,8 +94,8 @@
                     </div>
 
                     <div class="mt-4">
-                        <button class="btn btn-dark" type="submit"><i class="bx bx-save me-1" aria-hidden="true"></i>บันทึก</button>
-                        <a class="btn btn-outline-secondary" href="{{ route($moduleRoutePrefix.'.suppliers.index') }}">ยกเลิก</a>
+                        <button class="btn btn-app-primary" type="submit"><i class="bx bx-save me-1" aria-hidden="true"></i>บันทึก</button>
+                        <a class="btn btn-app-soft" href="{{ route($moduleRoutePrefix.'.suppliers.index') }}"><i class="bx bx-arrow-back me-1" aria-hidden="true"></i>กลับหน้ารายการ</a>
                     </div>
                 </form>
             </div>

@@ -13,6 +13,7 @@
         ])
         <div class="card border-0 shadow-sm mb-3">
             <div class="card-body p-3 p-lg-4">
+                <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3"><div><h2 class="h5 mb-1">ตัวกรองใบรับข้อมูล</h2><p class="text-secondary mb-0 small">กรองก่อนค้นหาจากตาราง</p></div><button id="si-reset" type="button" class="btn btn-sm btn-app-soft"><i class="bx bx-reset me-1"></i>ล้างตัวกรอง</button></div>
                 <div class="row g-3 align-items-end">
                     <div class="col-md-3"><label for="si-from" class="form-label">วันที่เริ่ม</label><input id="si-from"
                             type="date" class="form-control"></div>
@@ -28,15 +29,14 @@
                             <option value="CANCELLED">ยกเลิก</option>
                         </select></div>
                 </div>
-                <button id="si-filter" class="btn btn-outline-secondary mt-3"><i
-                        class="bx bx-filter-alt me-1"></i>กรอง</button>
+                <button id="si-filter" class="btn btn-app-primary mt-3"><i
+                        class="bx bx-filter-alt me-1"></i>ใช้ตัวกรอง</button>
             </div>
         </div>
         <div class="card border-0 shadow-sm">
             <div class="card-body p-3 p-lg-4">
                 <div class="mb-3">
-                    <h2 class="h6 mb-0">รายการใบรับข้อมูล</h2>
-                    {{-- <small class="text-secondary">ค้นหาด้วยเลขที่เอกสารหรือชื่อลูกค้า</small> --}}
+                    <h2 class="h5 mb-1">รายการใบรับข้อมูล</h2><p class="text-secondary mb-0 small">เลือกดูรายละเอียดเพื่อตรวจราคา แก้ไขเอกสารร่าง หรือส่งต่อขั้นตอนขาย</p>
                 </div>
                 <div class="table-responsive">
                     <table id="si-table" class="table table-hover align-middle w-100 mb-0"
@@ -85,11 +85,7 @@
                 success: 'app-badge-success',
                 danger: 'text-bg-danger'
             } [s] || 'app-badge-soft');
-            const actionItem = (url, label, icon = 'bx-file-plus') => url ?
-                `<li><form method="post" action="${esc(url)}" class="js-sales-intake-convert"><input type="hidden" name="_token" value="{{ csrf_token() }}"><button class="dropdown-item" type="submit"><i class="bx ${icon} me-2" aria-hidden="true"></i>${label}</button></form></li>` :
-                '';
-            const actions = row =>
-                `<div class="dropup d-inline-block js-intake-actions" data-menu-id="si-actions-${row.id}"><button class="btn btn-sm btn-app-soft dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false"><i class="bx bx-dots-horizontal-rounded" aria-hidden="true"></i><span class="visually-hidden">จัดการ</span></button><ul id="si-actions-${row.id}" class="dropdown-menu dropdown-menu-end shadow"><li><a class="dropdown-item" href="${esc(row.show_url)}"><i class="bx bx-show me-2" aria-hidden="true"></i>ดูรายละเอียด</a></li>${actionItem(row.to_rfq_url, 'สร้าง RFQ')}${actionItem(row.to_quotation_url, 'สร้างใบเสนอราคา')}${actionItem(row.to_order_url, 'สร้างใบสั่งขาย', 'bx-cart-add')}${row.edit_url ? `<li><a class="dropdown-item" href="${esc(row.edit_url)}"><i class="bx bx-edit me-2" aria-hidden="true"></i>แก้ไข</a></li>` : ''}${row.delete_url ? `<li><hr class="dropdown-divider"></li><li><button class="dropdown-item text-danger js-delete-intake" type="button" data-url="${esc(row.delete_url)}" data-method="DELETE"><i class="bx bx-trash me-2" aria-hidden="true"></i>ลบ</button></li>` : ''}</ul></div>`;
+            const actions = row => `<a class="btn btn-sm btn-app-soft" title="ดูรายละเอียด" aria-label="ดูรายละเอียด" href="${esc(row.show_url)}"><i class="bx bx-file-find"></i></a>${row.edit_url ? ` <a class="btn btn-sm btn-app-soft" title="แก้ไข" aria-label="แก้ไข" href="${esc(row.edit_url)}"><i class="bx bx-edit"></i></a>` : ''}${row.pdf_url ? ` <a class="btn btn-sm btn-app-soft" title="พิมพ์ PDF" aria-label="พิมพ์ PDF" href="${esc(row.pdf_url)}" target="_blank" rel="noopener"><i class="bx bx-printer"></i></a>` : ''}${row.delete_url ? ` <button class="btn btn-sm btn-app-danger js-delete-intake" title="ลบร่าง" aria-label="ลบร่าง" type="button" data-url="${esc(row.delete_url)}" data-method="DELETE"><i class="bx bx-trash"></i></button>` : ''}`;
             const table = $('#si-table');
             const t = table.DataTable($.extend(true, {}, window.erpDataTableDefaults, {
                 order: [
@@ -153,6 +149,7 @@
                 }]
             }));
             $('#si-filter').on('click', () => t.ajax.reload());
+            $('#si-reset').on('click', () => { $('#si-from,#si-to').val(''); $('#si-status').val(''); $('#si-party').val(null).trigger('change'); t.ajax.reload(); });
             $('#si-party').select2({
                 ajax: {
                     url: '{{ route('pos.sales-intakes.party-options') }}',
@@ -165,29 +162,10 @@
                     processResults: d => d
                 }
             });
-            $(document).on('shown.bs.dropdown', '.js-intake-actions', function() {
-                const dropdown = $(this);
-                const menu = $('#' + dropdown.data('menu-id'));
-                const button = dropdown.find('[data-bs-toggle="dropdown"]')[0].getBoundingClientRect();
-                menu.appendTo(document.body).css({
-                    position: 'fixed',
-                    top: 'auto',
-                    left: Math.max(8, button.right - menu.outerWidth()),
-                    bottom: window.innerHeight - button.top + 4,
-                    zIndex: 1080
-                });
-            }).on('hidden.bs.dropdown', '.js-intake-actions', function() {
-                const dropdown = $(this);
-                $('#' + dropdown.data('menu-id')).removeAttr('style').appendTo(dropdown);
-            });
-            window.erpAjaxForm({
-                form: '.js-sales-intake-convert',
-                redirect: true
-            });
             window.erpAjaxDelete({
                 button: '.js-delete-intake',
                 reload: '#si-table',
-                confirm: 'ยืนยันการลบใบรับข้อมูลนี้หรือไม่?'
+                confirm: 'ยืนยันการลบร่างใบรับข้อมูลนี้หรือไม่?'
             });
         });
     </script>

@@ -44,7 +44,9 @@ final class PettyCashTopUpController extends Controller
         $query = PettyCashTopUp::query()->with(['fund.cashBankAccount', 'sourceBankAccount'])
             ->where('warehouse_id', $this->warehouse($request)->id)
             ->when($request->filled('status'), fn (Builder $q) => $q->where('status', $request->string('status')))
-            ->when($request->filled('petty_cash_fund_id'), fn (Builder $q) => $q->where('petty_cash_fund_id', $request->integer('petty_cash_fund_id')));
+            ->when($request->filled('petty_cash_fund_id'), fn (Builder $q) => $q->where('petty_cash_fund_id', $request->integer('petty_cash_fund_id')))
+            ->when($request->filled('date_from'), fn (Builder $q) => $q->whereDate('document_date', '>=', $request->string('date_from')))
+            ->when($request->filled('date_to'), fn (Builder $q) => $q->whereDate('document_date', '<=', $request->string('date_to')));
         $table = DataTables::eloquent($query)
             ->addColumn('document_date_label', fn (PettyCashTopUp $topUp) => $topUp->document_date?->format('d/m/Y'))
             ->addColumn('fund_label', fn (PettyCashTopUp $topUp) => $topUp->fund ? $topUp->fund->name.' · '.$topUp->fund->cashBankAccount?->code : '—')
@@ -52,6 +54,9 @@ final class PettyCashTopUpController extends Controller
             ->addColumn('show_url', fn (PettyCashTopUp $topUp) => route('finance.petty-cash-top-ups.show', $topUp));
         if ($request->user()->hasPermission('finance.petty-cash-top-ups.update')) {
             $table->addColumn('edit_url', fn (PettyCashTopUp $topUp) => $topUp->status === 'DRAFT' ? route('finance.petty-cash-top-ups.edit', $topUp) : null);
+        }
+        if ($request->user()->hasPermission('finance.petty-cash-top-ups.delete')) {
+            $table->addColumn('delete_url', fn (PettyCashTopUp $topUp) => $topUp->status === 'DRAFT' ? route('finance.petty-cash-top-ups.destroy', $topUp) : null);
         }
         foreach (['submit', 'approve', 'void', 'post', 'reverse'] as $action) {
             if ($request->user()->hasPermission("finance.petty-cash-top-ups.{$action}")) {
@@ -95,7 +100,7 @@ final class PettyCashTopUpController extends Controller
         return $this->action($r, $topUp, $s, 'approve');
     }
     public function reject(PettyCashActionRequest $r, PettyCashTopUp $topUp, PettyCashTopUpService $s): JsonResponse { $this->scope($r, $topUp); $topUp = $s->reject($topUp, $this->warehouse($r), (string) $r->validated()['reason'], $r->user(), $r); return response()->json(['status' => true, 'msg' => 'ไม่อนุมัติเอกสารเติมเงินแล้ว', 'data' => $topUp]); }
-    public function destroy(Request $r, PettyCashTopUp $topUp, PettyCashTopUpService $s): JsonResponse { $this->scope($r, $topUp); $s->deleteDraft($topUp, $this->warehouse($r), $r->user(), $r); return response()->json(['status' => true, 'msg' => 'ลบเอกสาร Draft แล้ว', 'redirect' => route('finance.petty-cash-top-ups.index')]); }
+    public function destroy(Request $r, PettyCashTopUp $topUp, PettyCashTopUpService $s): JsonResponse { $this->scope($r, $topUp); $s->deleteDraft($topUp, $this->warehouse($r), $r->user(), $r); return response()->json(['status' => true, 'msg' => 'ลบร่างเอกสารแล้ว', 'redirect' => route('finance.petty-cash-top-ups.index')]); }
 
     public function void(PettyCashActionRequest $r, PettyCashTopUp $topUp, PettyCashTopUpService $s): JsonResponse
     {

@@ -8,7 +8,7 @@
             <h1 class="h3 mb-1">พิจารณา RFQ {{ $x->document_number }}</h1>
             <p class="text-secondary mb-0">บันทึกต้นทุนประเมินเพื่อประเมินกำไรขั้นต้นก่อนอนุมัติ</p>
         </div>
-        <a class="btn btn-outline-secondary" href="{{ route('pos.sales-rfqs.show', $x) }}">กลับรายละเอียด</a>
+        <a class="btn btn-app-soft" href="{{ route('pos.sales-rfqs.show', $x) }}">กลับรายละเอียด</a>
     </div>
 
     <form id="rfq-review" method="post" action="{{ route('pos.sales-rfqs.decide', $x) }}">
@@ -64,7 +64,7 @@
                 </div>
                 <div class="mt-3">
                     <button class="btn btn-success js-decision" type="submit" data-decision="APPROVED">อนุมัติ</button>
-                    <button class="btn btn-outline-danger ms-2 js-decision" type="submit" data-decision="REJECTED">ไม่อนุมัติ</button>
+                    <button class="btn btn-app-danger ms-2 js-decision" type="submit" data-decision="REJECTED">ไม่อนุมัติ</button>
                 </div>
             </div>
         </div>

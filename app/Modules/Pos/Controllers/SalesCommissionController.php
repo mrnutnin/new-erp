@@ -64,11 +64,25 @@ final class SalesCommissionController extends Controller
                 default => $record->status,
             })
             ->addColumn('payment_progress', fn (CommissionRecord $record) => $this->paymentProgress($record))
-            ->addColumn('approve_url', fn (CommissionRecord $record) => $record->status === 'PENDING' && $request->user()->hasPermission('pos.sales-commissions.approve') ? route('pos.sales-commissions.approve', $record) : null)
-            ->addColumn('reject_url', fn (CommissionRecord $record) => $record->status === 'PENDING' && $request->user()->hasPermission('pos.sales-commissions.approve') ? route('pos.sales-commissions.reject', $record) : null)
-            ->addColumn('edit_status_url', fn (CommissionRecord $record) => $record->status === 'APPROVED' && $record->has_cancelled_payment_batch && $request->user()->hasPermission('pos.sales-commissions.approve') ? route('pos.sales-commissions.update-status', $record) : null)
-            ->addColumn('history_url', fn (CommissionRecord $record) => route('pos.sales-commissions.history', $record))
+            ->addColumn('show_url', fn (CommissionRecord $record) => route('pos.sales-commissions.show', $record))
             ->toJson();
+    }
+
+    public function show(Request $request, CommissionRecord $commissionRecord): View
+    {
+        $branchId = (int) $request->attributes->get('selectedBranch')->id;
+        $warehouseIds = $this->authorizedWarehouseIds($request);
+        $record = CommissionRecord::query()
+            ->with(['plan', 'recipient', 'physicalSale', 'paymentBatchLines.batch.paymentRequests.voucher.settlement'])
+            ->whereKey($commissionRecord->id)->where('branch_id', $branchId)->whereIn('warehouse_id', $warehouseIds)
+            ->firstOrFail();
+        $canEditStatus = $record->status === 'APPROVED'
+            && $record->paymentBatchLines()->whereHas('batch', fn (Builder $batch) => $batch->where('status', 'CANCELLED'))->exists()
+            && ! $record->paymentBatchLines()->whereHas('batch', fn (Builder $batch) => $batch->whereIn('status', ['DRAFT', 'SUBMITTED', 'VERIFIED']))->exists();
+        $history = AuditLog::query()->with('user:id,name')
+            ->where('subject_type', $record->getMorphClass())->where('subject_id', $record->id)->latest('created_at')->latest('id')->get();
+
+        return view('Pos::sales-commissions.show', compact('record', 'history', 'canEditStatus') + ['paymentProgress' => $this->paymentProgress($record)]);
     }
 
     public function recipientOptions(Request $request): JsonResponse

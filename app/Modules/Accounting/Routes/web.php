@@ -118,6 +118,7 @@ Route::middleware(['auth', 'program:accounting', 'warehouse'])
         Route::get('/bank-reconciliation', [BankReconciliationController::class, 'index'])->middleware('permission:accounting.reports.view')->name('bank-reconciliation.index');
         Route::get('/bank-reconciliation/template', [BankReconciliationController::class, 'template'])->middleware('permission:accounting.reports.view')->name('bank-reconciliation.template');
         Route::post('/bank-reconciliation', [BankReconciliationController::class, 'store'])->middleware('permission:accounting.reports.view')->name('bank-reconciliation.store');
+        Route::delete('/bank-reconciliation/{bankStatement}', [BankReconciliationController::class, 'destroy'])->middleware('permission:accounting.bank-reconciliation.delete')->name('bank-reconciliation.destroy');
         Route::get('/bank-reconciliation/{bankStatement}', [BankReconciliationController::class, 'show'])->middleware('permission:accounting.reports.view')->name('bank-reconciliation.show');
         Route::post('/bank-reconciliation-lines/{bankStatementLine}/match', [BankReconciliationController::class, 'match'])->middleware('permission:accounting.reports.view')->name('bank-reconciliation.match');
         Route::post('/bank-reconciliation/{bankStatement}/reconcile', [BankReconciliationController::class, 'reconcile'])->middleware('permission:accounting.reports.view')->name('bank-reconciliation.reconcile');
@@ -133,6 +134,8 @@ Route::middleware(['auth', 'program:accounting', 'warehouse'])
         Route::put('/journal-entries/{journalEntry}/submit', [JournalEntryController::class, 'submit'])->middleware('permission:accounting.journal-entries.submit')->name('journal-entries.submit');
         Route::put('/journal-entries/{journalEntry}/approve', [JournalEntryController::class, 'approve'])->middleware('permission:accounting.journal-entries.approve')->name('journal-entries.approve');
         Route::put('/journal-entries/{journalEntry}/reverse', [JournalEntryController::class, 'reverse'])->middleware('permission:accounting.journal-entries.reverse')->name('journal-entries.reverse');
+        Route::delete('/journal-entries/{journalEntry}', [JournalEntryController::class, 'destroy'])->middleware('permission:accounting.journal-entries.delete')->name('journal-entries.destroy');
+        Route::get('/journal-entries/{journalEntry}/pdf', [JournalEntryController::class, 'pdf'])->middleware('permission:accounting.journal-entries.print')->name('journal-entries.pdf');
         Route::get('/journal-entries/{journalEntry}', [JournalEntryController::class, 'show'])->middleware('permission:accounting.journal-entries.view')->name('journal-entries.show');
         Route::get('/journal-entries/{journalEntry}/edit', [JournalEntryController::class, 'edit'])->middleware('permission:accounting.journal-entries.update')->name('journal-entries.edit');
         Route::put('/journal-entries/{journalEntry}', [JournalEntryController::class, 'update'])->middleware('permission:accounting.journal-entries.update')->name('journal-entries.update');

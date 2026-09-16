@@ -11,6 +11,7 @@
         </div>
         <div class="card border-0 shadow-sm mb-3">
             <div class="card-body p-3 p-lg-4">
+                <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3"><div><h2 class="h5 mb-1">ตัวกรองรายงาน</h2><p class="text-secondary small mb-0">เลือกช่วงวันที่เพื่อโหลดข้อมูลจากตาราง</p></div><button class="btn btn-sm btn-app-soft" id="sales-report-reset" type="button"><i class="bx bx-reset me-1" aria-hidden="true"></i>ล้างตัวกรอง</button></div>
                 <div class="row g-3 align-items-end">
                     <div class="col-md-3"><label for="sales-report-from" class="form-label">วันที่เริ่ม</label><input
                             id="sales-report-from" type="date" class="form-control"
@@ -22,8 +23,8 @@
                             value="{{ $warehouse->code }} · {{ $warehouse->name }}" readonly>
                         {{-- <div class="form-text">เปลี่ยนคลังได้จากตัวเลือกด้านบน</div> --}}
                     </div>
-                    <div class="col-md-2"><button id="sales-report-filter" class="btn btn-outline-secondary w-100"
-                            type="button"><i class="bx bx-filter-alt me-1" aria-hidden="true"></i>กรอง</button></div>
+                    <div class="col-md-2"><button id="sales-report-filter" class="btn btn-app-primary w-100"
+                            type="button"><i class="bx bx-filter-alt me-1" aria-hidden="true"></i>ใช้ตัวกรอง</button></div>
                 </div>
             </div>
         </div>
@@ -182,6 +183,7 @@
                 sales.ajax.reload();
                 tenders.ajax.reload();
             });
+            $('#sales-report-reset').on('click', () => { $('#sales-report-from').val(@json(now()->startOfMonth()->format('Y-m-d'))); $('#sales-report-to').val(@json(now()->endOfMonth()->format('Y-m-d'))); sales.ajax.reload(); tenders.ajax.reload(); });
         });
     </script>
 @endpush

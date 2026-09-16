@@ -5,6 +5,6 @@
         <p class="text-secondary mb-0">{{ $description }}</p>
     </div>
     @if (! empty($actionUrl))
-        <a class="btn {{ $actionClass ?? 'btn-primary' }} d-inline-flex align-items-center text-nowrap px-3" href="{{ $actionUrl }}"><i class="bx {{ $actionIcon ?? 'bx-plus' }} me-1" aria-hidden="true"></i>{{ $actionLabel }}</a>
+        <a class="btn {{ $actionClass ?? 'btn-app-primary' }} d-inline-flex align-items-center text-nowrap px-3" href="{{ $actionUrl }}"><i class="bx {{ $actionIcon ?? 'bx-plus' }} me-1" aria-hidden="true"></i>{{ $actionLabel }}</a>
     @endif
 </div>

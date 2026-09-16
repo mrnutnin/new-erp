@@ -29,7 +29,11 @@ final class CommissionPayoutController extends Controller
 
     public function data(Request $request): JsonResponse
     {
-        $batches = CommissionPaymentBatch::query()->withCount('lines')->with(['lines.commissionRecord', 'paymentRequests.voucher.settlement'])->where('branch_id', $request->attributes->get('selectedBranch')->id)->whereIn('status', ['SUBMITTED', 'VERIFIED']);
+        $batches = CommissionPaymentBatch::query()->withCount('lines')->with(['lines.commissionRecord', 'paymentRequests.voucher.settlement'])
+            ->where('branch_id', $request->attributes->get('selectedBranch')->id)
+            ->whereIn('status', ['SUBMITTED', 'VERIFIED'])
+            ->when($request->filled('period_from'), fn (Builder $q) => $q->whereDate('period_to', '>=', $request->string('period_from')))
+            ->when($request->filled('period_to'), fn (Builder $q) => $q->whereDate('period_from', '<=', $request->string('period_to')));
 
         return DataTables::eloquent($batches)->order(fn (Builder $query) => $query->orderByDesc('id'))
             ->addColumn('period_label', fn (CommissionPaymentBatch $batch) => $batch->period_from->format('d/m/Y').' - '.$batch->period_to->format('d/m/Y'))

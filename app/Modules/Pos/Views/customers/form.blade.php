@@ -113,7 +113,7 @@
                                 <div class="border rounded-3 p-3">
                                     <div class="d-flex justify-content-between align-items-center gap-2 mb-3">
                                         <div><h2 class="h6 mb-0">{{ $addressLabel }}</h2><div class="form-text">เพิ่มได้หลายรายการ เลือกเปิดแก้ไขเฉพาะรายการที่ต้องการ</div></div>
-                                        <button class="btn btn-outline-secondary btn-sm js-add-address" type="button" data-address-type="{{ $addressType }}"><i class="bx bx-plus me-1" aria-hidden="true"></i>เพิ่มที่อยู่</button>
+                                        <button class="btn btn-app-soft btn-sm js-add-address" type="button" data-address-type="{{ $addressType }}"><i class="bx bx-plus me-1" aria-hidden="true"></i>เพิ่มที่อยู่</button>
                                     </div>
                                     <div class="row g-3" data-address-list="{{ $addressType }}">
                                         @forelse (collect($addressRows)->where('address_type', $addressType) as $address)
@@ -124,7 +124,7 @@
                                                     <div class="pt-3">
                                                         <input type="hidden" name="addresses[{{ $index }}][id]" value="{{ $address['id'] ?? '' }}">
                                                         <input type="hidden" name="addresses[{{ $index }}][address_type]" value="{{ $addressType }}">
-                                                        <div class="d-flex justify-content-end mb-3"><button class="btn btn-outline-danger btn-sm js-remove-address" type="button"><i class="bx bx-trash me-1" aria-hidden="true"></i>ลบที่อยู่</button></div>
+                                                        <div class="d-flex justify-content-end mb-3"><button class="btn btn-app-danger btn-sm js-remove-address" type="button"><i class="bx bx-trash me-1" aria-hidden="true"></i>ลบที่อยู่</button></div>
                                                         <div class="row g-2">
                                                             <div class="col-md-6"><label class="form-label">ชื่อเรียกที่อยู่</label><input class="form-control" name="addresses[{{ $index }}][label]" maxlength="100" value="{{ $address['label'] ?? '' }}"></div>
                                                             <div class="col-md-6"><label class="form-label">ผู้รับ</label><input class="form-control" name="addresses[{{ $index }}][recipient_name]" maxlength="255" value="{{ $address['recipient_name'] ?? '' }}"></div>
@@ -148,8 +148,8 @@
                     </div>
 
                     <div class="mt-4">
-                        <button class="btn btn-dark" type="submit">บันทึก</button>
-                        <a class="btn btn-outline-secondary" href="{{ route('pos.customers.index') }}">ยกเลิก</a>
+                        <button class="btn btn-app-primary" type="submit">บันทึก</button>
+                        <a class="btn btn-app-soft" href="{{ route('pos.customers.index') }}">ยกเลิก</a>
                     </div>
                 </form>
             </div>
@@ -168,7 +168,7 @@
                 return `<div class="col-12 js-address-card"><details class="border rounded-3 p-3 bg-light-subtle" open>
                     <input type="hidden" name="addresses[${index}][address_type]" value="${type}">
                     <summary class="d-flex justify-content-between align-items-center gap-2"><span><strong>ที่อยู่ใหม่</strong><span class="text-secondary ms-2">กรอกรายละเอียดด้านล่าง</span></span><span class="text-secondary small">คลิกเพื่อยุบ</span></summary>
-                    <div class="pt-3"><div class="d-flex justify-content-end mb-3"><button class="btn btn-outline-danger btn-sm js-remove-address" type="button"><i class="bx bx-trash me-1" aria-hidden="true"></i>ลบที่อยู่</button></div><div class="row g-2">
+                    <div class="pt-3"><div class="d-flex justify-content-end mb-3"><button class="btn btn-app-danger btn-sm js-remove-address" type="button"><i class="bx bx-trash me-1" aria-hidden="true"></i>ลบที่อยู่</button></div><div class="row g-2">
                         <div class="col-md-6"><label class="form-label">ชื่อเรียกที่อยู่</label><input class="form-control" name="addresses[${index}][label]" maxlength="100"></div>
                         <div class="col-md-6"><label class="form-label">ผู้รับ</label><input class="form-control" name="addresses[${index}][recipient_name]" maxlength="255"></div>
                         <div class="col-12"><label class="form-label">ที่อยู่</label><textarea class="form-control" name="addresses[${index}][address_line]" rows="2" maxlength="2000" required></textarea></div>

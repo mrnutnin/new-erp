@@ -8,7 +8,8 @@ use App\Modules\Accounting\Models\Account;
 use App\Modules\Accounting\Models\FiscalPeriod;
 use App\Modules\Accounting\Models\JournalBook;
 use App\Modules\Accounting\Services\AccountingReportService;
-use App\Modules\Platform\Services\DocumentPdfRenderer;
+use App\Modules\Accounting\Services\WithholdingCertificatePdfRenderer;
+use App\Modules\Accounting\Support\ThaiBahtText;
 use App\Modules\Settings\Services\GlobalSettings;
 use App\Modules\Wms\Services\InventoryReconciliationService;
 use Illuminate\Database\Eloquent\Builder;
@@ -393,14 +394,45 @@ class AccountingReportController extends Controller
         }, strtolower($form).'-'.now()->format('Ymd-His').'.csv', ['Content-Type' => 'text/csv; charset=UTF-8']);
     }
 
-    public function withholdingCertificate(Request $request, int $realization, DocumentPdfRenderer $renderer): Response
+    public function withholdingCertificate(Request $request, int $realization, WithholdingCertificatePdfRenderer $renderer): Response
     {
-        $row = \DB::table('finance_withholding_realizations as wr')->join('finance_open_items as oi', 'oi.id', '=', 'wr.open_item_id')->join('parties as p', 'p.id', '=', 'oi.party_id')->join('tax_codes as tc', 'tc.id', '=', 'wr.tax_code_id')->where('wr.id', $realization)->where('wr.direction', 'PAYABLE')->whereIn('oi.warehouse_id', $this->authorizedWarehouseIds($request, 'all'))->select(['wr.settlement_date', 'wr.tax_base', 'wr.tax_amount', 'oi.document_number', 'p.name as party_name', 'p.type as party_type', 'p.tax_id', 'p.branch_code', 'tc.code as tax_code', 'tc.name as tax_name'])->firstOrFail();
+        $row = DB::table('finance_withholding_realizations as wr')
+            ->join('finance_open_items as oi', 'oi.id', '=', 'wr.open_item_id')
+            ->join('parties as p', 'p.id', '=', 'oi.party_id')
+            ->join('tax_codes as tc', 'tc.id', '=', 'wr.tax_code_id')
+            ->join('warehouses as w', 'w.id', '=', 'oi.warehouse_id')
+            ->join('branches as b', 'b.id', '=', 'w.branch_id')
+            ->where('wr.id', $realization)
+            ->where('wr.direction', 'PAYABLE')
+            ->whereIn('oi.warehouse_id', $this->authorizedWarehouseIds($request, 'all'))
+            ->select([
+                'wr.id', 'wr.settlement_date', 'wr.tax_base', 'wr.tax_amount', 'oi.document_number',
+                'p.name as party_name', 'p.type as party_type', 'p.tax_id', 'p.branch_code', 'p.address as party_address',
+                'tc.code as tax_code', 'tc.name as tax_name', 'b.name as branch_name',
+                'b.tax_branch_code as payer_branch_code', 'b.tax_address as payer_address',
+            ])->firstOrFail();
         $company = CompanySetting::query()->first();
-        $formType = $row->party_type === 'INDIVIDUAL' ? 'ภ.ง.ด.3' : 'ภ.ง.ด.53';
-        $pdf = $renderer->renderView('Accounting::reports.withholding-certificate', compact('row', 'company', 'formType'));
+        $formType = $row->party_type === 'INDIVIDUAL' ? 'PND3' : 'PND53';
+        $certificateNumber = sprintf('WT%s%06d', Carbon::parse($row->settlement_date)->format('Y'), $row->id);
+        $payerAddress = trim((string) ($row->payer_address ?: $company?->company_address));
+        $missing = collect([
+            'ชื่อผู้มีหน้าที่หักภาษี' => $company?->company_name,
+            'เลขประจำตัวผู้เสียภาษีของผู้มีหน้าที่หักภาษี' => $company?->tax_id,
+            'ที่อยู่สถานประกอบการของสาขา' => $payerAddress,
+            'รหัสสาขาภาษีของผู้มีหน้าที่หักภาษี' => $row->payer_branch_code,
+            'ชื่อผู้ถูกหักภาษี' => $row->party_name,
+            'เลขประจำตัวผู้เสียภาษี/ประชาชนของผู้ถูกหักภาษี' => $row->tax_id,
+            'ที่อยู่ผู้ถูกหักภาษี' => $row->party_address,
+        ])->filter(fn ($value) => blank($value))->keys();
+        abort_if($missing->isNotEmpty(), 422, 'ยังออกหนังสือรับรอง 50 ทวิไม่ได้: กรุณากรอก '.implode(', ', $missing->all()).' ให้ครบก่อน');
+        abort_unless(preg_match('/^\d{13}$/', (string) $company?->tax_id), 422, 'เลขประจำตัวผู้เสียภาษีของผู้มีหน้าที่หักภาษีต้องมี 13 หลัก');
+        abort_unless(preg_match('/^\d{13}$/', (string) $row->tax_id), 422, 'เลขประจำตัวผู้เสียภาษี/ประชาชนของผู้ถูกหักภาษีต้องมี 13 หลัก');
+        abort_unless(preg_match('/^\d{5}$/', (string) $row->payer_branch_code), 422, 'รหัสสาขาภาษีของผู้มีหน้าที่หักภาษีต้องมี 5 หลัก');
 
-        return response($pdf, 200, ['Content-Type' => 'application/pdf', 'Content-Disposition' => 'inline; filename="50-thawi-'.$realization.'.pdf"']);
+        $taxAmountText = ThaiBahtText::convert((string) $row->tax_amount);
+        $pdf = $renderer->render($row, $company, $formType, $certificateNumber, $payerAddress, $taxAmountText);
+
+        return response($pdf, 200, ['Content-Type' => 'application/pdf', 'Content-Disposition' => 'inline; filename="'.$certificateNumber.'.pdf"']);
     }
 
     private function applyWithholdingSearch($query, Request $request): void
@@ -446,6 +478,7 @@ class AccountingReportController extends Controller
         $period = FiscalPeriod::query()->with('fiscalYear')->find((int) request('period_id'))
             ?: FiscalPeriod::query()->with('fiscalYear')->where('start_date', '<=', now()->toDateString())->where('end_date', '>=', now()->toDateString())->first()
             ?: FiscalPeriod::query()->with('fiscalYear')->latest('start_date')->firstOrFail();
+
         return view('Accounting::reports.cash-flow', ['periods' => $reports->periods(), 'selectedPeriodId' => $period->id] + $this->reportFilterOptions(request()));
     }
 
@@ -465,6 +498,7 @@ class AccountingReportController extends Controller
             ->selectRaw('COALESCE(SUM(lines.debit - lines.credit), 0) AS net')
             ->groupBy('accounts.id', 'accounts.code', 'accounts.name');
         $totals = DB::query()->fromSub($query, 'cash_flow')->selectRaw('COALESCE(SUM(debit),0) debit, COALESCE(SUM(credit),0) credit, COALESCE(SUM(net),0) net')->first();
+
         return DataTables::query($query)->with('totals', ['debit' => (float) $totals->debit, 'credit' => (float) $totals->credit, 'net' => (float) $totals->net])->toJson();
     }
 
@@ -479,6 +513,7 @@ class AccountingReportController extends Controller
             return response()->json(['draw' => $request->integer('draw'), 'recordsTotal' => 0, 'recordsFiltered' => 0, 'data' => []]);
         }
         $query = DB::table('asset_depreciation_runs as runs')->join('branches', 'branches.id', '=', 'runs.branch_id')->join('fiscal_periods', 'fiscal_periods.id', '=', 'runs.fiscal_period_id')->where('runs.status', 'FAILED')->when($request->input('branch_id') && is_numeric($request->input('branch_id')), fn ($q) => $q->where('runs.branch_id', (int) $request->input('branch_id')))->when($request->input('date_from'), fn ($q, $date) => $q->where('runs.run_through_date', '>=', $date))->when($request->input('date_to'), fn ($q, $date) => $q->where('runs.run_through_date', '<=', $date))->select(['runs.id', 'runs.document_number', 'runs.run_through_date', 'runs.error_message', 'branches.name as branch_name', 'fiscal_periods.name as period_name']);
+
         return DataTables::query($query)->addColumn('show_url', fn ($row) => route('asset.depreciations.show', $row->id))->toJson();
     }
 

@@ -81,7 +81,7 @@
                     {
                         data: 'periods_url', orderable: false, searchable: false, className: 'text-end',
                         render: function (value) {
-                            return '<a class="btn btn-sm btn-outline-dark" href="' + text.display(value) + '"><i class="bx bx-show me-1" aria-hidden="true"></i>ดูงวด</a>';
+                            return '<a class="btn btn-sm btn-outline-dark" href="' + text.display(value) + '"><i class="bx bx-file-find me-1" aria-hidden="true"></i>ดูงวด</a>';
                         }
                     }
                 ]

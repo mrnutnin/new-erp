@@ -26,6 +26,9 @@ final class PosAdvanceDepositUiContractTest extends TestCase
         self::assertStringContainsString('pos.advance-deposits.print', $rbac);
         self::assertStringContainsString('pos.advance-deposits.refund', $rbac);
         self::assertStringContainsString('advance-deposits-table', $index);
+        self::assertStringContainsString('btn-app-soft', $index);
+        self::assertStringContainsString('aria-label="ดูรายละเอียด"', $index);
+        self::assertStringContainsString('aria-label="พิมพ์ PDF"', $index);
         self::assertStringContainsString('ใช้กับ HS', $index);
         self::assertStringContainsString('อ้างอิง GL', $index);
         self::assertStringContainsString("'used_hs_label'", $controller);
@@ -68,7 +71,9 @@ final class PosAdvanceDepositUiContractTest extends TestCase
         self::assertStringContainsString('journal-preview.show', $detail);
         self::assertStringContainsString('รายละเอียดการรับเงิน', $detail);
         self::assertStringContainsString('ยอดคงเหลือใช้ได้', $detail);
-        self::assertStringContainsString('>ย้อนกลับ</a>', $detail);
+        self::assertStringContainsString('>กลับหน้ารายการ</a>', $detail);
+        self::assertStringContainsString('flex-column flex-lg-row', $detail);
+        self::assertStringContainsString('border-dark', $detail);
         self::assertStringContainsString("'VOID'=>'text-bg-danger'", $detail);
         self::assertStringContainsString('advanceDeposit->tenders as $tender', $detail);
         self::assertStringContainsString("'remainingAmount' => \$this->remaining(\$advanceDeposit)", $controller);

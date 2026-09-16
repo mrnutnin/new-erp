@@ -5,8 +5,8 @@
 @section('content')
     <div class="container-fluid px-3 px-lg-4 py-4 print-label-page">
         <div class="d-flex justify-content-between align-items-center gap-3 mb-4 d-print-none">
-            <a class="btn btn-outline-dark" href="{{ route('asset.assets.show', $asset) }}"><i class="bx bx-arrow-back me-1" aria-hidden="true"></i>กลับทะเบียนสินทรัพย์</a>
-            <button class="btn btn-dark js-print-label" type="button"><i class="bx bx-printer me-1" aria-hidden="true"></i>พิมพ์ป้าย</button>
+            <a class="btn btn-app-soft" href="{{ route('asset.assets.show', $asset) }}"><i class="bx bx-arrow-back me-1" aria-hidden="true"></i>กลับทะเบียนสินทรัพย์</a>
+            <button class="btn btn-app-primary js-print-label" type="button"><i class="bx bx-printer me-1" aria-hidden="true"></i>พิมพ์ป้าย</button>
         </div>
         <section class="card border-dark print-label" aria-labelledby="asset-label-title">
             <div class="card-body p-3 text-center">

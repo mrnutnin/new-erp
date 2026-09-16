@@ -18,7 +18,7 @@ final class SalesReturnPostUiContractTest extends TestCase
         self::assertStringContainsString("Route::post('/sales-returns/{salesReturn}/post'", $routes);
         self::assertStringContainsString('permission:pos.sales-returns.post', $routes);
         self::assertStringContainsString('pos.sales-returns.post', $rbac);
-        self::assertStringContainsString("'post_url'", $controller);
+        self::assertStringNotContainsString("'post_url'", $controller);
         self::assertStringContainsString('SalesReturnPostingService', $controller);
         self::assertStringContainsString('$posting->post($salesReturn, $values[\'posting_date\']', $controller);
         self::assertStringContainsString("'stock_uom_id' => \$line->stock_uom_id", $controller);
@@ -28,8 +28,9 @@ final class SalesReturnPostUiContractTest extends TestCase
         self::assertStringContainsString('js-sales-return-post', $show);
         self::assertStringContainsString("route('pos.sales-returns.post', \$returnDocument)", $show);
         self::assertStringContainsString('posting_date', $show);
-        self::assertStringContainsString('ระบบจะตรวจใบขายต้นทาง ปริมาณคืน Stock และงวดบัญชีที่เปิดอยู่ก่อน Post', $show);
+        self::assertStringContainsString('ตรวจสอบเอกสารต้นทาง ปริมาณคืน และวันที่ Post ก่อน Post เอกสาร เพื่อคืน Stock และ GL', $show);
         self::assertStringContainsString('เอกสารที่เกี่ยวข้อง', $show);
-        self::assertStringContainsString('js-return-post', $index);
+        self::assertStringNotContainsString('js-return-post', $index);
+        self::assertStringContainsString('เปิดรายละเอียดเพื่อ Post หรือยกเลิกเอกสารร่าง', $index);
     }
 }

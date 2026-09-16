@@ -12,30 +12,32 @@
             <span class="badge app-status-neutral">{{ $labels[$topUp->status] ?? $topUp->status }}</span>
         </div>
         <div class="d-flex flex-wrap gap-2">
-            <a class="btn btn-outline-secondary" href="{{ route('finance.petty-cash-top-ups.index') }}">กลับ</a>
+            <a class="btn btn-app-soft" href="{{ route('finance.petty-cash-top-ups.index') }}"><i class="bx bx-arrow-back me-1" aria-hidden="true"></i>กลับหน้ารายการ</a>
             @if($topUp->journalEntry && auth()->user()->hasPermission('accounting.journal-entries.view'))
                 <button class="btn btn-app-soft" type="button" data-journal-preview-url="{{ route('accounting.journal-preview.show', $topUp->journalEntry) }}"><i class="bx bx-book-open me-1" aria-hidden="true"></i>ดู GL</button>
             @endif
             @if($topUp->reversalJournalEntry && auth()->user()->hasPermission('accounting.journal-entries.view'))
-                <button class="btn btn-outline-danger" type="button" data-journal-preview-url="{{ route('accounting.journal-preview.show', $topUp->reversalJournalEntry) }}"><i class="bx bx-undo me-1" aria-hidden="true"></i>ดู GL ยกเลิก</button>
+                <button class="btn btn-app-soft" type="button" data-journal-preview-url="{{ route('accounting.journal-preview.show', $topUp->reversalJournalEntry) }}"><i class="bx bx-book-open me-1" aria-hidden="true"></i>ดู GL รายการยกเลิก</button>
             @endif
             @if($topUp->status === 'DRAFT' && auth()->user()->hasPermission('finance.petty-cash-top-ups.update'))
-                <a class="btn btn-outline-dark" href="{{ route('finance.petty-cash-top-ups.edit', $topUp) }}">แก้ไข</a>
-                <form method="POST" action="{{ route('finance.petty-cash-top-ups.destroy', $topUp) }}" class="d-inline" onsubmit="event.preventDefault(); var form=this; Swal.fire({icon:'warning',title:'ลบเอกสาร Draft?',text:'เอกสารจะถูกลบออกจากรายการ',showCancelButton:true,confirmButtonText:'ลบเอกสาร',cancelButtonText:'ยกเลิก',confirmButtonColor:'#dc3545'}).then(function(result){if(!result.isConfirmed)return; $.ajax({url:form.action,method:'DELETE',data:{_token:$('meta[name=csrf-token]').attr('content')},headers:{Accept:'application/json'}}).done(function(response){Swal.fire({icon:'success',text:response.msg||'ลบเอกสารแล้ว'}).then(function(){window.location.href=response.redirect;});}).fail(function(xhr){Swal.fire({icon:'error',text:xhr.responseJSON?.message||'ไม่สามารถลบเอกสารได้'});});});">@csrf @method('DELETE')<button class="btn btn-outline-danger" type="submit">ลบ Draft</button></form>
+                <a class="btn btn-app-soft" href="{{ route('finance.petty-cash-top-ups.edit', $topUp) }}">แก้ไข</a>
+            @endif
+            @if($topUp->status === 'DRAFT' && auth()->user()->hasPermission('finance.petty-cash-top-ups.delete'))
+                <button class="btn btn-app-danger js-delete-top-up" type="button" data-url="{{ route('finance.petty-cash-top-ups.destroy', $topUp) }}"><i class="bx bx-trash me-1" aria-hidden="true"></i>ลบร่าง</button>
             @endif
             @foreach(['submit' => 'ส่งอนุมัติ', 'approve' => 'อนุมัติ', 'post' => 'ลงบัญชี'] as $action => $actionLabel)
                 @if(($action === 'submit' && $topUp->status === 'DRAFT' || $action === 'approve' && $topUp->status === 'SUBMITTED' || $action === 'post' && $topUp->status === 'APPROVED') && auth()->user()->hasPermission('finance.petty-cash-top-ups.'.$action))
-                    <button class="btn btn-dark js-action" data-url="{{ route('finance.petty-cash-top-ups.'.$action, $topUp) }}" data-method="{{ $action === 'post' ? 'POST' : 'PUT' }}">{{ $actionLabel }}</button>
+                    <button class="btn btn-app-primary js-action" data-url="{{ route('finance.petty-cash-top-ups.'.$action, $topUp) }}" data-method="{{ $action === 'post' ? 'POST' : 'PUT' }}">{{ $actionLabel }}</button>
                 @endif
             @endforeach
             @if($topUp->status === 'SUBMITTED' && auth()->user()->hasPermission('finance.petty-cash-top-ups.approve'))
-                <button class="btn btn-outline-danger js-reason" data-url="{{ route('finance.petty-cash-top-ups.reject', $topUp) }}" data-title="ไม่อนุมัติเอกสาร">ไม่อนุมัติ</button>
+                <button class="btn btn-app-danger js-reason" data-url="{{ route('finance.petty-cash-top-ups.reject', $topUp) }}" data-title="ไม่อนุมัติเอกสาร">ไม่อนุมัติ</button>
             @endif
             @if(in_array($topUp->status, ['SUBMITTED', 'APPROVED'], true) && auth()->user()->hasPermission('finance.petty-cash-top-ups.void'))
-                <button class="btn btn-outline-danger js-reason" data-url="{{ route('finance.petty-cash-top-ups.void', $topUp) }}">ยกเลิก</button>
+                <button class="btn btn-app-danger js-reason" data-url="{{ route('finance.petty-cash-top-ups.void', $topUp) }}">ยกเลิก</button>
             @endif
             @if($topUp->status === 'POSTED' && auth()->user()->hasPermission('finance.petty-cash-top-ups.reverse'))
-                <button class="btn btn-outline-danger js-reason" data-reversal="1" data-url="{{ route('finance.petty-cash-top-ups.reverse', $topUp) }}">ยกเลิกรายการ</button>
+                <button class="btn btn-app-danger js-reason" data-reversal="1" data-url="{{ route('finance.petty-cash-top-ups.reverse', $topUp) }}">ยกเลิกรายการ</button>
             @endif
         </div>
     </div>
@@ -54,5 +56,7 @@
 </div>
     <div class="card border-0 shadow-sm mb-4"><div class="card-body p-3 p-lg-4"><h2 class="h5 mb-3">ประวัติเอกสาร</h2>@forelse($history ?? [] as $event)<div class="d-flex gap-3 border-bottom py-2"><div class="small text-secondary text-nowrap">{{ $event->created_at?->format('d/m/Y H:i') }}</div><div><strong>{{ $event->action }}</strong><div class="small text-secondary">{{ $event->user?->name ?? 'ระบบ' }}</div>@if($event->reason)<div class="small mt-1"><span class="text-secondary">รายละเอียด:</span> {{ $event->reason }}</div>@endif</div></div>@empty<p class="text-secondary mb-0">ยังไม่มีประวัติเอกสาร</p>@endforelse</div></div>
 @endsection
+
+@push('scripts')<script>$(function(){window.erpAjaxDelete({button:'.js-delete-top-up',redirect:@json(route('finance.petty-cash-top-ups.index')),confirm:'ยืนยันการลบเอกสารเติมเงินสดย่อยฉบับร่างนี้หรือไม่?',confirmButtonText:'ลบร่าง',cancelButtonText:'กลับ'});});</script>@endpush
 
 @push('scripts')<script>$(function(){function send($b,data){$.ajax({url:$b.data('url'),method:$b.data('method')||'PUT',data:data||{},headers:{Accept:'application/json','X-CSRF-TOKEN':$('meta[name="csrf-token"]').attr('content')}}).done(function(r){Swal.fire({icon:'success',text:r.msg}).then(function(){location.reload();});}).fail(function(x){Swal.fire({icon:'error',text:x.responseJSON?.message||x.responseJSON?.errors?.reason?.[0]||'ไม่สามารถดำเนินการได้'});});}$('.js-action').on('click',function(){var $b=$(this);Swal.fire({icon:'question',text:'ยืนยันการดำเนินการ?',showCancelButton:true}).then(function(r){if(r.isConfirmed)send($b);});});$('.js-reason').on('click',function(){var $b=$(this);Swal.fire({input:'textarea',inputLabel:'เหตุผล',showCancelButton:true,preConfirm:function(v){if(!$.trim(v||'')){Swal.showValidationMessage('กรุณาระบุเหตุผล');return false;}return v;}}).then(function(r){if(r.isConfirmed)send($b,{reason:r.value,reversal_date:$b.data('reversal')?new Date().toISOString().slice(0,10):undefined});});});});</script>@endpush

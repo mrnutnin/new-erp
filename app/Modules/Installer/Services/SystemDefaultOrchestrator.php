@@ -12,6 +12,7 @@ use Database\Seeders\ProductionFinishedReceiptAccountMappingSeeder;
 use Database\Seeders\RbacSeeder;
 use Database\Seeders\StandardChartOfAccountsSeeder;
 use Database\Seeders\SystemDocumentSequenceSeeder;
+use Database\Seeders\SystemTaxCodeSeeder;
 use Database\Seeders\WmsIssueTypeSeeder;
 use Illuminate\Support\Facades\DB;
 use Throwable;
@@ -20,10 +21,11 @@ class SystemDefaultOrchestrator
 {
     /** @var array<string, string> */
     private const SEED_VERSIONS = [
-        'core.rbac' => '1.3',
+        'core.rbac' => '1.6',
         'core.programs' => '1.0',
         'accounting.journal_books' => '1.0',
         'accounting.chart_of_accounts' => '1.5',
+        'accounting.tax_codes' => '1.0',
         'wms.production_finished_receipt_mapping' => '1.0',
         'core.document_sequences' => '1.1',
         'core.role_templates' => '1.0',
@@ -74,6 +76,9 @@ class SystemDefaultOrchestrator
                 app(StandardChartOfAccountsSeeder::class)->run();
                 $chartOfAccounts = $this->version('accounting.chart_of_accounts');
 
+                app(SystemTaxCodeSeeder::class)->run();
+                $taxCodes = $this->version('accounting.tax_codes');
+
                 $productionReceiptMapping = null;
                 if (Program::query()->where('code', 'wms')->where('is_enabled', true)->exists()) {
                     app(ProductionFinishedReceiptAccountMappingSeeder::class)->run();
@@ -93,13 +98,13 @@ class SystemDefaultOrchestrator
                 $roleTemplates = $this->version('core.role_templates');
 
                 $this->markStep($session, 'system-defaults', 'COMPLETED', [
-                    'seed_versions' => [$rbac, $programs, $journalBooks, $chartOfAccounts, $productionReceiptMapping, $documentSequences, $roleTemplates, $issueTypes],
+                    'seed_versions' => [$rbac, $programs, $journalBooks, $chartOfAccounts, $taxCodes, $productionReceiptMapping, $documentSequences, $roleTemplates, $issueTypes],
                     'role_templates' => $roles,
                 ]);
 
                 $session->forceFill(['status' => 'DEFAULTS_READY', 'progress' => max(30, (int) $session->progress)])->save();
 
-                return ['seed_count' => 6 + ($productionReceiptMapping === null ? 0 : 1) + ($issueTypes === null ? 0 : 1)];
+                return ['seed_count' => 7 + ($productionReceiptMapping === null ? 0 : 1) + ($issueTypes === null ? 0 : 1)];
             });
 
             $this->stateStore->write([

@@ -10,6 +10,8 @@ class PosSalesCommissionUiContractTest extends TestCase
     {
         $root = dirname(__DIR__, 2);
         $controller = file_get_contents($root.'/app/Modules/Pos/Controllers/SalesCommissionController.php');
+        $index = file_get_contents($root.'/app/Modules/Pos/Views/sales-commissions/index.blade.php');
+        $detail = file_get_contents($root.'/app/Modules/Pos/Views/sales-commissions/show.blade.php');
         $routes = file_get_contents($root.'/app/Modules/Pos/Routes/web.php');
 
         $this->assertStringContainsString("where('branch_id', \$branchId)", $controller);
@@ -27,7 +29,14 @@ class PosSalesCommissionUiContractTest extends TestCase
         $this->assertStringContainsString('permission:pos.sales-commissions.view', $routes);
         $this->assertStringContainsString('permission:pos.sales-commissions.approve', $routes);
         $this->assertStringContainsString("name('sales-commissions.history')", $routes);
+        $this->assertStringContainsString("name('sales-commissions.show')", $routes);
         $this->assertStringContainsString("name('sales-commission-payment-batches.history')", $routes);
+        $this->assertStringContainsString('public function show', $controller);
+        $this->assertStringContainsString('js-commission-approve', $detail);
+        $this->assertStringContainsString('js-commission-reject', $detail);
+        $this->assertStringContainsString('กลับหน้ารายการ', $detail);
+        $this->assertStringNotContainsString('js-commission-approve', $index);
+        $this->assertStringNotContainsString('js-commission-reject', $index);
     }
 
     public function test_commission_page_creates_a_combined_batch_before_handing_it_to_finance(): void
@@ -44,7 +53,7 @@ class PosSalesCommissionUiContractTest extends TestCase
 
         $controller = file_get_contents($root.'/app/Modules/Pos/Controllers/SalesCommissionController.php');
         $this->assertStringContainsString('function history', $controller);
-        $this->assertStringContainsString('Audit Trail', $view);
-        $this->assertStringContainsString('js-payment-batch-history', $view);
+        $this->assertStringContainsString("window.erpExcelButton(batchTable)", $view);
+        $this->assertStringContainsString('เปิดรายละเอียดชุดจ่าย', $view);
     }
 }

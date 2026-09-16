@@ -11,7 +11,7 @@
                 <h1 class="h3 mb-2">{{ $isAr ? 'Aging ลูกหนี้' : 'Aging เจ้าหนี้' }}</h1>
                 <p class="text-secondary mb-0">สรุปยอดคงค้างตามอายุหนี้ ณ วันที่เลือก</p>
             </div>
-            <a class="btn btn-outline-dark" href="{{ $openItemsUrl }}"><i class="bx bx-list-ul me-1" aria-hidden="true"></i>ดูรายการคงค้าง</a>
+            <a class="btn btn-app-soft" href="{{ $openItemsUrl }}"><i class="bx bx-list-ul me-1" aria-hidden="true"></i>ดูรายการคงค้าง</a>
         </div>
 
         <div class="card border-0 shadow-sm mb-4">
@@ -61,7 +61,7 @@
                     { data: 'days_61_90', name: 'days_61_90', className: 'text-end', render: amount },
                     { data: 'days_over_90', name: 'days_over_90', className: 'text-end', render: amount },
                     { data: 'total_amount', name: 'total_amount', className: 'text-end', render: amount },
-                    { data: 'details_url', name: 'details_url', orderable: false, searchable: false, className: 'text-center', render: function (url, type) { return type === 'display' ? '<a class="btn btn-sm btn-app-soft" href="' + text.display(url) + '" title="ดูรายการคงค้างของคู่ค้า" aria-label="ดูรายการคงค้างของคู่ค้า"><i class="bx bx-show" aria-hidden="true"></i></a>' : ''; } }
+                    { data: 'details_url', name: 'details_url', orderable: false, searchable: false, className: 'text-center', render: function (url, type) { return type === 'display' ? '<a class="btn btn-sm btn-app-soft" href="' + text.display(url) + '" title="ดูรายการคงค้างของคู่ค้า" aria-label="ดูรายการคงค้างของคู่ค้า"><i class="bx bx-file-find" aria-hidden="true"></i></a>' : ''; } }
                 ]
             }));
 

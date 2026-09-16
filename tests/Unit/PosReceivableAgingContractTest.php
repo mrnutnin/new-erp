@@ -22,6 +22,8 @@ final class PosReceivableAgingContractTest extends TestCase
         self::assertStringContainsString("route('pos.receivables.aging.data')", $view);
         self::assertStringContainsString('ยังไม่ครบกำหนด', $view);
         self::assertStringContainsString('มากกว่า 90 วัน', $view);
+        self::assertStringContainsString('aria-label="ดูรายละเอียดลูกหนี้"', $view);
+        self::assertStringNotContainsString('>ดูรายการ</a>', $view);
         self::assertStringContainsString("route('pos.receivables.index', ['party_id' => \$row->party_id])", $controller);
     }
 }

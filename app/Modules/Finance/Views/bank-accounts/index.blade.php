@@ -11,7 +11,7 @@
                 <p class="text-secondary mb-0">บัญชีรับ–จ่ายที่ผูกกับบัญชีคุม GL ของ Warehouse ปัจจุบัน</p>
             </div>
             @if (auth()->user()->hasPermission('finance.bank-accounts.create'))
-                <a class="btn btn-dark" href="{{ route('finance.bank-accounts.create') }}"><i class="bx bx-plus me-1" aria-hidden="true"></i>เพิ่มบัญชี</a>
+                <a class="btn btn-app-primary" href="{{ route('finance.bank-accounts.create') }}"><i class="bx bx-plus me-1" aria-hidden="true"></i>เพิ่มบัญชี</a>
             @endif
         </div>
 
@@ -76,8 +76,8 @@
                     render: function (value, type, row) {
                         if (type !== 'display') return '';
                         var actions = [];
-                        if (row.edit_url) actions.push('<a class="btn btn-sm btn-outline-dark" href="' + text.display(row.edit_url) + '">แก้ไข</a>');
-                        if (row.delete_url) actions.push('<button class="btn btn-sm btn-outline-danger js-delete-bank-account" data-url="' + text.display(row.delete_url) + '" type="button">ลบ</button>');
+                        if (row.edit_url) actions.push('<a class="btn btn-sm btn-app-soft" href="' + text.display(row.edit_url) + '">แก้ไข</a>');
+                        if (row.delete_url) actions.push('<button class="btn btn-sm btn-app-danger js-delete-bank-account" data-url="' + text.display(row.delete_url) + '" type="button">ลบ</button>');
                         return actions.join(' ');
                     }
                 });

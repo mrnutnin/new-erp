@@ -25,7 +25,9 @@ class UserController extends Controller
 {
     public function index(): View
     {
-        return view('Settings::users.index');
+        return view('Settings::users.index', [
+            'branches' => Branch::query()->where('is_active', true)->orderBy('code')->get(['id', 'code', 'name']),
+        ]);
     }
 
     public function data(Request $request): JsonResponse
@@ -234,6 +236,14 @@ class UserController extends Controller
 
     private function applyTableSearch(Builder $query, Request $request): void
     {
+        if (in_array($request->input('is_active'), ['0', '1'], true)) {
+            $query->where('users.is_active', $request->boolean('is_active'));
+        }
+
+        if (ctype_digit((string) $request->input('primary_branch_id'))) {
+            $query->where('users.primary_branch_id', $request->integer('primary_branch_id'));
+        }
+
         $search = trim((string) $request->input('search.value', ''));
 
         if ($search === '') {
@@ -244,7 +254,10 @@ class UserController extends Controller
             $query->where('users.name', 'like', "%{$search}%")
                 ->orWhere('users.username', 'like', "%{$search}%")
                 ->orWhere('users.employee_code', 'like', "%{$search}%")
-                ->orWhere('users.email', 'like', "%{$search}%");
+                ->orWhere('users.email', 'like', "%{$search}%")
+                ->orWhereHas('primaryBranch', fn (Builder $branch) => $branch
+                    ->where('branches.code', 'like', "%{$search}%")
+                    ->orWhere('branches.name', 'like', "%{$search}%"));
         });
     }
 

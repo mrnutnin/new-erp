@@ -16,7 +16,7 @@
             @endif
             <div class="col-12 {{ isset($issueTypeOptions) ? 'col-md-2' : 'col-md-3' }}"><label class="form-label" for="{{ $filterId }}-from">วันที่เริ่มต้น</label><input id="{{ $filterId }}-from" class="form-control js-wms-filter-from" type="date"></div>
             <div class="col-12 {{ isset($issueTypeOptions) ? 'col-md-2' : 'col-md-3' }}"><label class="form-label" for="{{ $filterId }}-to">วันที่สิ้นสุด</label><input id="{{ $filterId }}-to" class="form-control js-wms-filter-to" type="date"></div>
-            <div class="col-12 col-md-2"><button type="button" class="btn btn-dark w-100 js-wms-apply-filter">ค้นหา</button></div>
+            <div class="col-12 col-md-2"><button type="button" class="btn btn-app-primary w-100 js-wms-apply-filter"><i class="bx bx-search me-1" aria-hidden="true"></i>ค้นหา</button></div>
         </div>
     </div>
 </section>

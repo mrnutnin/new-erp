@@ -52,12 +52,14 @@ class BranchController extends Controller
             echo '<?xml version="1.0" encoding="UTF-8"?>';
             echo '<?mso-application progid="Excel.Sheet"?>';
             echo '<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet" xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet"><Worksheet ss:Name="Branches"><Table>';
-            echo $this->excelRow(['รหัส', 'ชื่อสาขา', 'คลังที่ใช้งาน', 'สถานะ']);
+            echo $this->excelRow(['รหัส', 'ชื่อสาขา', 'รหัสสาขาภาษี', 'ที่อยู่บนใบกำกับภาษี', 'คลังที่ใช้งาน', 'สถานะ']);
 
             foreach ($query->lazy(500) as $branch) {
                 echo $this->excelRow([
                     $branch->code,
                     $branch->name,
+                    $branch->tax_branch_code,
+                    $branch->tax_address,
                     $branch->active_warehouses_count,
                     $branch->is_active ? 'ใช้งาน' : 'ปิดใช้งาน',
                 ]);
@@ -158,18 +160,24 @@ class BranchController extends Controller
     private function branchesQuery(): Builder
     {
         return Branch::query()
-            ->select(['branches.id', 'branches.code', 'branches.name', 'branches.is_active'])
+            ->select(['branches.id', 'branches.code', 'branches.name', 'branches.tax_branch_code', 'branches.tax_address', 'branches.is_active'])
             ->withCount(['warehouses as active_warehouses_count' => fn ($query) => $query->where('is_active', true)]);
     }
 
     private function applyTableSearch(Builder $query, Request $request): void
     {
+        if (in_array($request->input('is_active'), ['0', '1'], true)) {
+            $query->where('branches.is_active', $request->boolean('is_active'));
+        }
+
         $search = trim((string) $request->input('search.value', ''));
 
         if ($search !== '') {
             $query->where(fn (Builder $query) => $query
                 ->where('branches.code', 'like', "%{$search}%")
-                ->orWhere('branches.name', 'like', "%{$search}%"));
+                ->orWhere('branches.name', 'like', "%{$search}%")
+                ->orWhere('branches.tax_branch_code', 'like', "%{$search}%")
+                ->orWhere('branches.tax_address', 'like', "%{$search}%"));
         }
     }
 
@@ -178,8 +186,9 @@ class BranchController extends Controller
         $columns = [
             0 => 'branches.code',
             1 => 'branches.name',
-            2 => 'active_warehouses_count',
-            3 => 'branches.is_active',
+            2 => 'branches.tax_branch_code',
+            3 => 'active_warehouses_count',
+            4 => 'branches.is_active',
         ];
         $column = $columns[(int) $request->input('order.0.column', 0)] ?? 'branches.code';
         $direction = $request->input('order.0.dir') === 'desc' ? 'desc' : 'asc';

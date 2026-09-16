@@ -6,9 +6,12 @@ use App\Models\User;
 use App\Models\Warehouse;
 use App\Modules\Accounting\Models\JournalEntry;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 final class InventoryAdjustment extends Model
 {
+    use SoftDeletes;
+
     protected $table = 'wms_inventory_adjustments';
 
     protected $fillable = ['document_id', 'line_number', 'warehouse_id', 'item_id', 'uom_id', 'direction', 'status', 'reversal_status', 'quantity', 'value', 'business_date', 'reason', 'idempotency_key', 'stock_movement_id', 'cost_allocation_id', 'reversal_journal_entry_id', 'reversal_movement_id', 'reversal_allocation_id', 'created_by', 'approved_by', 'reversed_by', 'reversed_at', 'reversal_reason', 'reversal_revision'];

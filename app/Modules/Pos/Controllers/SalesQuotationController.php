@@ -57,7 +57,8 @@ class SalesQuotationController extends Controller
             ->addColumn('party_label', fn (SalesQuotation $row) => trim($row->party_code.' · '.$row->party_name, ' ·'))
             ->addColumn('status_label', fn (SalesQuotation $row) => ['DRAFT' => 'ร่าง', 'SENT' => 'ส่งแล้ว', 'ACCEPTED' => 'ตอบรับแล้ว', 'REJECTED' => 'ปฏิเสธ', 'CANCELLED' => 'ยกเลิก'][$row->status] ?? $row->status)
             ->addColumn('show_url', fn (SalesQuotation $row) => route('pos.sales-quotations.show', $row))
-            ->addColumn('pdf_url', fn (SalesQuotation $row) => route('pos.sales-quotations.pdf', $row))
+            ->addColumn('pdf_url', fn (SalesQuotation $row) => $request->user()->hasPermission('pos.sales-quotations.print') ? route('pos.sales-quotations.pdf', $row) : null)
+            ->addColumn('delete_url', fn (SalesQuotation $row) => $row->status === 'DRAFT' && $request->user()->hasPermission('pos.sales-quotations.delete') ? route('pos.sales-quotations.destroy', $row) : null)
             ->addColumn('order_url', fn (SalesQuotation $row) => $row->order ? route('pos.sales-orders.show', $row->order) : null)
             ->toJson();
     }
@@ -197,6 +198,25 @@ class SalesQuotationController extends Controller
         $this->transition($request, $salesQuotation, $audit, 'cancel');
 
         return response()->json(['status' => true, 'msg' => 'ยกเลิกใบเสนอราคาแล้ว']);
+    }
+
+    public function destroy(Request $request, SalesQuotation $salesQuotation, AuditLogger $audit): JsonResponse
+    {
+        $this->scope($request, $salesQuotation);
+        DB::transaction(function () use ($request, $salesQuotation, $audit): void {
+            $quotation = SalesQuotation::query()->with('order')->lockForUpdate()->findOrFail($salesQuotation->id);
+            abort_unless($quotation->status === 'DRAFT', 422, 'ลบได้เฉพาะใบเสนอราคาสถานะร่าง');
+            abort_if($quotation->order, 422, 'ใบเสนอราคานี้มีใบสั่งขายแล้ว');
+            $before = $quotation->toArray();
+            $intake = $quotation->source_sales_intake_id ? SalesIntake::query()->lockForUpdate()->find($quotation->source_sales_intake_id) : null;
+            $quotation->delete();
+            if ($intake?->status === 'COMPLETED') {
+                $intake->update(['status' => 'DRAFT']);
+            }
+            $audit->record('pos.sales-quotation.deleted', $quotation, $before, [], $request->user(), $request);
+        });
+
+        return response()->json(['status' => true, 'msg' => 'ลบร่างใบเสนอราคาแล้ว', 'redirect' => route('pos.sales-quotations.index')]);
     }
 
     private function transition(ChangeSalesQuotationStatusRequest $request, SalesQuotation $salesQuotation, AuditLogger $audit, string $action): void

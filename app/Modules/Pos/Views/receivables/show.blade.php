@@ -10,11 +10,12 @@
     <div class="d-flex flex-wrap justify-content-between align-items-start gap-3 mb-4">
         <div><p class="eyebrow mb-2">SALES / RECEIVABLES / STATEMENT</p><h1 class="h3 mb-1">Statement ลูกหนี้</h1><p class="text-secondary mb-0">{{ $openItem->document_number }} · {{ $openItem->party?->code }} · {{ $openItem->party?->name }}</p></div>
         <div class="d-flex flex-wrap justify-content-end gap-2">
-            @if((float) $remainingAmount > 0 && auth()->user()->hasPermission('pos.receipts.create'))<a class="btn btn-success" href="{{ route('pos.physical-sales.receive-payment.create', $sale->id) }}"><i class="bx bx-money me-1"></i>รับชำระหนี้</a>@endif
+            <a class="btn btn-app-soft" href="{{ route('pos.receivables.index') }}"><i class="bx bx-arrow-back me-1"></i>กลับหน้ารายการ</a>
             @if(auth()->user()->hasPermission('pos.physical-sales.view'))<a class="btn btn-app-soft" href="{{ route('pos.physical-sales.show', $sale->id) }}">ดู IV</a>@endif
-            <a class="btn btn-outline-secondary" href="{{ route('pos.receivables.index') }}"><i class="bx bx-arrow-back me-1"></i>ย้อนกลับ</a>
+            @if((float) $remainingAmount > 0 && auth()->user()->hasPermission('pos.receipts.create'))<a class="btn btn-app-primary" href="{{ route('pos.physical-sales.receive-payment.create', $sale->id) }}"><i class="bx bx-money me-1"></i>รับชำระหนี้</a>@endif
         </div>
     </div>
+    @if((float) $remainingAmount > 0)<div class="alert alert-info border-0 shadow-sm mb-4"><strong>ขั้นถัดไป:</strong> บันทึกรับชำระหนี้สำหรับยอดคงเหลือของใบขายเชื่อนี้</div>@else<div class="alert alert-success border-0 shadow-sm mb-4"><strong>ลูกหนี้ชำระครบแล้ว</strong></div>@endif
     <div class="card border-0 shadow-sm mb-4"><div class="card-body p-4"><div class="row g-4">
         <div class="col-6 col-lg-3"><div class="text-secondary small">วันที่เอกสาร</div><div class="fw-semibold">{{ $openItem->document_date?->format($dateFormat) }}</div></div>
         <div class="col-6 col-lg-3"><div class="text-secondary small">วันครบกำหนด</div><div class="fw-semibold">{{ $openItem->due_date?->format($dateFormat) ?: '—' }}</div><div class="small {{ $daysOverdue ? 'text-danger' : 'text-secondary' }}">{{ $daysOverdue ? 'ค้างชำระ '.$daysOverdue.' วัน' : 'ยังไม่เกินกำหนด' }}</div></div>

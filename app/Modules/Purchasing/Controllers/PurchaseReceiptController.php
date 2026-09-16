@@ -8,10 +8,13 @@ use App\Modules\Settings\Services\GlobalSettings;
 use App\Modules\Purchasing\Models\GoodsReceipt;
 use App\Modules\Purchasing\Models\PurchaseOrder;
 use App\Modules\Purchasing\Services\GoodsReceiptService;
+use App\Modules\Platform\Services\AuditLogger;
 use App\Modules\Wms\Support\WmsDecimal;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
 use Yajra\DataTables\Facades\DataTables;
 
@@ -56,10 +59,12 @@ class PurchaseReceiptController extends Controller
             ->addColumn('reason_label', fn (GoodsReceipt $row) => $row->status === 'VOID' ? ($row->void_reason ?: '-') : '-')
             ->addColumn('status_label', fn (GoodsReceipt $row) => $labels[$row->status] ?? $row->status)
             ->editColumn('business_date', fn (GoodsReceipt $row) => $row->business_date?->format((string) $settings->value('date_format')) ?: '-')
+            ->addColumn('show_url', fn (GoodsReceipt $row) => route($this->moduleRoutePrefix().'.purchase-receipts.show', $row))
             ->addColumn('can_approve', fn (GoodsReceipt $row) => $row->status === 'DRAFT' && $request->user()->hasPermission($this->modulePermission('purchase-receipts.approve')))
             ->addColumn('can_void', fn (GoodsReceipt $row) => in_array($row->status, ['DRAFT', 'APPROVED'], true) && ! $row->lines->flatMap->purchaseDocumentAllocations->contains(fn ($allocation) => $allocation->purchaseDocumentLine?->document?->status !== 'VOID') && $request->user()->hasPermission($this->modulePermission('purchase-receipts.void')))
             ->addColumn('edit_url', fn (GoodsReceipt $row) => $row->status === 'DRAFT' && $request->user()->hasPermission($this->modulePermission('purchase-receipts.update')) ? route($this->moduleRoutePrefix().'.purchase-receipts.edit', $row) : null)
             ->addColumn('print_url', fn (GoodsReceipt $row) => $request->user()->hasPermission($this->modulePermission('purchase-receipts.print')) ? route($this->moduleRoutePrefix().'.purchase-receipts.pdf', $row) : null)
+            ->addColumn('delete_url', fn (GoodsReceipt $row) => $row->status === 'DRAFT' && $request->user()->hasPermission($this->modulePermission('purchase-receipts.delete')) ? route($this->moduleRoutePrefix().'.purchase-receipts.destroy', $row) : null)
             ->toJson();
     }
 
@@ -84,6 +89,26 @@ class PurchaseReceiptController extends Controller
         abort_unless($purchaseReceipt->status === 'DRAFT', 404);
 
         return view($this->moduleViewPrefix().'::purchase-receipts.form', ['today' => $purchaseReceipt->business_date?->format('Y-m-d') ?: now()->toDateString(), 'receipt' => $purchaseReceipt->load('lines'), 'moduleRoutePrefix' => $this->moduleRoutePrefix()]);
+    }
+
+    public function show(Request $request, GoodsReceipt $purchaseReceipt, GlobalSettings $settings): View
+    {
+        $this->assertWarehouse($request, $purchaseReceipt);
+
+        return view($this->moduleViewPrefix().'::purchase-receipts.show', [
+            'receipt' => $purchaseReceipt->load([
+                'warehouse.branch',
+                'purchaseOrder',
+                'supplier',
+                'createdBy',
+                'approvedBy',
+                'lines.item',
+                'lines.purchaseUom',
+                'lines.stockUom',
+            ]),
+            'dateFormat' => (string) $settings->value('date_format'),
+            'moduleRoutePrefix' => $this->moduleRoutePrefix(),
+        ]);
     }
 
     public function purchaseOptions(Request $request, GlobalSettings $settings): JsonResponse
@@ -116,7 +141,7 @@ class PurchaseReceiptController extends Controller
         $order = PurchaseOrder::query()->where($this->purchasingScopeColumn(), $this->purchasingScopeId($request))->whereIn('warehouse_id', $this->authorizedWarehouseIds($request))->where('status', 'APPROVED')->findOrFail($values['purchase_order_id']);
         $receipt = $receipts->createDraft([...$values, 'warehouse_id' => $order->warehouse_id], $request->user());
 
-        return response()->json(['status' => true, 'msg' => "สร้างร่าง Receipt {$receipt->receipt_number} แล้ว", 'redirect' => route($this->moduleRoutePrefix().'.purchase-receipts.index')]);
+        return response()->json(['status' => true, 'msg' => "สร้างร่าง Receipt {$receipt->receipt_number} แล้ว", 'redirect' => route($this->moduleRoutePrefix().'.purchase-receipts.show', $receipt)]);
     }
 
     public function update(Request $request, GoodsReceipt $purchaseReceipt, GoodsReceiptService $receipts): JsonResponse
@@ -124,7 +149,24 @@ class PurchaseReceiptController extends Controller
         $this->assertWarehouse($request, $purchaseReceipt);
         $receipt = $receipts->updateDraft($purchaseReceipt, $request->validate($this->rules(false)), $request->user());
 
-        return response()->json(['status' => true, 'msg' => "แก้ไขร่าง Receipt {$receipt->receipt_number} แล้ว", 'redirect' => route($this->moduleRoutePrefix().'.purchase-receipts.index')]);
+        return response()->json(['status' => true, 'msg' => "แก้ไขร่าง Receipt {$receipt->receipt_number} แล้ว", 'redirect' => route($this->moduleRoutePrefix().'.purchase-receipts.show', $receipt)]);
+    }
+
+    public function destroy(Request $request, GoodsReceipt $purchaseReceipt, AuditLogger $audit): JsonResponse
+    {
+        $this->assertWarehouse($request, $purchaseReceipt);
+        DB::transaction(function () use ($request, $purchaseReceipt, $audit): void {
+            $receipt = GoodsReceipt::query()->with('lines')->lockForUpdate()->findOrFail($purchaseReceipt->id);
+            $this->assertWarehouse($request, $receipt);
+            if ($receipt->status !== 'DRAFT') {
+                throw ValidationException::withMessages(['status' => 'ลบได้เฉพาะใบรับสินค้าที่เป็นร่าง']);
+            }
+            $before = $receipt->toArray();
+            $audit->record('purchasing.goods_receipt.deleted', $receipt, $before, [], $request->user(), $request);
+            $receipt->delete();
+        });
+
+        return response()->json(['status' => true, 'msg' => 'ลบร่างใบรับสินค้าแล้ว']);
     }
 
     public function approve(Request $request, GoodsReceipt $purchaseReceipt, GoodsReceiptService $receipts): JsonResponse

@@ -11,12 +11,13 @@
                 <p class="text-secondary mb-0">จัดการสถานะ โปรแกรม สาขา และคลังที่ผู้ใช้เข้าถึงได้</p>
             </div>
             @if (auth()->user()->hasPermission('settings.users.create'))
-                <a class="btn btn-dark" href="{{ route('settings.users.create') }}">
+                <a class="btn btn-app-primary" href="{{ route('settings.users.create') }}">
                     <i class="bx bx-plus me-1" aria-hidden="true"></i>เพิ่มผู้ใช้งาน
                 </a>
             @endif
         </div>
 
+        <div class="card border-0 shadow-sm mb-4"><div class="card-body p-3 p-lg-4"><div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3"><div><h2 class="h5 mb-1">ตัวกรอง</h2><p class="small text-secondary mb-0">กรองตามสาขาหลักและสถานะก่อนดูรายการ</p></div><button class="btn btn-sm btn-app-soft" id="user-filter-reset" type="button"><i class="bx bx-reset me-1" aria-hidden="true"></i>ล้างตัวกรอง</button></div><div class="row g-3"><div class="col-12 col-md-4"><label class="form-label" for="user-filter-branch">สาขาหลัก</label><select class="form-select" id="user-filter-branch"><option value="">ทุกสาขา</option>@foreach ($branches as $branch)<option value="{{ $branch->id }}">{{ $branch->code }} — {{ $branch->name }}</option>@endforeach</select></div><div class="col-12 col-md-4"><label class="form-label" for="user-filter-status">สถานะ</label><select class="form-select" id="user-filter-status"><option value="">ทุกสถานะ</option><option value="1">ใช้งาน</option><option value="0">ปิดใช้งาน</option></select></div></div></div></div>
         <div class="row g-4">
             <div class="col-12">
                 <div class="card border-0 shadow-sm">
@@ -101,7 +102,7 @@
                             return value;
                         }
 
-                        return '<span class="badge ' + (value ? 'text-bg-dark">ใช้งาน' : 'text-bg-secondary">ปิดใช้งาน') + '</span>';
+                        return '<span class="badge ' + (value ? 'app-status-success">ใช้งาน' : 'app-status-neutral">ปิดใช้งาน') + '</span>';
                     }
                 }
             ];
@@ -111,14 +112,14 @@
                     data: null,
                     orderable: false,
                     searchable: false,
-                    className: 'text-end',
+                    className: 'text-end text-nowrap',
                     render: function (value, type, row) {
                         var actions = [];
                         if (row.edit_url) {
-                            actions.push('<a class="btn btn-sm btn-outline-dark" href="' + text.display(row.edit_url) + '"><i class="bx bx-edit me-1" aria-hidden="true"></i>แก้ไข</a>');
+                            actions.push('<a class="btn btn-sm btn-app-soft" href="' + text.display(row.edit_url) + '" title="แก้ไข" aria-label="แก้ไข"><i class="bx bx-edit" aria-hidden="true"></i></a>');
                         }
                         if (row.delete_url) {
-                            actions.push('<button class="btn btn-sm btn-outline-danger js-delete-user" type="button" data-url="' + text.display(row.delete_url) + '"><i class="bx bx-trash me-1" aria-hidden="true"></i>ลบ</button>');
+                            actions.push('<button class="btn btn-sm btn-app-danger js-delete-user" type="button" data-url="' + text.display(row.delete_url) + '" title="ลบ" aria-label="ลบ"><i class="bx bx-trash" aria-hidden="true"></i></button>');
                         }
 
                         return actions.join(' ');
@@ -127,11 +128,14 @@
             }
 
             $table.DataTable($.extend(true, {}, window.erpDataTableDefaults, {
-                ajax: $table.data('url'),
+                ajax: { url: $table.data('url'), data: function (data) { data.primary_branch_id = $('#user-filter-branch').val(); data.is_active = $('#user-filter-status').val(); } },
                 order: [[0, 'asc']],
                 buttons: [window.erpExcelButton($table)],
                 columns: columns
             }));
+
+            $('#user-filter-branch,#user-filter-status').on('change', function () { $table.DataTable().ajax.reload(); });
+            $('#user-filter-reset').on('click', function () { $('#user-filter-branch,#user-filter-status').val(''); $table.DataTable().ajax.reload(); });
 
             window.erpAjaxDelete({
                 button: '.js-delete-user',

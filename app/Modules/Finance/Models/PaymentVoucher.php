@@ -7,6 +7,7 @@ use App\Models\User;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 class PaymentVoucher extends Model
@@ -45,5 +46,10 @@ class PaymentVoucher extends Model
     public function settlement(): BelongsTo
     {
         return $this->belongsTo(Settlement::class);
+    }
+
+    public function commissionRequest(): HasOne
+    {
+        return $this->hasOne(CommissionPaymentRequest::class);
     }
 }

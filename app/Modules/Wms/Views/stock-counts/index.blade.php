@@ -10,7 +10,7 @@
         </div>
         <div class="d-flex flex-wrap align-items-end gap-2">
             @include('Wms::partials.warehouse-selector')
-            <a class="btn btn-dark" href="{{ route('wms.stock-counts.create') }}">
+            <a class="btn btn-app-primary" href="{{ route('wms.stock-counts.create') }}">
                 <i class="bx bx-plus me-1" aria-hidden="true"></i>สร้างเอกสารตรวจนับ
             </a>
         </div>
@@ -18,7 +18,7 @@
 
     @include('Wms::partials.document-filters', ['filterId' => 'count-filters', 'statusOptions' => [
         'DRAFT' => 'ร่าง', 'COUNTED' => 'ตรวจนับแล้ว', 'APPROVED' => 'อนุมัติแล้ว',
-        'POSTED' => 'ปิดผลตรวจนับ', 'VOID' => 'ยกเลิก', 'REVERSED' => 'กลับรายการแล้ว',
+        'POSTED' => 'ปิดผลตรวจนับ', 'VOID' => 'ยกเลิกเอกสาร', 'REVERSED' => 'ยกเลิกเอกสารแล้ว',
     ]])
 
     <section class="card border-0 shadow-sm">
@@ -85,10 +85,9 @@ $(function () {
                 className: 'text-end text-nowrap',
                 render: function (value, type, row) {
                     if (type !== 'display') return '';
-                    let html = '<a class="btn btn-sm btn-app-soft me-1" href="' + escape.display(row.show_url) + '" title="ดูรายละเอียด" aria-label="ดูรายละเอียด"><i class="bx bx-show" aria-hidden="true"></i></a>';
+                    let html = '<a class="btn btn-sm btn-app-soft me-1" href="' + escape.display(row.show_url) + '" title="ดูรายละเอียด" aria-label="ดูรายละเอียด"><i class="bx bx-file-find" aria-hidden="true"></i></a>';
                     if (row.can_edit) html += '<a class="btn btn-sm btn-app-soft me-1" href="' + escape.display(row.show_url + '/edit') + '" title="แก้ไขร่าง" aria-label="แก้ไขร่าง"><i class="bx bx-edit" aria-hidden="true"></i></a>';
-                    if (row.can_approve) html += '<button class="btn btn-sm btn-app-soft me-1 js-count-approve" data-url="' + escape.display(row.show_url + '/approve') + '" title="อนุมัติ" aria-label="อนุมัติ"><i class="bx bx-check" aria-hidden="true"></i></button>';
-                    if (row.can_delete) html += '<button class="btn btn-sm btn-outline-danger js-count-delete" data-url="' + escape.display(row.show_url) + '" title="ลบร่าง" aria-label="ลบร่าง"><i class="bx bx-trash" aria-hidden="true"></i></button>';
+                    if (row.can_delete) html += '<button class="btn btn-sm btn-app-danger js-count-delete" data-url="' + escape.display(row.delete_url) + '" title="ลบร่าง" aria-label="ลบร่าง"><i class="bx bx-trash" aria-hidden="true"></i></button>';
                     return html;
                 }
             }
@@ -98,19 +97,9 @@ $(function () {
         if ($(this).hasClass('js-wms-reset-filter')) filters.find('select,input').val('');
         table.ajax.reload();
     });
-    $(document).on('click', '.js-count-approve', function () {
-        const button = $(this);
-        Swal.fire({ icon: 'warning', text: 'ยืนยันการอนุมัติเอกสารตรวจนับ?', showCancelButton: true, confirmButtonText: 'อนุมัติ', cancelButtonText: 'ยกเลิก' })
-            .then(function (result) {
-                if (!result.isConfirmed) return;
-                $.post(button.data('url'), { _token: $('meta[name=csrf-token]').attr('content') })
-                    .done(function (response) { Swal.fire({ icon: 'success', text: response.msg, timer: 1200, showConfirmButton: false }); table.ajax.reload(null, false); })
-                    .fail(function (error) { Swal.fire({ icon: 'error', text: error.responseJSON?.message || 'อนุมัติไม่สำเร็จ' }); });
-            });
-    });
     $(document).on('click', '.js-count-delete', function () {
         const button = $(this);
-        Swal.fire({ icon: 'warning', text: 'ยืนยันการลบร่างเอกสาร?', showCancelButton: true, confirmButtonText: 'ลบร่าง', cancelButtonText: 'ยกเลิก', confirmButtonColor: '#dc3545' })
+        Swal.fire({ icon: 'warning', text: 'เอกสารร่างจะถูกลบและไม่สามารถกู้คืนได้', showCancelButton: true, confirmButtonText: 'ลบร่าง', cancelButtonText: 'กลับ' })
             .then(function (result) {
                 if (!result.isConfirmed) return;
                 $.ajax({ url: button.data('url'), method: 'DELETE', data: { _token: $('meta[name=csrf-token]').attr('content') } })

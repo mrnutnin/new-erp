@@ -36,6 +36,7 @@ Route::middleware(['auth', 'warehouse'])->prefix('wms')->name('wms.')->group(fun
         Route::post('/opening-balances', [OpeningBalanceController::class, 'store'])->middleware('permission:wms.opening-balances.create')->name('opening-balances.store');
         Route::get('/opening-balances/{batch}', [OpeningBalanceController::class, 'show'])->middleware('permission:wms.opening-balances.view')->name('opening-balances.show');
         Route::post('/opening-balances/{batch}/post', [OpeningBalanceController::class, 'post'])->middleware('permission:wms.opening-balances.post')->name('opening-balances.post');
+        Route::delete('/opening-balances/{batch}', [OpeningBalanceController::class, 'destroy'])->middleware('permission:wms.opening-balances.delete')->name('opening-balances.destroy');
         Route::get('/stock', [StockController::class, 'index'])->middleware('permission:wms.stock.view')->name('stock.index');
         Route::get('/stock-valuation/legacy-accounting-proof', [StockValuationController::class, 'legacyAccountingProof'])->middleware('permission:wms.cost-revaluation.recover')->name('stock-valuation.legacy-accounting-proof');
         Route::post('/stock-valuation/legacy-accounting-proof/recover', [StockValuationController::class, 'legacyAccountingProofRecover'])->middleware('permission:wms.cost-revaluation.recover')->name('stock-valuation.legacy-accounting-proof.recover');

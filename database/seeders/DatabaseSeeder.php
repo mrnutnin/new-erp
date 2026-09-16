@@ -33,6 +33,7 @@ class DatabaseSeeder extends Seeder
 
         $this->call(RbacSeeder::class);
         $this->call(JournalBookSeeder::class);
+        $this->call(SystemTaxCodeSeeder::class);
 
         $branch = Branch::query()->updateOrCreate(['code' => 'HQ'], [
             'name' => 'สำนักงานใหญ่',

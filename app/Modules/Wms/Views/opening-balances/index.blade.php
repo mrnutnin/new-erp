@@ -61,12 +61,15 @@ $(function () {
             }},
             {data: null, orderable: false, searchable: false, className: 'text-end text-nowrap', render: function (value, type, row) {
                 if (type !== 'display') return '';
-                return '<a class="btn btn-sm btn-app-soft" href="' + escape.display(row.show_url) + '" title="ดูรายละเอียด" aria-label="ดูรายละเอียด"><i class="bx bx-show" aria-hidden="true"></i></a>';
+                const actions = ['<a class="btn btn-sm btn-app-soft" href="' + escape.display(row.show_url) + '" title="ดูรายละเอียด" aria-label="ดูรายละเอียด"><i class="bx bx-file-find" aria-hidden="true"></i></a>'];
+                if (row.delete_url) actions.push('<button class="btn btn-sm btn-app-danger js-opening-delete" type="button" data-url="' + escape.display(row.delete_url) + '" title="ลบร่าง" aria-label="ลบร่าง"><i class="bx bx-trash" aria-hidden="true"></i></button>');
+                return actions.join(' ');
             }}
         ]
     }));
     filters.on('click', '.js-wms-apply-filter', function () { table.ajax.reload(); });
     filters.on('click', '.js-wms-reset-filter', function () { filters.find('select,input').val(''); table.ajax.reload(); });
+    window.erpAjaxDelete({button: '.js-opening-delete', reload: '#opening-balances-table', confirm: 'ลบร่างยอดยกมาสินค้านี้หรือไม่? เอกสารร่างจะถูกลบและไม่สามารถกู้คืนได้', confirmButtonText: 'ลบร่าง', cancelButtonText: 'กลับ'});
 });
 </script>
 @endpush

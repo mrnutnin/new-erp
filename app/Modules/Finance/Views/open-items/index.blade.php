@@ -65,7 +65,7 @@
                     { data: 'signed_outstanding_amount', name: 'signed_outstanding_amount', className: 'text-end', render: amount },
                     { data: 'days_overdue', name: 'days_overdue', className: 'text-end', render: text.display },
                     { data: 'status_label', name: 'status_label', orderable: false, render: function (value, type, row) { return type === 'display' ? '<span class="badge ' + (row.status_class || 'text-bg-secondary') + '">' + text.display(value) + '</span>' : value; } },
-                    { data: 'show_url', name: 'show_url', orderable: false, searchable: false, className: 'text-center', render: function (url, type) { return type === 'display' ? '<a class="btn btn-sm btn-app-soft" href="' + text.display(url) + '" title="ดูรายละเอียด" aria-label="ดูรายละเอียด"><i class="bx bx-show" aria-hidden="true"></i></a>' : ''; } }
+                    { data: 'show_url', name: 'show_url', orderable: false, searchable: false, className: 'text-center', render: function (url, type) { return type === 'display' ? '<a class="btn btn-sm btn-app-soft" href="' + text.display(url) + '" title="ดูรายละเอียด" aria-label="ดูรายละเอียด"><i class="bx bx-file-find" aria-hidden="true"></i></a>' : ''; } }
                 ]
             }));
 

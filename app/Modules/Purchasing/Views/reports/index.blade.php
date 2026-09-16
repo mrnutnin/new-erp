@@ -13,6 +13,19 @@
         <span class="badge app-status-info">ใช้ DataTable แบบ server-side</span>
     </div>
 
+    <form class="card border-0 shadow-sm mb-4" method="GET" action="{{ route('purchasing.reports.pdf') }}" target="_blank">
+        <div class="card-body p-4">
+            <div class="d-flex flex-wrap justify-content-between align-items-start gap-3 mb-3">
+                <div><h2 class="h5 mb-1">สรุปภาพรวมสำหรับพิมพ์</h2><p class="text-secondary small mb-0">สรุปจำนวนเอกสารและมูลค่าแยกตามสถานะ ภายในคลังที่คุณมีสิทธิ์</p></div>
+                <button class="btn btn-app-primary" type="submit"><i class="bx bx-printer me-1" aria-hidden="true"></i>พิมพ์รายงาน PDF</button>
+            </div>
+            <div class="row g-3">
+                <div class="col-12 col-md-4"><label class="form-label" for="report-date-from">วันที่เริ่มต้น</label><input class="form-control" id="report-date-from" type="date" name="date_from" value="{{ $dateFrom }}" required></div>
+                <div class="col-12 col-md-4"><label class="form-label" for="report-date-to">วันที่สิ้นสุด</label><input class="form-control" id="report-date-to" type="date" name="date_to" value="{{ $dateTo }}" min="{{ $dateFrom }}" required></div>
+            </div>
+        </div>
+    </form>
+
     <div class="row g-3">
         @foreach ($reports as $report)
             @if (auth()->user()->hasPermission($report['permission']))
@@ -20,8 +33,8 @@
                     <a class="card h-100 border-0 shadow-sm text-decoration-none text-body report-card" href="{{ route($report['route'], $report['query'] ?? []) }}">
                         <div class="card-body p-4 d-flex flex-column">
                             <div class="d-flex justify-content-between align-items-start mb-3">
-                                <span class="report-icon"><i class="bx {{ $report['icon'] }}" aria-hidden="true"></i></span>
-                                <i class="bx bx-right-arrow-alt text-primary fs-4" aria-hidden="true"></i>
+                                <span class="d-inline-flex align-items-center justify-content-center rounded-3 bg-light text-dark p-2"><i class="bx {{ $report['icon'] }} fs-5" aria-hidden="true"></i></span>
+                                <i class="bx bx-right-arrow-alt text-dark fs-4" aria-hidden="true"></i>
                             </div>
                             <h2 class="h6 mb-2">{{ $report['title'] }}</h2>
                             <p class="text-secondary small mb-0">{{ $report['description'] }}</p>
@@ -38,9 +51,4 @@
     </div>
 </div>
 
-<style>
-    .report-card { transition: transform .15s ease, box-shadow .15s ease; }
-    .report-card:hover { transform: translateY(-2px); box-shadow: 0 .5rem 1rem rgba(31, 41, 55, .10) !important; }
-    .report-icon { width: 2.5rem; height: 2.5rem; display: inline-flex; align-items: center; justify-content: center; border-radius: .8rem; background: #e8efff; color: #3564d8; font-size: 1.25rem; }
-</style>
 @endsection
