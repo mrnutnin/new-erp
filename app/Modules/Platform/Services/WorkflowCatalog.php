@@ -140,6 +140,32 @@ final class WorkflowCatalog
             ], 'daily');
         }
 
+        if ($program === 'crm') {
+            return self::decorate([
+                [
+                    'code' => 'crm-readiness', 'title' => 'เตรียมทีม CRM ก่อนเริ่มใช้งาน', 'mode' => 'setup',
+                    'description' => 'กำหนดทีม ผู้รับผิดชอบ และช่องทางแจ้งเตือนก่อนเริ่มติดตามลูกค้า', 'duration' => 'ประมาณ 10 นาที',
+                    'steps' => [
+                        ['label' => 'จัดการทีมขาย', 'route' => 'crm.teams.index', 'permission' => 'crm.teams.manage', 'effect' => 'กำหนดหัวหน้าทีมและสมาชิกตามสาขา', 'mode' => 'setup'],
+                        ['label' => 'ตรวจสอบลูกค้าซ้ำ', 'route' => 'crm.customers.duplicates', 'permission' => 'crm.customers.update', 'effect' => 'ลดข้อมูลลูกค้าซ้ำก่อนเริ่มสร้าง Opportunity', 'mode' => 'setup'],
+                        ['label' => 'ตั้งค่าการแจ้งเตือน', 'route' => 'crm.notifications.index', 'permission' => 'crm.opportunities.view', 'effect' => 'เลือกเวลาแจ้งเตือนและเปิด Browser Push ตามอุปกรณ์', 'mode' => 'setup'],
+                    ],
+                ],
+                [
+                    'code' => 'crm-daily-work', 'title' => 'งานประจำวันของทีมขาย', 'mode' => 'daily',
+                    'description' => 'เริ่มจากงานที่ถึงกำหนด ดูข้อมูลลูกค้า ติดตาม Opportunity และส่งต่อการขายให้ POS', 'duration' => 'ทำตามงานจริงในแต่ละวัน',
+                    'steps' => [
+                        ['label' => 'ตรวจงานของฉัน', 'route' => 'crm.my-work.index', 'permission' => 'crm.opportunities.view', 'effect' => 'จัดลำดับงานวันนี้ งานเกินกำหนด และงานถัดไป', 'mode' => 'daily'],
+                        ['label' => 'เปิด Customer 360', 'route' => 'crm.customers.index', 'permission' => 'crm.opportunities.view', 'effect' => 'ตรวจข้อมูลติดต่อ ประวัติการขาย และสถานะการเงิน', 'mode' => 'daily'],
+                        ['label' => 'สร้างและติดตาม Opportunity', 'route' => 'crm.opportunities.index', 'permission' => 'crm.opportunities.view', 'effect' => 'บันทึกมูลค่า Stage ผู้รับผิดชอบ และ Next action', 'mode' => 'daily'],
+                        ['label' => 'วางแผนในปฏิทิน', 'route' => 'crm.calendar.index', 'permission' => 'crm.calendar.view', 'effect' => 'สร้าง เลื่อน และทำ Activity ให้เสร็จตามกำหนด', 'mode' => 'daily'],
+                        ['label' => 'อัปเดต Pipeline', 'route' => 'crm.opportunities.kanban', 'permission' => 'crm.opportunities.view', 'effect' => 'ย้าย Stage ตามผลการติดตามและระบุเหตุผลเมื่อ Lost', 'mode' => 'daily'],
+                        ['label' => 'ตรวจ Forecast', 'route' => 'crm.forecast.index', 'permission' => 'crm.forecast.view', 'effect' => 'ดู Pipeline coverage ดีลเสี่ยง และยอดขายเทียบเป้าหมาย', 'mode' => 'daily'],
+                    ],
+                ],
+            ], 'daily');
+        }
+
         if ($program === 'wms') {
             return self::decorate([
                 [

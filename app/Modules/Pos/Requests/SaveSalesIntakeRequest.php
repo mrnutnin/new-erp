@@ -43,6 +43,7 @@ class SaveSalesIntakeRequest extends FormRequest
         $decimal = WmsDecimal::rule();
 
         return [
+            'crm_opportunity_id' => ['nullable', 'integer', 'exists:crm_opportunities,id'],
             'party_id' => ['required', 'integer', 'min:1'],
             'prepared_by' => ['nullable', 'integer', 'min:1'],
             'document_date' => ['required', 'date_format:Y-m-d'],

@@ -9,6 +9,7 @@ use App\Models\Party;
 use App\Models\PartyRole;
 use App\Models\User;
 use App\Modules\Accounting\Models\TaxCode;
+use App\Modules\Crm\Models\Opportunity;
 use App\Modules\Finance\Models\DocumentSequence;
 use App\Modules\Finance\Services\DocumentSequenceService;
 use App\Modules\Platform\Services\AuditLogger;
@@ -32,6 +33,7 @@ use Brick\Math\RoundingMode;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -158,12 +160,33 @@ class SalesIntakeController extends Controller
             : [['value' => $fallback, 'text' => 'ที่อยู่หลัก · '.$fallback, 'is_default' => true]];
     }
 
-    public function create(): View
+    public function create(Request $r, PriceListResolver $prices, PromotionResolver $promotions): View
     {
+        if ($r->filled('crm_opportunity_id')) {
+            abort_unless($r->user()->hasPermission('crm.opportunities.convert-pos'), 403);
+        }
+        $crmOpportunity = $r->filled('crm_opportunity_id')
+            ? Opportunity::query()->with(['party', 'productInterests.item.baseUom', 'productInterests.uom'])->where('branch_id', $this->branchId())->whereNull('sales_intake_id')->findOrFail($r->integer('crm_opportunity_id'))
+            : null;
+        abort_if($crmOpportunity && ! $crmOpportunity->party_id, 422, 'โอกาสการขายยังไม่ได้ผูกลูกค้า');
+        if ($crmOpportunity) {
+            abort_unless($crmOpportunity->productInterests->isNotEmpty() && $crmOpportunity->productInterests->count() <= 100, 422, 'Product Interest ต้องมี 1-100 รายการ');
+            $date = now();
+            $group = $this->customerGroupCode($crmOpportunity->party);
+            $lines = $crmOpportunity->productInterests->sortBy('id')->values()->map(function ($interest, int $index) use ($prices, $promotions, $date, $group): SalesIntakeLine {
+                $price = $prices->resolve($this->branchId(), (int) $interest->item_id, (int) $interest->uom_id, $group, $date, (string) $interest->quantity);
+                $promotion = $interest->target_unit_price === null ? $promotions->resolve((int) $interest->item_id, (int) $interest->uom_id, $group, $date, (string) $interest->quantity) : null;
+                $line = new SalesIntakeLine(['line_number' => $index + 1, 'item_id' => $interest->item_id, 'uom_id' => $interest->uom_id, 'quantity' => WmsDecimal::input($interest->quantity), 'description' => $interest->requirements, 'standard_unit_price' => $price['unit_price'] ?? null, 'requested_unit_price' => $interest->target_unit_price !== null ? WmsDecimal::input($interest->target_unit_price) : ($promotion ? null : ($price['unit_price'] ?? null)), 'discount_amount' => '0', 'pricing_snapshot' => $promotion]);
+                return $line->setRelation('item', $interest->item)->setRelation('uom', $interest->uom);
+            });
+        } else {
+            $lines = collect([new SalesIntakeLine(['line_number' => 1, 'quantity' => WmsDecimal::input('1')])]);
+        }
+
         return view('Pos::sales-intakes.form', [
-            'intake' => new SalesIntake(['document_date' => now()->toDateString(), 'prepared_by' => auth()->id(), 'tax_treatment' => 'VAT_OUT', 'prices_include_vat' => true]),
-            'lines' => [new SalesIntakeLine(['line_number' => 1, 'quantity' => '1.0000'])],
-            'party' => null, 'decimalPlaces' => WmsDecimal::places(),
+            'intake' => new SalesIntake(['document_date' => now()->toDateString(), 'prepared_by' => auth()->id(), 'party_id' => $crmOpportunity?->party_id, 'source' => $crmOpportunity ? 'CRM' : null, 'description' => $crmOpportunity?->title, 'tax_treatment' => 'VAT_OUT', 'prices_include_vat' => true]),
+            'lines' => $lines,
+            'party' => $crmOpportunity?->party, 'crmOpportunity' => $crmOpportunity, 'decimalPlaces' => WmsDecimal::places(),
             'preparedUsers' => User::query()->where('is_active', true)->orderBy('name')->get(['id', 'name']),
             'taxCodes' => TaxCode::query()->where('kind', 'VAT_OUT')->where('is_active', true)->orderBy('code')->get(['id', 'code', 'name', 'rate']),
         ]);
@@ -174,7 +197,7 @@ class SalesIntakeController extends Controller
         $x = $this->scope($r, $salesIntake)->load('lines.item.baseUom', 'lines.uom', 'party', 'quotation.order', 'order', 'rfq.quotation.order', 'rfq.order');
         abort_unless($this->canRevise($x), 403);
 
-        return view('Pos::sales-intakes.form', ['intake' => $x, 'lines' => $x->lines, 'party' => $x->party, 'decimalPlaces' => WmsDecimal::places(),
+        return view('Pos::sales-intakes.form', ['intake' => $x, 'lines' => $x->lines, 'party' => $x->party, 'crmOpportunity' => null, 'decimalPlaces' => WmsDecimal::places(),
             'preparedUsers' => User::query()->where('is_active', true)->orderBy('name')->get(['id', 'name']),
             'taxCodes' => TaxCode::query()->where('kind', 'VAT_OUT')->where('is_active', true)->orderBy('code')->get(['id', 'code', 'name', 'rate']),
         ]);
@@ -301,6 +324,14 @@ class SalesIntakeController extends Controller
                 ]);
             }
             $audit->record($before ? 'pos.sales-intake.updated' : 'pos.sales-intake.created', $x, $before, $x->fresh()->toArray(), $r->user(), $r);
+            if (! empty($d['crm_opportunity_id'])) {
+                abort_unless($r->user()->hasPermission('crm.opportunities.convert-pos'), 403);
+                $opportunity = Opportunity::query()->lockForUpdate()->where('branch_id', $this->branchId())->where('party_id', $party->id)->findOrFail($d['crm_opportunity_id']);
+                abort_if($opportunity->sales_intake_id && (int) $opportunity->sales_intake_id !== (int) $x->id, 422, 'โอกาสการขายนี้เชื่อมต่อเอกสาร POS แล้ว');
+                $opportunityBefore = $opportunity->toArray();
+                $opportunity->update(['sales_intake_id' => $x->id, 'stage' => in_array($opportunity->stage, ['WON', 'LOST'], true) ? $opportunity->stage : 'PROPOSAL', 'probability' => in_array($opportunity->stage, ['WON', 'LOST'], true) ? $opportunity->probability : max(60, $opportunity->probability), 'updated_by' => $r->user()->id]);
+                $audit->record('crm.opportunity.linked-pos', $opportunity, $opportunityBefore, $opportunity->fresh()->toArray(), $r->user(), $r);
+            }
 
             return $x->fresh();
         });
@@ -312,8 +343,18 @@ class SalesIntakeController extends Controller
     {
         $x = $this->scope($r, $salesIntake)->load('lines.item', 'lines.uom', 'party', 'rfq.quotation.order.physicalSales', 'rfq.order.physicalSales', 'quotation.order.physicalSales', 'order.physicalSales', 'preparedBy');
         $history = AuditLog::query()->with('user:id,name')->where('subject_type', $x->getMorphClass())->where('subject_id', $x->id)->latest()->get();
+        $crmOpportunity=$r->user()->hasPermission('crm.opportunities.view')&&$r->user()->programs()->where('code','crm')->where('is_enabled',true)->exists()?Opportunity::query()->where('branch_id',$x->branch_id)->where('sales_intake_id',$x->id)->first(['id','title']):null;
 
-        return view('Pos::sales-intakes.show', ['x' => $x, 'history' => $history, 'canRevise' => $this->canRevise($x), 'decimalPlaces' => (int) ($x->tax_decimal_places ?? WmsDecimal::places()), 'flowDocuments' => SalesDocumentTrail::for($x)]);
+        return view('Pos::sales-intakes.show', ['x' => $x, 'history' => $history, 'canRevise' => $this->canRevise($x), 'decimalPlaces' => (int) ($x->tax_decimal_places ?? WmsDecimal::places()), 'flowDocuments' => SalesDocumentTrail::for($x),'crmOpportunity'=>$crmOpportunity]);
+    }
+
+    public function openCrm(Request $request,SalesIntake $salesIntake):RedirectResponse
+    {
+        $salesIntake=$this->scope($request,$salesIntake);abort_unless($request->user()->hasPermission('crm.opportunities.view'),403);
+        $program=$request->user()->programs()->where('code','crm')->where('is_enabled',true)->first();abort_unless($program,403,'ผู้ใช้ไม่ได้รับสิทธิ์เข้าโปรแกรม CRM');
+        $opportunity=Opportunity::query()->where('branch_id',$salesIntake->branch_id)->where('sales_intake_id',$salesIntake->id)->firstOrFail();
+        $request->session()->put(['selected_program_id'=>$program->id,'selected_branch_id'=>$salesIntake->branch_id]);
+        return redirect()->route('crm.opportunities.show',$opportunity);
     }
 
     public function toRfq(Request $r, SalesIntake $salesIntake, DocumentSequenceService $seq, AuditLogger $audit): JsonResponse

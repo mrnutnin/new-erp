@@ -2,6 +2,7 @@
 
 use App\Modules\Accounting\Providers\AccountingServiceProvider;
 use App\Modules\Asset\Providers\AssetServiceProvider;
+use App\Modules\Crm\Providers\CrmServiceProvider;
 use App\Modules\Dashboard\Providers\DashboardServiceProvider;
 use App\Modules\Finance\Providers\FinanceServiceProvider;
 use App\Modules\Installer\Providers\InstallerServiceProvider;
@@ -24,4 +25,5 @@ return [
     WmsServiceProvider::class,
     PurchasingServiceProvider::class,
     PosServiceProvider::class,
+    CrmServiceProvider::class,
 ];

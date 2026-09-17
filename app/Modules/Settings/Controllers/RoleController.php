@@ -164,6 +164,7 @@ class RoleController extends Controller
         $moduleLabels = [
             'accounting' => 'บัญชี',
             'asset' => 'สินทรัพย์',
+            'crm' => 'ลูกค้าสัมพันธ์',
             'dashboard' => 'แดชบอร์ดผู้บริหาร',
             'finance' => 'การเงิน',
             'pos' => 'ขายและหน้าร้าน',

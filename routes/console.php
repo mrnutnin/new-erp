@@ -8,6 +8,7 @@ Artisan::command('inspire', function () {
 })->purpose('Display an inspiring quote');
 use App\Models\User;
 use App\Modules\Asset\Models\AssetMaintenanceSchedule;
+use App\Modules\Crm\Services\CrmNotificationService;
 use App\Modules\Wms\Jobs\DispatchPendingInventoryRecost;
 use App\Modules\Wms\Models\CostAllocation;
 use App\Modules\Wms\Services\CostAllocationReviewService;
@@ -396,6 +397,13 @@ Artisan::command('asset:maintenance-alerts', function (): void {
 })->purpose('บันทึกการตรวจแผนบำรุงรักษาที่ใกล้ครบกำหนดหรือเกินกำหนด โดยไม่สร้างใบแจ้งซ่อม');
 
 Schedule::command('asset:maintenance-alerts')->dailyAt('08:00')->withoutOverlapping()->onOneServer();
+
+Artisan::command('crm:send-reminders', function (): void { $this->info(app(CrmNotificationService::class)->sendDueReminders().' reminders queued'); });
+Artisan::command('crm:send-daily-digests', function (): void { $this->info(app(CrmNotificationService::class)->sendDailyDigests().' digests queued'); });
+Artisan::command('crm:send-risk-alerts', function (): void { $this->info(app(CrmNotificationService::class)->sendRiskAlerts().' risk alerts queued'); });
+Schedule::command('crm:send-reminders')->everyMinute()->withoutOverlapping()->onOneServer();
+Schedule::command('crm:send-daily-digests')->dailyAt((string) config('erp.crm.digest_time', '08:00'))->withoutOverlapping()->onOneServer();
+Schedule::command('crm:send-risk-alerts')->dailyAt((string) config('erp.crm.risk_alert_time', '08:15'))->withoutOverlapping()->onOneServer();
 
 Artisan::command('wms:repair-pos-reversal-links {warehouse_id} {--apply} {--actor=1}', function (int $warehouse_id): void {
     $rows = DB::table('wms_cost_allocations as allocations')

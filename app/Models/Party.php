@@ -2,10 +2,12 @@
 
 namespace App\Models;
 
+use App\Support\PartyNameNormalizer;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use App\Modules\Crm\Models\CustomerAssignment;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
@@ -27,6 +29,11 @@ class Party extends Model
         'created_by',
         'updated_by',
     ];
+
+    protected static function booted():void
+    {
+        static::saving(fn(Party $party)=>$party->normalized_name=PartyNameNormalizer::normalize($party->name));
+    }
 
     protected function casts(): array
     {
@@ -56,6 +63,16 @@ class Party extends Model
     public function addresses(): HasMany
     {
         return $this->hasMany(PartyAddress::class);
+    }
+
+    public function customerAssignments():HasMany
+    {
+        return $this->hasMany(CustomerAssignment::class);
+    }
+
+    public function contacts(): HasMany
+    {
+        return $this->hasMany(PartyContact::class)->orderByDesc('is_primary')->orderBy('name');
     }
 
     public function createdBy(): BelongsTo

@@ -15,6 +15,7 @@ final class SalesIntakeQuickMasterDataContractTest extends TestCase
 
         self::assertStringContainsString('js-quick-customer', $form);
         self::assertStringContainsString('js-quick-address', $form);
+        self::assertStringContainsString('id="quick-address-form">@csrf', $form);
         self::assertStringContainsString("Route::post('/customers/{customer}/addresses'", $routes);
         self::assertStringContainsString("Route::get('/customers/quick-options'", $routes);
         self::assertStringContainsString('function quickOptions', $customerController);

@@ -14,6 +14,7 @@ use App\Modules\Finance\Models\Settlement;
 use App\Modules\Finance\Services\AdvanceDepositApplicationService;
 use App\Modules\Finance\Services\DocumentSequenceService;
 use App\Modules\Finance\Services\OpenItemService;
+use App\Modules\Crm\Services\OpportunityPosLifecycleService;
 use App\Modules\Platform\Services\AuditLogger;
 use App\Modules\Pos\Models\PhysicalSale;
 use App\Modules\Pos\Models\SalesReturn;
@@ -42,6 +43,7 @@ final class PhysicalSaleCancellationService
         private readonly CommissionCalculationService $commissions,
         private readonly AuditLogger $audit,
         private readonly CostPropagationTriggerDispatcher $costPropagation,
+        private readonly OpportunityPosLifecycleService $crmLifecycle,
     ) {}
 
     public function cancel(PhysicalSale $sale, Warehouse $warehouse, string $date, string $reason, User $actor, Request $request): PhysicalSale
@@ -108,6 +110,7 @@ final class PhysicalSaleCancellationService
                 'reversal_revision' => (int) $sale->reversal_revision + 1, 'reversal_key' => "physical-sale-cancel:{$sale->id}",
                 'void_reason' => $reason, 'voided_by' => $actor->id, 'voided_at' => now(), 'updated_by' => $actor->id])->save();
             $this->audit->record('pos.physical-sale.cancelled', $sale, $before, $sale->fresh()->only(array_keys($before)), $actor, $request);
+            $this->crmLifecycle->notifyCancellation($sale);
             $this->costPropagation->dispatchIfEnabled('SALES_RETURN', $return->id, (int) $return->reversal_revision, [], $actor->id);
 
             return $sale->fresh();

@@ -170,6 +170,7 @@ class DatabasePreparationService
             'warehouses' => ['deleted_at'],
             'users' => ['profile_image_disk', 'profile_image_path', 'signature_disk', 'signature_path', 'signature_checksum', 'signature_mime_type', 'position', 'deleted_at'],
             'roles' => ['deleted_at'],
+            'parties' => ['normalized_name', 'deleted_at'],
             'wms_inventory_adjustments' => ['deleted_at'],
             'wms_transfers' => ['note', 'deleted_at'],
             'wms_inventory_adjustment_documents' => ['document_context', 'deleted_at'],
@@ -179,8 +180,20 @@ class DatabasePreparationService
             'wms_transfer_photos' => ['transfer_id', 'stage', 'disk', 'path', 'original_name', 'mime_type', 'bytes', 'checksum', 'uploaded_by'],
             'wms_document_photos' => ['document_type', 'document_id', 'disk', 'path', 'original_name', 'mime_type', 'bytes', 'checksum', 'uploaded_by'],
             'wms_production_receipt_sources' => ['receipt_document_id', 'issue_document_id', 'issue_line_id', 'source_allocation_id', 'source_allocation_revision', 'consumed_quantity', 'consumed_value'],
+            'crm_opportunities' => ['branch_id', 'party_id', 'owner_id', 'sales_intake_id', 'stage', 'next_action_at', 'deleted_at'],
+            'crm_activities' => ['opportunity_id', 'type', 'due_at', 'completed_at', 'assigned_to'],
+            'crm_product_interests' => ['opportunity_id', 'item_id', 'uom_id', 'quantity', 'target_unit_price', 'budget_amount', 'requirements'],
+            'party_contacts' => ['party_id', 'name', 'decision_role', 'preferred_channel', 'contact_permission_status', 'lawful_basis', 'allow_phone', 'allow_email', 'allow_line', 'permission_recorded_at', 'is_primary', 'is_active', 'deleted_at'],
+            'crm_sales_teams' => ['branch_id', 'name', 'manager_id', 'is_active', 'deleted_at'],
+            'crm_sales_team_members' => ['team_id', 'user_id'],
+            'notifications' => ['id', 'type', 'notifiable_type', 'notifiable_id', 'data', 'read_at'],
+            'crm_notification_deliveries' => ['idempotency_key', 'user_id', 'kind', 'activity_id', 'branch_id'],
+            'crm_notification_preferences' => ['user_id', 'reminder_enabled', 'reminder_minutes'],
+            'crm_customer_duplicate_resolutions' => ['signature', 'match_type', 'match_key', 'resolved_by'],
+            'crm_customer_assignments' => ['party_id', 'branch_id', 'owner_id', 'team_id', 'territory', 'backup_owner_id'],
+            'push_subscriptions' => ['subscribable_type', 'subscribable_id', 'endpoint', 'public_key', 'auth_token', 'content_encoding'],
         ];
-        $requiredTables = ['wms_cost_revaluation_batches', 'wms_cost_revaluation_runs', 'wms_cost_revaluation_deltas', 'wms_production_receipt_sources', 'wms_transfer_photos', 'wms_document_photos', 'document_signature_snapshots'];
+        $requiredTables = ['wms_cost_revaluation_batches', 'wms_cost_revaluation_runs', 'wms_cost_revaluation_deltas', 'wms_production_receipt_sources', 'wms_transfer_photos', 'wms_document_photos', 'document_signature_snapshots', 'crm_opportunities', 'crm_activities', 'crm_product_interests', 'party_contacts', 'crm_sales_teams', 'crm_sales_team_members', 'notifications', 'crm_notification_deliveries', 'crm_notification_preferences', 'crm_customer_duplicate_resolutions', 'crm_customer_assignments', 'push_subscriptions'];
 
         foreach ($requiredTables as $table) {
             if (! Schema::hasTable($table)) {

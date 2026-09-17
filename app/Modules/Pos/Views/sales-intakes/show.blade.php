@@ -17,6 +17,7 @@
         </div>
         <div class="d-flex flex-wrap justify-content-end gap-2">
             <a class="btn btn-app-soft d-inline-flex align-items-center gap-1" href="{{ route('pos.sales-intakes.index') }}"><i class="bx bx-arrow-back"></i>กลับหน้ารายการ</a>
+            @if($crmOpportunity)<form method="post" action="{{ route('pos.sales-intakes.open-crm',$x) }}">@csrf<button class="btn btn-app-soft d-inline-flex align-items-center gap-1" type="submit"><i class="bx bx-target-lock" aria-hidden="true"></i>เปิด Opportunity</button></form>@endif
             @if ($x->requires_rfq)
                 @if (in_array($x->status, ['DRAFT', 'COMPLETED'], true) && ! $x->rfq && auth()->user()->hasPermission('pos.sales-intakes.convert'))
                     <form class="js-convert d-inline-flex" method="post" action="{{ route('pos.sales-intakes.to-rfq', $x) }}">@csrf<button class="btn btn-app-primary d-inline-flex align-items-center gap-1" type="submit"><i class="bx bx-plus-circle"></i>สร้าง RFQ</button></form>

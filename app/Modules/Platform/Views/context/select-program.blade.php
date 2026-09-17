@@ -24,7 +24,7 @@
         @if ($programs->isEmpty())
             <div class="alert alert-light border">บัญชีนี้ยังไม่มีสิทธิ์เข้าใช้งานโปรแกรม</div>
         @else
-            @php($programIcons = ['dashboard' => 'bx-bar-chart-alt-2', 'settings' => 'bx-cog', 'purchasing' => 'bx-cart-alt', 'wms' => 'bx-package', 'pos' => 'bx-store-alt', 'finance' => 'bx-wallet', 'accounting' => 'bx-calculator', 'asset' => 'bx-building-house'])
+            @php($programIcons = ['dashboard' => 'bx-bar-chart-alt-2', 'settings' => 'bx-cog', 'purchasing' => 'bx-cart-alt', 'wms' => 'bx-package', 'crm' => 'bx-group', 'pos' => 'bx-store-alt', 'finance' => 'bx-wallet', 'accounting' => 'bx-calculator', 'asset' => 'bx-building-house'])
             <div class="row g-3">
                 @foreach ($programs as $program)
                     <div class="col-12 col-md-6 col-xl-3">

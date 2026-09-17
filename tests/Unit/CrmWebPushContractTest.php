@@ -1,0 +1,10 @@
+<?php
+namespace Tests\Unit;
+use PHPUnit\Framework\Attributes\Test;
+use Tests\TestCase;
+final class CrmWebPushContractTest extends TestCase
+{
+ #[Test] public function web_push_uses_vapid_owned_subscriptions_and_installer_schema_guard():void{$composer=file_get_contents(base_path('composer.json'));$user=file_get_contents(base_path('app/Models/User.php'));$schema=file_get_contents(base_path('app/Modules/Installer/Services/DatabasePreparationService.php'));self::assertStringContainsString('laravel-notification-channels/webpush',$composer);self::assertStringContainsString('HasPushSubscriptions',$user);self::assertStringContainsString("'push_subscriptions' =>",$schema);self::assertFileExists(base_path('database/migrations/2026_09_17_190000_create_push_subscriptions_table.php'));}
+ #[Test] public function subscriptions_are_authenticated_validated_and_browser_opt_in():void{$controller=file_get_contents(base_path('app/Modules/Crm/Controllers/NotificationController.php'));$routes=file_get_contents(base_path('app/Modules/Crm/Routes/web.php'));$view=file_get_contents(base_path('app/Modules/Crm/Views/notifications/index.blade.php'));self::assertStringContainsString("'endpoint'=>['required','url','max:2048']",$controller);self::assertStringContainsString('updatePushSubscription',$controller);self::assertStringContainsString('deletePushSubscription',$controller);self::assertStringContainsString('permission:crm.opportunities.view',$routes);self::assertStringContainsString('Notification.requestPermission()',$view);self::assertStringContainsString("navigator.serviceWorker.register('/crm-push-sw.js')",$view);}
+ #[Test] public function queued_crm_notifications_use_database_and_web_push_channels():void{$notification=file_get_contents(base_path('app/Modules/Crm/Notifications/CrmWorkNotification.php'));$worker=file_get_contents(public_path('crm-push-sw.js'));self::assertStringContainsString('WebPushChannel::class',$notification);self::assertStringContainsString('toWebPush',$notification);self::assertStringContainsString("self.addEventListener('push'",$worker);self::assertStringContainsString("self.addEventListener('notificationclick'",$worker);}
+}

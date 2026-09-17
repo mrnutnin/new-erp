@@ -5,6 +5,7 @@ namespace App\Modules\Installer\Services;
 use App\Models\Permission;
 use App\Models\Program;
 use App\Models\Role;
+use App\Models\User;
 use App\Modules\Installer\Models\InstallationSession;
 use App\Modules\Installer\Models\SystemSeedVersion;
 use Database\Seeders\JournalBookSeeder;
@@ -21,14 +22,14 @@ class SystemDefaultOrchestrator
 {
     /** @var array<string, string> */
     private const SEED_VERSIONS = [
-        'core.rbac' => '1.8',
-        'core.programs' => '1.0',
+        'core.rbac' => '2.9',
+        'core.programs' => '1.1',
         'accounting.journal_books' => '1.0',
         'accounting.chart_of_accounts' => '1.5',
         'accounting.tax_codes' => '1.0',
         'wms.production_finished_receipt_mapping' => '1.0',
         'core.document_sequences' => '1.1',
-        'core.role_templates' => '1.0',
+        'core.role_templates' => '1.1',
         'wms.issue_types' => '1.2',
     ];
 
@@ -148,17 +149,22 @@ class SystemDefaultOrchestrator
             ['code' => 'settings', 'name' => 'Global Setting', 'description' => 'ตั้งค่าระบบและข้อมูลบริษัท', 'requires_branch' => false, 'requires_warehouse' => false, 'entry_route' => 'settings.index', 'is_enabled' => true, 'sort_order' => 2],
             ['code' => 'purchasing', 'name' => 'Purchasing', 'description' => 'บริหารจัดซื้อ', 'requires_branch' => true, 'requires_warehouse' => true, 'entry_route' => 'purchasing.index', 'is_enabled' => true, 'sort_order' => 3],
             ['code' => 'wms', 'name' => 'WMS', 'description' => 'บริหารคลังสินค้าและสต็อก', 'requires_branch' => true, 'requires_warehouse' => true, 'entry_route' => 'wms.index', 'is_enabled' => true, 'sort_order' => 4],
-            ['code' => 'pos', 'name' => 'POS', 'description' => 'ขายและคำสั่งซื้อ', 'requires_branch' => true, 'requires_warehouse' => true, 'entry_route' => 'pos.index', 'is_enabled' => true, 'sort_order' => 5],
-            ['code' => 'finance', 'name' => 'Finance', 'description' => 'บริหารการเงิน', 'requires_branch' => true, 'requires_warehouse' => true, 'entry_route' => 'finance.index', 'is_enabled' => true, 'sort_order' => 6],
-            ['code' => 'accounting', 'name' => 'Accounting', 'description' => 'บัญชีและรายงานการเงิน', 'requires_branch' => true, 'requires_warehouse' => true, 'entry_route' => 'accounting.index', 'is_enabled' => true, 'sort_order' => 7],
-            ['code' => 'asset', 'name' => 'Asset', 'description' => 'บริหารสินทรัพย์', 'requires_branch' => true, 'requires_warehouse' => false, 'entry_route' => 'asset.index', 'is_enabled' => true, 'sort_order' => 8],
-            ['code' => 'logistics', 'name' => 'Logistics', 'description' => 'บริหารการขนส่ง', 'requires_branch' => true, 'requires_warehouse' => true, 'entry_route' => 'dashboard', 'is_enabled' => false, 'sort_order' => 9],
+            ['code' => 'crm', 'name' => 'CRM', 'description' => 'บริหารลูกค้าสัมพันธ์และโอกาสการขาย', 'requires_branch' => true, 'requires_warehouse' => false, 'entry_route' => 'crm.index', 'is_enabled' => true, 'sort_order' => 5],
+            ['code' => 'pos', 'name' => 'POS', 'description' => 'ขายและคำสั่งซื้อ', 'requires_branch' => true, 'requires_warehouse' => true, 'entry_route' => 'pos.index', 'is_enabled' => true, 'sort_order' => 6],
+            ['code' => 'finance', 'name' => 'Finance', 'description' => 'บริหารการเงิน', 'requires_branch' => true, 'requires_warehouse' => true, 'entry_route' => 'finance.index', 'is_enabled' => true, 'sort_order' => 7],
+            ['code' => 'accounting', 'name' => 'Accounting', 'description' => 'บัญชีและรายงานการเงิน', 'requires_branch' => true, 'requires_warehouse' => true, 'entry_route' => 'accounting.index', 'is_enabled' => true, 'sort_order' => 8],
+            ['code' => 'asset', 'name' => 'Asset', 'description' => 'บริหารสินทรัพย์', 'requires_branch' => true, 'requires_warehouse' => false, 'entry_route' => 'asset.index', 'is_enabled' => true, 'sort_order' => 9],
+            ['code' => 'logistics', 'name' => 'Logistics', 'description' => 'บริหารการขนส่ง', 'requires_branch' => true, 'requires_warehouse' => true, 'entry_route' => 'dashboard', 'is_enabled' => false, 'sort_order' => 10],
         ])->each(function (array $definition): void {
             $program = Program::query()->withTrashed()->firstOrNew(['code' => $definition['code']]);
             $program->fill($definition);
             $program->deleted_at = null;
             $program->save();
         });
+
+        Program::query()->where('code', 'crm')->first()?->users()->syncWithoutDetaching(
+            User::query()->whereHas('roles', fn ($query) => $query->where('roles.code', 'admin'))->pluck('users.id')->all()
+        );
     }
 
     /** @return array<string, bool> */
@@ -170,7 +176,7 @@ class SystemDefaultOrchestrator
             'approver' => ['name' => 'ผู้อนุมัติ', 'description' => 'อนุมัติเอกสารตามสิทธิ์ที่กำหนด', 'filter' => fn (string $code): bool => str_ends_with($code, '.approve') || str_ends_with($code, '.reject') || str_ends_with($code, '.view')],
             'accountant' => ['name' => 'นักบัญชี', 'description' => 'งาน Accounting และ Finance', 'filter' => fn (string $code): bool => str_starts_with($code, 'accounting.') || str_starts_with($code, 'finance.')],
             'warehouse_staff' => ['name' => 'พนักงานคลัง', 'description' => 'งานรับ จ่าย โอน และตรวจสอบคลัง', 'filter' => fn (string $code): bool => str_starts_with($code, 'wms.') && ! str_ends_with($code, '.delete')],
-            'sales' => ['name' => 'พนักงานขาย', 'description' => 'งานขายและ POS', 'filter' => fn (string $code): bool => str_starts_with($code, 'pos.') && ! str_ends_with($code, '.delete')],
+            'sales' => ['name' => 'พนักงานขาย', 'description' => 'งาน CRM งานขาย และ POS', 'filter' => fn (string $code): bool => (str_starts_with($code, 'pos.') || str_starts_with($code, 'crm.')) && ! str_ends_with($code, '.delete')],
             'purchasing' => ['name' => 'พนักงานจัดซื้อ', 'description' => 'งานจัดซื้อ', 'filter' => fn (string $code): bool => str_starts_with($code, 'purchasing.') && ! str_ends_with($code, '.delete')],
             'viewer' => ['name' => 'ผู้ดูข้อมูล', 'description' => 'ดูข้อมูลและรายงานเท่านั้น', 'filter' => fn (string $code): bool => str_ends_with($code, '.view')],
         ];

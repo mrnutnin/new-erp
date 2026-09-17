@@ -215,7 +215,7 @@ final class CostRevaluationInstallerContractTest extends TestCase
             self::assertStringContainsString($permission, $routes);
             self::assertStringContainsString($permission, $rbac);
         }
-        self::assertStringContainsString("'core.rbac' => '1.8'", $installer);
+        self::assertStringContainsString("'core.rbac' => '2.1'", $installer);
     }
 
     public function test_revaluation_show_defines_recovery_state_before_using_it(): void

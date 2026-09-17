@@ -10,6 +10,7 @@ use App\Modules\Accounting\Services\JournalPostingService;
 use App\Modules\Accounting\Support\JournalBalance;
 use App\Modules\Finance\Services\AdvanceDepositApplicationService;
 use App\Modules\Finance\Services\OpenItemService;
+use App\Modules\Crm\Services\OpportunityPosLifecycleService;
 use App\Modules\Platform\Services\AuditLogger;
 use App\Modules\Pos\Models\PhysicalSale;
 use App\Modules\Pos\Support\PhysicalSaleCogsPostingContract;
@@ -42,6 +43,7 @@ final class PhysicalSalePostingService
         private readonly AuditLogger $audit,
         private readonly AccountMappingService $mappings,
         private readonly CostPropagationTriggerDispatcher $costPropagation,
+        private readonly OpportunityPosLifecycleService $crmLifecycle,
     ) {}
 
     /**
@@ -155,6 +157,7 @@ final class PhysicalSalePostingService
             ])->save();
             $this->commissions->calculatePostedSale($sale);
             $this->audit->record('pos.physical-sale.posted', $sale, $before, $sale->only(array_keys($before)), $actor, $request);
+            $this->crmLifecycle->markWon($sale,$actor,$request);
             $this->costPropagation->dispatchIfEnabled('PHYSICAL_SALE', $sale->id, 0, [], $actor->id);
 
             return $sale->fresh();

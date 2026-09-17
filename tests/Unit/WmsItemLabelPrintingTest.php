@@ -25,7 +25,7 @@ class WmsItemLabelPrintingTest extends TestCase
         self::assertStringContainsString('js-item-select', $index);
         self::assertStringContainsString('selectedItems', $index);
         self::assertStringContainsString("'wms.items.print'", $rbac);
-        self::assertStringContainsString("'core.rbac' => '1.8'", $installer);
+        self::assertStringContainsString("'core.rbac' => '2.1'", $installer);
     }
 
     public function test_shared_renderer_outputs_a_qr_and_barcode_sticker_pdf(): void

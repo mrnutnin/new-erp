@@ -1,6 +1,12 @@
 <?php
 
 return [
+    'crm' => [
+        'digest_time' => env('CRM_DIGEST_TIME', '08:00'),
+        'reminder_minutes' => (int) env('CRM_REMINDER_MINUTES', 30),
+        'risk_alert_time' => env('CRM_RISK_ALERT_TIME', '08:15'),
+        'stale_opportunity_days' => (int) env('CRM_STALE_OPPORTUNITY_DAYS', 14),
+    ],
     'setup' => [
         'enabled' => (bool) env('ERP_SETUP_ENABLED', false),
         'token' => (string) env('ERP_SETUP_TOKEN', ''),

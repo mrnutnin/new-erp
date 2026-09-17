@@ -57,6 +57,7 @@ Route::middleware(['auth', 'program:pos', 'warehouse'])->prefix('pos')->name('po
     Route::get('/sales-intakes/uom-options', [SalesIntakeController::class, 'uomOptions'])->middleware('permission:pos.sales-intakes.view')->name('sales-intakes.uom-options');
     Route::get('/sales-intakes/create', [SalesIntakeController::class, 'create'])->middleware('permission:pos.sales-intakes.create')->name('sales-intakes.create');
     Route::post('/sales-intakes', [SalesIntakeController::class, 'store'])->middleware('permission:pos.sales-intakes.create')->name('sales-intakes.store');
+    Route::post('/sales-intakes/{salesIntake}/open-crm', [SalesIntakeController::class, 'openCrm'])->middleware('permission:pos.sales-intakes.view')->name('sales-intakes.open-crm');
     Route::post('/sales-intakes/{salesIntake}/to-rfq', [SalesIntakeController::class, 'toRfq'])->middleware('permission:pos.sales-intakes.convert')->name('sales-intakes.to-rfq');
     Route::post('/sales-intakes/{salesIntake}/to-quotation', [SalesQuotationController::class, 'fromIntake'])->middleware('permission:pos.sales-quotations.create')->name('sales-quotations.from-intake');
     Route::post('/sales-intakes/{salesIntake}/to-order', [SalesOrderController::class, 'fromIntake'])->middleware('permission:pos.sales-orders.create')->name('sales-orders.from-intake');
