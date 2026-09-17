@@ -1,6 +1,6 @@
 @extends('Accounting::layout')
 
-@section('title', 'การตั้งค่าการลงบัญชี | New ERP')
+@section('title', 'การตั้งค่าการลงบัญชี | MintERP')
 
 @section('content')
     @php($events = app(\App\Modules\Accounting\Services\AccountMappingService::class)->configurationEvents())

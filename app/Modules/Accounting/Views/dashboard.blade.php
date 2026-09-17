@@ -1,14 +1,14 @@
 @extends('Accounting::layout')
 
-@section('title', 'Accounting Dashboard | New ERP')
+@section('title', 'Accounting Dashboard | MintERP')
 
 @section('content')
-    <div class="container-fluid px-3 px-lg-4 py-4">
-        <div class="d-flex flex-wrap justify-content-between align-items-end gap-3 mb-4">
-            <div><p class="eyebrow mb-2">ACCOUNTING / OVERVIEW</p><h1 class="h3 mb-2">Accounting Dashboard</h1><p class="text-secondary mb-0">ภาพรวมการลงบัญชีและสถานะงวดปัจจุบัน · {{ $warehouse?->branch?->name }} — {{ $warehouse?->name }}</p></div>
+    <div class="container-fluid px-3 px-lg-4 py-4 module-dashboard module-dashboard--accounting">
+        <div class="module-dashboard-hero d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4">
+            <div><p class="module-dashboard-kicker mb-2"><span></span>ACCOUNTING / GENERAL LEDGER</p><h1>ศูนย์ควบคุมบัญชี</h1><p class="mb-0">ภาพรวมการลงบัญชีและสถานะงวดปัจจุบัน · {{ $warehouse?->branch?->name }} — {{ $warehouse?->name }}</p></div>
             <div class="d-flex flex-wrap gap-2 align-items-end"><div><label class="form-label small mb-1" for="dashboard-branch">สาขา</label><select class="form-select form-select-sm" id="dashboard-branch"><option value="current">สาขาปัจจุบัน</option><option value="all">ทุกสาขาที่มีสิทธิ์</option>@foreach($branches as $branch)<option value="{{ $branch->id }}">{{ $branch->code }} · {{ $branch->name }}</option>@endforeach</select></div><div><label class="form-label small mb-1" for="dashboard-period">งวดบัญชี</label><select class="form-select form-select-sm" id="dashboard-period">@foreach($periods as $period)<option value="{{ $period->id }}">{{ $period->fiscalYear->name }} / {{ $period->name }}</option>@endforeach</select></div><a class="btn btn-app-soft btn-sm" href="{{ route('accounting.workflow.index') }}"><i class="bx bx-map-alt me-1" aria-hidden="true"></i>คู่มือการทำงาน</a></div>
         </div>
-        <section class="row g-3 mb-4" aria-label="สรุปการเงิน">
+        <section class="row g-3 mb-4 module-dashboard-summary" aria-label="สรุปการเงิน">
             @foreach ([['cash','เงินสด/ธนาคาร','bx-building-house','success'],['receivable','ลูกหนี้คงค้าง (AR)','bx-user','info'],['payable','เจ้าหนี้คงค้าง (AP)','bx-wallet','warning'],['profit','กำไรสุทธิ','bx-line-chart','primary'],['revenue','รายได้ (MTD)','bx-coin-stack','info'],['expense','ค่าใช้จ่าย (MTD)','bx-down-arrow-circle','danger']] as [$key,$label,$icon,$color])
                 <div class="col-12 col-sm-6 col-xl-2"><div class="card border-0 shadow-sm h-100"><div class="card-body p-3"><div class="d-flex align-items-center gap-2 mb-2"><span class="rounded-circle bg-{{ $color }} bg-opacity-10 text-{{ $color }} p-2"><i class="bx {{ $icon }} fs-5" aria-hidden="true"></i></span><div class="small text-secondary">{{ $label }}</div></div><div class="h4 mb-1" data-dashboard-financial="{{ $key }}">—</div><div class="small text-success">ภาพรวมงวดปัจจุบัน</div></div></div></div>
             @endforeach

@@ -58,7 +58,7 @@
                     <table id="physical-sales-table" class="table table-hover align-middle w-100"
                         data-url="{{ route('pos.physical-sales.data') }}">
                         <thead>
-                            <tr>
+                            <tr><th>ลำดับ</th>
                                 <th>เลขที่</th>
                                 <th>ประเภท</th>
                                 <th>วันที่เอกสาร</th>
@@ -98,10 +98,10 @@
                     }
                 },
                 order: [
-                    [2, 'desc']
+                    [3, 'desc']
                 ],
                 buttons: [window.erpExcelButton(t)],
-                columns: [{
+                columns: [window.erpRowNumberColumn(),{
                         data: 'document_number',
                         render: esc
                     }, {

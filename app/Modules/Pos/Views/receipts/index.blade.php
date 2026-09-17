@@ -21,7 +21,7 @@
         <div class="col-12 col-md-4 col-lg-1"><button class="btn btn-app-primary w-100" id="receipt-filter" type="button"><i class="bx bx-filter-alt me-1" aria-hidden="true"></i>ใช้ตัวกรอง</button></div>
     </div></div></div>
 
-    <div class="card border-0 shadow-sm"><div class="card-body p-3 p-lg-4"><div class="mb-3"><h2 class="h5 mb-1">รายการรับชำระหนี้</h2><p class="text-secondary mb-0 small">เปิดรายละเอียดเพื่ออนุมัติ ยืนยันลงบัญชี หรือยกเลิกเอกสาร</p></div><div class="table-responsive"><table id="receipts-table" class="table table-hover align-middle w-100 mb-0" data-url="{{ route('pos.receipts.data') }}"><thead class="table-light"><tr><th>เลขที่เอกสาร</th><th>วันที่รับเงิน</th><th>ลูกค้า</th><th>บัญชีเงินสด/ธนาคาร</th><th class="text-end">ยอดสุทธิ</th><th>สถานะ</th><th class="text-end">จัดการ</th></tr></thead></table></div></div></div>
+    <div class="card border-0 shadow-sm"><div class="card-body p-3 p-lg-4"><div class="mb-3"><h2 class="h5 mb-1">รายการรับชำระหนี้</h2><p class="text-secondary mb-0 small">เปิดรายละเอียดเพื่ออนุมัติ ยืนยันลงบัญชี หรือยกเลิกเอกสาร</p></div><div class="table-responsive"><table id="receipts-table" class="table table-hover align-middle w-100 mb-0" data-url="{{ route('pos.receipts.data') }}"><thead class="table-light"><tr><th>ลำดับ</th><th>เลขที่เอกสาร</th><th>วันที่รับเงิน</th><th>ลูกค้า</th><th>บัญชีเงินสด/ธนาคาร</th><th class="text-end">ยอดสุทธิ</th><th>สถานะ</th><th class="text-end">จัดการ</th></tr></thead></table></div></div></div>
 </div>
 @endsection
 
@@ -32,8 +32,8 @@ $(function () {
     const badge = status => ({ DRAFT: 'app-badge-soft', APPROVED: 'app-badge-success', POSTED: 'app-badge-success', VOID: 'text-bg-danger', REVERSED: 'text-bg-danger' }[status] || 'app-badge-soft');
     const dt = table.DataTable($.extend(true, {}, window.erpDataTableDefaults, {
         ajax: { url: table.data('url'), data: d => { d.date_from = $('#receipt-from').val(); d.date_to = $('#receipt-to').val(); d.party_id = $('#receipt-party').val(); d.status = $('#receipt-status').val(); } },
-        order: [[1, 'desc']], buttons: [window.erpExcelButton(table)],
-        columns: [
+        order: [[2, 'desc']], buttons: [window.erpExcelButton(table)],
+        columns: [window.erpRowNumberColumn(),
             { data: 'document_number', render: (d, _, r) => '<a href="' + esc.display(r.show_url) + '">' + esc.display(d) + '</a>' },
             { data: 'settlement_date_label', name: 'settlement_date', render: esc.display }, { data: 'party_label', render: esc.display }, { data: 'bank_label', render: esc.display },
             { data: 'net_amount', className: 'text-end', render: money },

@@ -36,8 +36,8 @@ class EmployeeSalesTargetController extends Controller
                 }
             })
             ->order(function (Builder $query) use ($request): void {
-                $columns = [0 => 'period_start', 1 => 'period_end', 3 => 'sales_target', 4 => 'gross_profit_target'];
-                $query->reorder($columns[(int) $request->input('order.0.column', 0)] ?? 'period_start', $request->input('order.0.dir') === 'asc' ? 'asc' : 'desc')->orderByDesc('id');
+                $columns = [1 => 'period_start', 2 => 'period_end', 4 => 'sales_target', 5 => 'gross_profit_target'];
+                $query->reorder($columns[(int) $request->input('order.0.column', 1)] ?? 'period_start', $request->input('order.0.dir') === 'asc' ? 'asc' : 'desc')->orderByDesc('id');
             })
             ->addColumn('employee_label', fn (EmployeeSalesTarget $target) => $target->employee?->name.($target->employee?->username ? ' · '.$target->employee->username : ''))
             ->editColumn('period_start', fn (EmployeeSalesTarget $target) => $target->period_start->format('d/m/Y'))

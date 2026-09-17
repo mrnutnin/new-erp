@@ -32,6 +32,18 @@
         }
     };
 
+    window.erpRowNumberColumn = function () {
+        return {
+            data: null,
+            orderable: false,
+            searchable: false,
+            className: 'text-center',
+            render: function (value, type, row, meta) {
+                return type === 'display' ? meta.settings._iDisplayStart + meta.row + 1 : '';
+            }
+        };
+    };
+
     window.erpExcelButton = function ($table) {
         return {
             extend: 'excelHtml5',

@@ -1,5 +1,5 @@
 @extends('Accounting::layout')
-@section('title', 'จับคู่ Bank Statement | New ERP')
+@section('title', 'จับคู่ Bank Statement | MintERP')
 @section('content')
 <div class="container-fluid px-3 px-lg-4 py-4"><div class="d-flex justify-content-between align-items-end mb-4"><div><p class="eyebrow mb-2">ACCOUNTING / BANK RECONCILIATION</p><h1 class="h3 mb-2">จับคู่รายการธนาคาร</h1><p class="text-secondary mb-0">{{ $bankStatement->bankAccount->code }} · {{ $bankStatement->statement_date->format('d/m/Y') }}</p></div><div class="d-flex gap-2"><a class="btn btn-app-soft" href="{{ route('accounting.bank-reconciliation.index') }}"><i class="bx bx-arrow-back me-1" aria-hidden="true"></i>กลับหน้ารายการ</a>@if($bankStatement->status === 'DRAFT' && auth()->user()->hasPermission('accounting.bank-reconciliation.delete'))<button class="btn btn-app-danger js-delete-statement" type="button" data-url="{{ route('accounting.bank-reconciliation.destroy', $bankStatement) }}"><i class="bx bx-trash me-1" aria-hidden="true"></i>ลบร่าง</button>@endif</div></div>@if(session('success'))<div class="alert alert-success border-0">{{ session('success') }}</div>@endif
 @php($statementMovement = (float) $bankStatement->lines->sum('amount'))

@@ -1,6 +1,6 @@
 @extends('Settings::layout')
 
-@section('title', 'Global Setting | New ERP')
+@section('title', 'Global Setting | MintERP')
 
 @section('content')
     @php($canUpdate = auth()->user()->hasPermission('settings.company.update'))

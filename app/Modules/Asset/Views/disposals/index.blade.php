@@ -1,5 +1,5 @@
 @extends('Asset::layout')
-@section('title', 'จำหน่ายสินทรัพย์ | New ERP')
+@section('title', 'จำหน่ายสินทรัพย์ | MintERP')
 @section('content')
 <div class="container-fluid px-3 px-lg-4 py-4">
     <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-end gap-3 mb-4">

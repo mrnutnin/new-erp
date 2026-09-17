@@ -90,7 +90,7 @@ final class OpeningBalanceController extends Controller
             $query->whereDate('cutover_date', '<=', $request->date('date_to'));
         }
 
-        return DataTables::eloquent($query->latest('id'))
+        return DataTables::eloquent($query)
             ->addColumn('line_count', fn ($row) => $row->lines->count())
             ->editColumn('cutover_date', fn ($row) => $row->cutover_date?->format('d/m/Y'))
             ->addColumn('costing_method_label', fn ($row) => match ($row->costing_method) {

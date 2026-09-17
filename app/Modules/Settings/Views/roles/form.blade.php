@@ -1,6 +1,6 @@
 @extends('Settings::layout')
 
-@section('title', ($role->exists ? 'แก้ไข' : 'เพิ่ม').'บทบาท | New ERP')
+@section('title', ($role->exists ? 'แก้ไข' : 'เพิ่ม').'บทบาท | MintERP')
 
 @section('content')
     <div class="container-fluid px-3 px-lg-4 py-4">
@@ -60,44 +60,76 @@
 
                     <div class="card border-0 shadow-sm">
                         <div class="card-body p-4 p-md-5">
-                            <div class="d-flex justify-content-between align-items-center mb-3">
+                            <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
                                 <div>
                                     <h2 class="h5 mb-1">สิทธิ์ของบทบาท</h2>
-                                    <p class="text-secondary small mb-0">เลือกเฉพาะสิทธิ์ที่จำเป็นต่อหน้าที่</p>
+                                    <p class="text-secondary small mb-0">เลือกโมดูล แล้วเลือกเฉพาะงานที่บทบาทนี้ต้องรับผิดชอบ</p>
                                 </div>
-                                <span class="badge app-badge-soft">{{ $permissionGroups->flatten()->count() }} สิทธิ์</span>
+                                <span class="badge app-badge-soft">{{ $permissionModules->sum('count') }} สิทธิ์</span>
                             </div>
 
-                            <div class="row g-3">
-                                @forelse ($permissionGroups as $prefix => $permissions)
-                                    <div class="col-12 col-md-6">
-                                        @php($groupId = 'permission-group-'.$loop->index)
-                                        <fieldset class="border rounded-3 p-3 h-100">
-                                            <legend class="float-none w-100 px-2 fs-6 fw-semibold mb-2 d-flex justify-content-between align-items-center">
-                                                <span>{{ $prefix }}</span>
-                                                <label class="small fw-normal text-secondary mb-0">
-                                                    <input class="form-check-input me-1 js-check-all" type="checkbox" data-group="{{ $groupId }}" @disabled($role->code === 'admin')>
-                                                    เลือกทั้งหมด
-                                                </label>
-                                            </legend>
-                                            @foreach ($permissions as $permission)
-                                                <div class="form-check mb-2">
-                                                    <input class="form-check-input js-permission" type="checkbox" data-group="{{ $groupId }}" id="permission_{{ $permission->id }}" name="permission_ids[]" value="{{ $permission->id }}" @checked($role->code === 'admin' || in_array($permission->id, old('permission_ids', $selectedPermissions))) @disabled($role->code === 'admin')>
-                                                    <label class="form-check-label" for="permission_{{ $permission->id }}">
-                                                        {{ $permission->name }}
-                                                        <span class="d-block small text-secondary">{{ $permission->code }}</span>
-                                                    </label>
+                            @if ($permissionModules->isNotEmpty())
+                                <div class="overflow-auto mb-4">
+                                    <ul class="nav nav-pills flex-nowrap gap-2" role="tablist" aria-label="โมดูลสิทธิ์">
+                                        @foreach ($permissionModules as $module => $moduleData)
+                                            @php($moduleId = 'permission-module-'.$module)
+                                            <li class="nav-item" role="presentation">
+                                                <button class="nav-link text-nowrap @if ($loop->first) active @endif" id="{{ $moduleId }}-tab" data-bs-toggle="tab" data-bs-target="#{{ $moduleId }}" type="button" role="tab" aria-controls="{{ $moduleId }}" aria-selected="{{ $loop->first ? 'true' : 'false' }}">
+                                                    {{ $moduleData['label'] }}
+                                                    <span class="badge text-bg-light ms-1">{{ $moduleData['count'] }}</span>
+                                                </button>
+                                            </li>
+                                        @endforeach
+                                    </ul>
+                                </div>
+
+                                <div class="tab-content">
+                                    @foreach ($permissionModules as $module => $moduleData)
+                                        @php($moduleId = 'permission-module-'.$module)
+                                        <section class="tab-pane fade @if ($loop->first) show active @endif" id="{{ $moduleId }}" role="tabpanel" aria-labelledby="{{ $moduleId }}-tab" tabindex="0">
+                                            <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+                                                <div>
+                                                    <h3 class="h6 mb-1">โมดูล{{ $moduleData['label'] }}</h3>
+                                                    <p class="small text-secondary mb-0">แบ่งสิทธิ์ตามหน้าจอและงาน เพื่อให้ตรวจสอบก่อนบันทึกได้ง่าย</p>
                                                 </div>
-                                            @endforeach
-                                            @if ($role->code === 'admin')
-                                                <div class="form-text">บทบาทผู้ดูแลระบบได้รับทุกสิทธิ์เสมอ</div>
-                                            @endif
-                                        </fieldset>
-                                    </div>
-                                @empty
-                                    <div class="col-12 text-center text-secondary py-4">ยังไม่มีสิทธิ์ในระบบ</div>
-                                @endforelse
-                            </div>
+                                                <span class="small text-secondary">{{ $moduleData['count'] }} สิทธิ์</span>
+                                            </div>
+                                            <div class="row g-3">
+                                                @foreach ($moduleData['groups'] as $group)
+                                                    @php($groupId = 'permission-group-'.md5($module.'.'.$group['code']))
+                                                    <div class="col-12 col-xl-6">
+                                                        <fieldset class="border rounded-3 p-3 h-100">
+                                                            <legend class="float-none w-100 px-2 mb-2 d-flex flex-wrap justify-content-between align-items-start gap-2">
+                                                                <span>
+                                                                    <span class="d-block fs-6 fw-semibold">{{ $group['label'] }}</span>
+                                                                    <span class="d-block small fw-normal text-secondary">รหัสกลุ่ม: {{ $module }}.{{ $group['code'] }}</span>
+                                                                </span>
+                                                                <label class="small fw-normal text-secondary mb-0 text-nowrap">
+                                                                    <input class="form-check-input me-1 js-check-all" type="checkbox" data-group="{{ $groupId }}" @disabled($role->code === 'admin')>
+                                                                    เลือกทั้งหมด
+                                                                </label>
+                                                            </legend>
+                                                            @foreach ($group['permissions'] as $permission)
+                                                                <div class="form-check mb-2">
+                                                                    <input class="form-check-input js-permission" type="checkbox" data-group="{{ $groupId }}" id="permission_{{ $permission->id }}" name="permission_ids[]" value="{{ $permission->id }}" @checked($role->code === 'admin' || in_array($permission->id, old('permission_ids', $selectedPermissions))) @disabled($role->code === 'admin')>
+                                                                    <label class="form-check-label" for="permission_{{ $permission->id }}">
+                                                                        {{ $permission->name }}
+                                                                    </label>
+                                                                </div>
+                                                            @endforeach
+                                                            @if ($role->code === 'admin')
+                                                                <div class="form-text">บทบาทผู้ดูแลระบบได้รับทุกสิทธิ์เสมอ</div>
+                                                            @endif
+                                                        </fieldset>
+                                                    </div>
+                                                @endforeach
+                                            </div>
+                                        </section>
+                                    @endforeach
+                                </div>
+                            @else
+                                <div class="text-center text-secondary py-4">ยังไม่มีสิทธิ์ในระบบ</div>
+                            @endif
                             <div class="invalid-feedback d-block" data-error-for="permission_ids"></div>
 
                             <div class="d-flex justify-content-between align-items-center mt-4">

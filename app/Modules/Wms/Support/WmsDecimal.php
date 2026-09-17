@@ -20,6 +20,24 @@ final class WmsDecimal
         return max(0, min(4, (int) app(GlobalSettings::class)->value('tax_decimal_places')));
     }
 
+    public static function step(): string
+    {
+        $places = self::places();
+
+        return $places === 0 ? '1' : '0.'.str_repeat('0', $places - 1).'1';
+    }
+
+    public static function input(mixed $value, ?int $places = null): string
+    {
+        if ($value === null || $value === '') {
+            return '';
+        }
+
+        return BigDecimal::of((string) $value)
+            ->toScale($places ?? self::places(), RoundingMode::HALF_UP)
+            ->__toString();
+    }
+
     public static function format(mixed $value, ?int $places = null): string
     {
         if ($value === null || $value === '') {

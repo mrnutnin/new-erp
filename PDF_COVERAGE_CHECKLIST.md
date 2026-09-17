@@ -30,11 +30,11 @@
 | Finance | 0 | เอกสารรับ/จ่ายสำคัญยังไม่มี PDF |
 | POS | 7 | มีบางเอกสารขาย แต่ยังขาดใบรับชำระ ใบแจ้งหนี้ และใบวางบิล |
 | Purchasing | 6 | มี PR, PO, GR, เอกสารซื้อ, Landed Cost และรายงานปฏิบัติการ |
-| WMS | 0 | เอกสารคลังและใบตรวจนับยังไม่มี PDF |
+| WMS | 1 | มีป้ายสินค้า Barcode/QR; เอกสารคลังและใบตรวจนับยังไม่มี PDF |
 | Asset | 0 | มีหน้าพิมพ์ป้ายสินทรัพย์แบบ HTML แต่ไม่มี A4 PDF |
 | Settings | 0 | ถูกต้องแล้ว; ไม่ควรมี business-document PDF |
 | Dashboard | 0 | ถูกต้องแล้ว; ใช้หน้าจอเป็นหลัก |
-| **รวม** | **14** | ทุก route ที่มีอยู่ยังต้อง audit layout, snapshot, permission และสถานะเอกสาร |
+| **รวม** | **15** | ทุก route ที่มีอยู่ยังต้อง audit layout, snapshot, permission และสถานะเอกสาร |
 
 ## Accounting
 
@@ -118,6 +118,7 @@
 
 | เมนู/หน้า | PDF ที่ควรมี | Class | Priority | ปัจจุบัน | Checklist/หมายเหตุ |
 |---|---|---|---|---|---|
+| ป้ายสินค้า | สติกเกอร์ Barcode/QR จากรหัสสินค้า | LABEL | P0 | มี route | [x] รองรับ 40×30, 50×30, 60×40, 100×50 มม. และ A4 แบบ 21/40 ดวง; เลือกหลายสินค้า/จำนวนสำเนา และใช้ shared renderer |
 | โอนออก / โอนเข้า | ใบโอนสินค้าและใบรับโอน | INTERNAL | P0 | ยังไม่มี | [ ] แสดงคลังต้นทาง/ปลายทาง ผู้ส่ง/ผู้รับ serial/lot เมื่อมี และสถานะ dispatch/complete |
 | เบิกสินค้า (Issue) | ใบเบิกสินค้า | INTERNAL | P0 | ยังไม่มี | [ ] แสดงประเภทเบิก ผู้เบิก คลัง cost center/reference และผู้อนุมัติ |
 | คืนจากการเบิก | ใบคืนสินค้า | INTERNAL | P0 | ยังไม่มี | [ ] อ้าง issue/movement เดิมและเหตุผล |
@@ -131,7 +132,7 @@
 | Inventory Valuation | รายงานมูลค่าสินค้าคงเหลือ ณ วันที่ | INTERNAL | P1 | ยังไม่มี | [ ] แสดง costing method, UOM, quantity, unit cost, value และ as-of date |
 | Dashboard, Workflow | — | — | — | ไม่ทำ | [-] เป็นหน้าติดตาม |
 | Revaluation, Manual Trigger, Emergency Rebuild, Legacy Review, Lineage | — | — | — | ไม่ทำ | [-] เป็น costing control/queue; ใช้ DataTable, Excel และ audit log |
-| Items, Categories, UOM, Conversion, Min/Max, Issue Types | — | — | — | ไม่ทำ | [-] เป็น master/configuration |
+| Categories, UOM, Conversion, Min/Max, Issue Types | — | — | — | ไม่ทำ | [-] เป็น master/configuration |
 
 ## Asset
 

@@ -1,6 +1,6 @@
 @extends('Accounting::layout')
 
-@section('title', 'รายงานเปรียบเทียบรายได้ | New ERP')
+@section('title', 'รายงานเปรียบเทียบรายได้ | MintERP')
 
 @section('content')
     @php($currentPeriod = $periods->first())

@@ -1,6 +1,6 @@
 @extends('Asset::layout')
 
-@section('title', 'แจ้งซ่อมสินทรัพย์ | New ERP')
+@section('title', 'แจ้งซ่อมสินทรัพย์ | MintERP')
 
 @section('content')
 <div class="container-fluid px-3 px-lg-4 py-4"><div class="mb-4"><p class="eyebrow mb-2">ASSET / MAINTENANCE</p><h1 class="h3 mb-1">แจ้งซ่อมสินทรัพย์</h1><p class="text-secondary mb-0">สร้างงานซ่อมเพื่อติดตามเท่านั้น ค่าใช้จ่ายจริงต้องอ้างอิงกลับไปยังเอกสาร Purchasing หรือ Finance</p></div>

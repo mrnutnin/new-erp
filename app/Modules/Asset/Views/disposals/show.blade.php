@@ -1,5 +1,5 @@
 @extends('Asset::layout')
-@section('title', $disposal->document_number.' | New ERP')
+@section('title', $disposal->document_number.' | MintERP')
 @section('content')
 @php
     $labels=['DRAFT'=>'ร่าง','SUBMITTED'=>'รออนุมัติ','APPROVED'=>'อนุมัติแล้ว','POSTED'=>'ลงบัญชีแล้ว','CANCELLED'=>'ยกเลิก'];

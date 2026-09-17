@@ -130,8 +130,8 @@ class CustomerGroupController extends Controller
 
     private function applyOrder(Builder $query, Request $request): void
     {
-        $columns = [0 => 'pos_customer_groups.code', 1 => 'pos_customer_groups.name', 2 => 'pos_customer_groups.is_active', 3 => 'party_count'];
-        $column = $columns[(int) $request->input('order.0.column', 0)] ?? $columns[0];
+        $columns = [1 => 'pos_customer_groups.code', 2 => 'pos_customer_groups.name', 3 => 'party_count', 4 => 'pos_customer_groups.is_active'];
+        $column = $columns[(int) $request->input('order.0.column', 1)] ?? $columns[1];
         $direction = $request->input('order.0.dir') === 'desc' ? 'desc' : 'asc';
         $query->reorder($column, $direction)->orderBy('pos_customer_groups.id');
     }

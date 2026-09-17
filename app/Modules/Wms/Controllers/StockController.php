@@ -202,8 +202,7 @@ class StockController extends Controller
             ->selectRaw("CASE WHEN terminal_marker = 1 THEN 0 WHEN reset_group = 0 THEN ? + SUM(CASE WHEN direction = 'IN' THEN movement_value ELSE -movement_value END) OVER (PARTITION BY reset_group ORDER BY business_date, id ROWS UNBOUNDED PRECEDING) ELSE SUM(CASE WHEN direction = 'IN' THEN movement_value ELSE -movement_value END) OVER (PARTITION BY reset_group ORDER BY business_date, id ROWS UNBOUNDED PRECEDING) END AS running_value_total", [$openingValue->__toString()]);
         $query = DB::query()->fromSub($valueStates, 'stock_card_rows')
             ->select('stock_card_rows.*')
-            ->selectRaw('CASE WHEN ROUND(running_quantity, 8) = 0 THEN 0 ELSE running_value_total / running_quantity END AS running_average_unit_cost')
-            ->orderBy('business_date')->orderBy('id');
+            ->selectRaw('CASE WHEN ROUND(running_quantity, 8) = 0 THEN 0 ELSE running_value_total / running_quantity END AS running_average_unit_cost');
         // StockBalance is keyed by the item's base UOM. Passing a null UOM
         // here silently returned an empty balance even though movements were
         // present, which made the Stock Card summary cards show zero.

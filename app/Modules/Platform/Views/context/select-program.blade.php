@@ -1,10 +1,11 @@
 @extends('layouts.app')
 
 @section('title', 'เลือกโปรแกรม | '.($companySetting->company_name ?: config('app.name')))
+@section('body-class', 'selection-page')
 
 @section('content')
     <div class="selection-shell container py-5">
-        <div class="page-heading mb-4">
+        <div class="selection-heading mb-4 p-4 p-md-5">
             <p class="eyebrow mb-2">STEP 1 OF 2</p>
             <div class="program-selection-brand mb-2">
                 @if ($companyLogoDataUri)
@@ -14,7 +15,7 @@
                 @endif
                 <div class="program-selection-brand__content">
                     <p class="program-selection-brand__name mb-1">{{ $companySetting->company_name ?: config('app.name') }}</p>
-                    <h1 class="h3 mb-0">เลือกโปรแกรม</h1>
+                    <h1 class="h2 mb-0">เลือกโปรแกรม</h1>
                 </div>
             </div>
             <p class="text-secondary mb-0">เลือกส่วนงานที่ต้องการเข้าใช้งาน</p>
@@ -30,7 +31,7 @@
                         <form class="js-program-form h-100" action="{{ route('programs.store') }}" method="post">
                             @csrf
                             <input name="program_id" type="hidden" value="{{ $program->id }}">
-                            <button class="program-card card h-100 w-100 text-start border-0 shadow-sm" type="submit" data-busy-text="กำลังเลือก...">
+                            <button class="program-card card h-100 w-100 text-start border-0" type="submit" data-busy-text="กำลังเลือก...">
                                 <span class="program-code"><i class="bx {{ $programIcons[$program->code] ?? 'bx-grid-alt' }}" aria-hidden="true"></i></span>
                                 <span class="h5 mt-4 mb-2">{{ $program->name }}</span>
                                 <span class="text-secondary">{{ $program->description }}</span>

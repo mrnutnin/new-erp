@@ -6,6 +6,7 @@ use App\Models\Concerns\HasDocumentBranch;
 use App\Models\User;
 use App\Models\Warehouse;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 final class IssueDocument extends Model
@@ -49,5 +50,12 @@ final class IssueDocument extends Model
     public function issueReturns()
     {
         return $this->hasMany(IssueReturn::class, 'issue_document_id')->orderBy('id');
+    }
+
+    public function photos(): HasMany
+    {
+        $type = $this->issue_type === 'PRODUCTION' ? 'MATERIAL_ISSUE' : 'ISSUE';
+
+        return $this->hasMany(DocumentPhoto::class, 'document_id')->where('document_type', $type)->orderBy('id');
     }
 }

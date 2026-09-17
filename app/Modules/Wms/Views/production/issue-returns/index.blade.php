@@ -19,7 +19,7 @@
 
     <div class="card border-0 shadow-sm"><div class="card-body p-3 p-lg-4">
         <div class="mb-3"><h2 class="h5 mb-1">รายการรับคืนวัตถุดิบ</h2><p class="text-secondary small mb-0">เปิดรายละเอียดเพื่ออนุมัติ ลง Stock หรือยกเลิกเอกสาร</p></div>
-        <div class="table-responsive"><table id="production-return-table" class="table table-hover align-middle w-100"><thead><tr><th>เลขที่เอกสาร</th><th>วันที่</th><th>ใบเบิกต้นทาง</th><th>จำนวน</th><th>เหตุผล</th><th>สถานะ</th><th>จัดการ</th></tr></thead></table></div>
+        <div class="table-responsive"><table id="production-return-table" class="table table-hover align-middle w-100"><thead><tr><th>ลำดับ</th><th>เลขที่เอกสาร</th><th>วันที่</th><th>ใบเบิกต้นทาง</th><th>จำนวน</th><th>เหตุผล</th><th>สถานะ</th><th>จัดการ</th></tr></thead></table></div>
     </div></div>
 </div>
 @endsection
@@ -32,7 +32,7 @@ $(function () {
     const text = $.fn.dataTable.render.text();
     const statuses = {DRAFT:'app-status-neutral', APPROVED:'app-status-info', POSTED:'app-status-success', VOID:'app-status-danger', REVERSED:'app-status-warning'};
     const table = tableElement.DataTable($.extend(true, {}, window.erpDataTableDefaults, {
-        processing: true, serverSide: true, order: [[1, 'desc']],
+        processing: true, serverSide: true, order: [[2, 'desc']],
         ajax: {url: '{{ route('wms.production.issue-returns.data') }}', data: function (data) {
             data.status = filters.find('.js-wms-filter-status').val();
             data.date_from = filters.find('.js-wms-filter-from').val();
@@ -40,6 +40,7 @@ $(function () {
         }},
         buttons: [window.erpExcelButton(tableElement)],
         columns: [
+            window.erpRowNumberColumn(),
             {data:'document_number', name:'document_number', render:text.display},
             {data:'business_date', name:'document_date', render:text.display},
             {data:'issue_number', name:'issue.document_number', render:text.display},

@@ -24,6 +24,7 @@ final class FinanceDashboardContractTest extends TestCase
         self::assertStringContainsString('employee_advance_clearings_to_process', $controller);
         self::assertStringContainsString('employee_advances_due_soon', $controller);
         self::assertStringContainsString('postingExceptionCount', $controller);
+        self::assertStringContainsString("->select('je.id')", $controller);
         self::assertStringContainsString('duplicateReceiptCount', $controller);
         self::assertStringContainsString('DataTables::query($query)', $controller);
         self::assertStringContainsString("/dashboard/data/{section}", $routes);

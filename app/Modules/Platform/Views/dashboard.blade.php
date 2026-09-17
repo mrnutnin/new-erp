@@ -1,6 +1,6 @@
 @extends('layouts.app')
 
-@section('title', 'Dashboard | New ERP')
+@section('title', 'Dashboard | MintERP')
 
 @section('content')
     <div class="container py-5">

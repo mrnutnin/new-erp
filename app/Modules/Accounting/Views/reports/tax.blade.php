@@ -1,5 +1,5 @@
 @extends('Accounting::layout')
-@section('title', 'รายงานภาษี | New ERP')
+@section('title', 'รายงานภาษี | MintERP')
 @section('content')
 <div class="container-fluid px-3 px-lg-4 py-4">
 @php($selectedPeriod = $periods->first(fn ($period) => now()->between($period->start_date, $period->end_date)) ?: $periods->first())

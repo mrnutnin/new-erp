@@ -6,6 +6,7 @@ use App\Models\Concerns\HasDocumentBranch;
 use App\Models\User;
 use App\Models\Warehouse;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 final class InventoryAdjustmentDocument extends Model
@@ -54,5 +55,10 @@ final class InventoryAdjustmentDocument extends Model
     public function poster()
     {
         return $this->belongsTo(User::class, 'posted_by');
+    }
+
+    public function photos(): HasMany
+    {
+        return $this->hasMany(DocumentPhoto::class, 'document_id')->where('document_type', 'FINISHED_RECEIPT')->orderBy('id');
     }
 }

@@ -1,10 +1,12 @@
 <?php
 
+use App\Modules\Wms\Controllers\DocumentPhotoController;
 use App\Modules\Wms\Controllers\EntryController;
 use App\Modules\Wms\Controllers\InventoryAdjustmentController;
 use App\Modules\Wms\Controllers\IssueReturnController;
 use App\Modules\Wms\Controllers\ItemCategoryController;
 use App\Modules\Wms\Controllers\ItemController;
+use App\Modules\Wms\Controllers\ItemLabelController;
 use App\Modules\Wms\Controllers\LegacyAllocationReviewController;
 use App\Modules\Wms\Controllers\OpeningBalanceController;
 use App\Modules\Wms\Controllers\ProductionFinishedReceiptController;
@@ -15,6 +17,7 @@ use App\Modules\Wms\Controllers\StockCountController;
 use App\Modules\Wms\Controllers\StockPolicyController;
 use App\Modules\Wms\Controllers\StockValuationController;
 use App\Modules\Wms\Controllers\TransferController;
+use App\Modules\Wms\Controllers\TransferPhotoController;
 use App\Modules\Wms\Controllers\UomController;
 use App\Modules\Wms\Controllers\WorkflowController;
 use Illuminate\Support\Facades\Route;
@@ -45,7 +48,11 @@ Route::middleware(['auth', 'warehouse'])->prefix('wms')->name('wms.')->group(fun
         Route::get('/issues/item-options', [IssueReturnController::class, 'itemOptions'])->middleware('permission:wms.issues.create')->name('issues.item-options');
         Route::get('/issues/create', [IssueReturnController::class, 'issueCreate'])->middleware('permission:wms.issues.create')->name('issues.create');
         Route::post('/issues', [IssueReturnController::class, 'issueStore'])->middleware('permission:wms.issues.create')->name('issues.store');
+        Route::get('/issues/{document}/edit', [IssueReturnController::class, 'issueEdit'])->middleware('permission:wms.issues.update')->name('issues.edit');
+        Route::put('/issues/{document}', [IssueReturnController::class, 'issueUpdate'])->middleware('permission:wms.issues.update')->name('issues.update');
         Route::get('/issues/{document}', [IssueReturnController::class, 'issueShow'])->middleware('permission:wms.issues.view')->name('issues.show');
+        Route::post('/issues/{document}/photos', [DocumentPhotoController::class, 'store'])->defaults('photo_document_type', 'ISSUE')->middleware('permission:wms.issues.create')->name('issues.photos.store');
+        Route::get('/issues/{document}/photos/{photo}', [DocumentPhotoController::class, 'preview'])->defaults('photo_document_type', 'ISSUE')->middleware('permission:wms.issues.view')->name('issues.photos.preview');
         Route::post('/issues/{document}/approve', [IssueReturnController::class, 'issueApprove'])->middleware('permission:wms.issues.approve')->name('issues.approve');
         Route::post('/issues/{document}/post', [IssueReturnController::class, 'issuePost'])->middleware('permission:wms.issues.post')->name('issues.post');
         Route::post('/issues/{document}/cancel', [IssueReturnController::class, 'issueCancel'])->middleware('permission:wms.issues.approve')->name('issues.cancel');
@@ -55,7 +62,11 @@ Route::middleware(['auth', 'warehouse'])->prefix('wms')->name('wms.')->group(fun
         Route::get('/production/material-issues/item-options', [ProductionMaterialIssueController::class, 'itemOptions'])->middleware('permission:wms.issues.create')->name('production.material-issues.item-options');
         Route::get('/production/material-issues/create', [ProductionMaterialIssueController::class, 'create'])->middleware('permission:wms.issues.create')->name('production.material-issues.create');
         Route::post('/production/material-issues', [ProductionMaterialIssueController::class, 'store'])->middleware('permission:wms.issues.create')->name('production.material-issues.store');
+        Route::get('/production/material-issues/{document}/edit', [ProductionMaterialIssueController::class, 'edit'])->middleware('permission:wms.issues.update')->name('production.material-issues.edit');
+        Route::put('/production/material-issues/{document}', [ProductionMaterialIssueController::class, 'update'])->middleware('permission:wms.issues.update')->name('production.material-issues.update');
         Route::get('/production/material-issues/{document}', [ProductionMaterialIssueController::class, 'show'])->middleware('permission:wms.issues.view')->name('production.material-issues.show');
+        Route::post('/production/material-issues/{document}/photos', [DocumentPhotoController::class, 'store'])->defaults('photo_document_type', 'MATERIAL_ISSUE')->middleware('permission:wms.issues.create')->name('production.material-issues.photos.store');
+        Route::get('/production/material-issues/{document}/photos/{photo}', [DocumentPhotoController::class, 'preview'])->defaults('photo_document_type', 'MATERIAL_ISSUE')->middleware('permission:wms.issues.view')->name('production.material-issues.photos.preview');
         Route::post('/production/material-issues/{document}/approve', [ProductionMaterialIssueController::class, 'approve'])->middleware('permission:wms.issues.approve')->name('production.material-issues.approve');
         Route::post('/production/material-issues/{document}/post', [ProductionMaterialIssueController::class, 'post'])->middleware('permission:wms.issues.post')->name('production.material-issues.post');
         Route::post('/production/material-issues/{document}/cancel', [ProductionMaterialIssueController::class, 'cancel'])->middleware('permission:wms.issues.approve')->name('production.material-issues.cancel');
@@ -79,6 +90,8 @@ Route::middleware(['auth', 'warehouse'])->prefix('wms')->name('wms.')->group(fun
         Route::get('/issue-returns/create', [IssueReturnController::class, 'returnCreate'])->middleware('permission:wms.issue-returns.create')->name('issue-returns.create');
         Route::post('/issue-returns', [IssueReturnController::class, 'returnStore'])->middleware('permission:wms.issue-returns.create')->name('issue-returns.store');
         Route::get('/issue-returns/{document}', [IssueReturnController::class, 'returnShow'])->middleware('permission:wms.issue-returns.view')->name('issue-returns.show');
+        Route::post('/issue-returns/{document}/photos', [DocumentPhotoController::class, 'store'])->defaults('photo_document_type', 'ISSUE_RETURN')->middleware('permission:wms.issue-returns.create')->name('issue-returns.photos.store');
+        Route::get('/issue-returns/{document}/photos/{photo}', [DocumentPhotoController::class, 'preview'])->defaults('photo_document_type', 'ISSUE_RETURN')->middleware('permission:wms.issue-returns.view')->name('issue-returns.photos.preview');
         Route::post('/issue-returns/{document}/approve', [IssueReturnController::class, 'returnApprove'])->middleware('permission:wms.issue-returns.approve')->name('issue-returns.approve');
         Route::post('/issue-returns/{document}/cancel', [IssueReturnController::class, 'returnCancel'])->middleware('permission:wms.issue-returns.approve')->name('issue-returns.cancel');
         Route::post('/issue-returns/{document}/post', [IssueReturnController::class, 'returnPost'])->middleware('permission:wms.issue-returns.post')->name('issue-returns.post');
@@ -113,6 +126,8 @@ Route::middleware(['auth', 'warehouse'])->prefix('wms')->name('wms.')->group(fun
         Route::post('/production/finished-receipts/{document}/reverse', [ProductionFinishedReceiptController::class, 'reverse'])->middleware('permission:wms.inventory-adjustments.reverse')->name('production.finished-receipts.reverse');
         Route::delete('/production/finished-receipts/{document}', [ProductionFinishedReceiptController::class, 'destroy'])->middleware('permission:wms.inventory-adjustments.delete')->name('production.finished-receipts.destroy');
         Route::get('/production/finished-receipts/{document}', [ProductionFinishedReceiptController::class, 'show'])->middleware('permission:wms.inventory-adjustments.view')->name('production.finished-receipts.show');
+        Route::post('/production/finished-receipts/{document}/photos', [DocumentPhotoController::class, 'store'])->defaults('photo_document_type', 'FINISHED_RECEIPT')->middleware('permission:wms.inventory-adjustments.create')->name('production.finished-receipts.photos.store');
+        Route::get('/production/finished-receipts/{document}/photos/{photo}', [DocumentPhotoController::class, 'preview'])->defaults('photo_document_type', 'FINISHED_RECEIPT')->middleware('permission:wms.inventory-adjustments.view')->name('production.finished-receipts.photos.preview');
         Route::get('/stock-counts', [StockCountController::class, 'index'])->middleware('permission:wms.stock-counts.view')->name('stock-counts.index');
         Route::get('/stock-counts/data', [StockCountController::class, 'data'])->middleware('permission:wms.stock-counts.view')->name('stock-counts.data');
         Route::get('/stock-counts/item-options', [StockCountController::class, 'itemOptions'])->middleware('permission:wms.stock-counts.view')->name('stock-counts.item-options');
@@ -154,6 +169,10 @@ Route::middleware(['auth', 'warehouse'])->prefix('wms')->name('wms.')->group(fun
         Route::get('/transfers/item-options', [TransferController::class, 'itemOptions'])->middleware('permission:wms.transfers.create')->name('transfers.item-options');
         Route::get('/transfers/{transfer}/receive', [TransferController::class, 'receive'])->middleware('permission:wms.transfers.complete')->name('transfers.receive');
         Route::get('/transfers/{transfer}/lines', [TransferController::class, 'lines'])->middleware('permission:wms.transfers.view')->name('transfers.lines');
+        Route::post('/transfers/{transfer}/photos', [TransferPhotoController::class, 'store'])->middleware('permission:wms.transfers.view')->name('transfers.photos.store');
+        Route::get('/transfers/{transfer}/photos/{photo}', [TransferPhotoController::class, 'preview'])->middleware('permission:wms.transfers.view')->name('transfers.photos.preview');
+        Route::get('/transfers/{transfer}/edit', [TransferController::class, 'edit'])->middleware('permission:wms.transfers.update')->name('transfers.edit');
+        Route::put('/transfers/{transfer}', [TransferController::class, 'update'])->middleware('permission:wms.transfers.update')->name('transfers.update');
         Route::get('/transfers/{transfer}', [TransferController::class, 'show'])->middleware('permission:wms.transfers.view')->name('transfers.show');
         Route::delete('/transfers/{transfer}', [TransferController::class, 'destroy'])->middleware('permission:wms.transfers.delete')->name('transfers.destroy');
         Route::post('/transfers', [TransferController::class, 'store'])->middleware('permission:wms.transfers.create')->name('transfers.store');
@@ -205,13 +224,15 @@ Route::middleware(['auth', 'warehouse'])->prefix('wms')->name('wms.')->group(fun
     Route::middleware('program:wms')->group(function (): void {
         Route::get('/items', [ItemController::class, 'index'])->middleware('permission:wms.items.view')->name('items.index');
         Route::get('/items/data', [ItemController::class, 'data'])->middleware('permission:wms.items.view')->name('items.data');
+        Route::get('/items/labels', [ItemLabelController::class, 'create'])->middleware('permission:wms.items.print')->name('items.labels.create');
+        Route::get('/items/labels/print', [ItemLabelController::class, 'print'])->middleware('permission:wms.items.print')->name('items.labels.print');
         Route::get('/items/category-options', [ItemController::class, 'categoryOptions'])->middleware('permission:wms.items.view')->name('items.category-options');
         Route::get('/items/account-options', [ItemController::class, 'accountOptions'])->middleware('permission:wms.items.view')->name('items.account-options');
         Route::get('/items/asset-category-options', [ItemController::class, 'assetCategoryOptions'])->middleware('permission:wms.items.view')->name('items.asset-category-options');
         Route::get('/items/uom-options', [ItemController::class, 'uomOptions'])->middleware('permission:wms.items.view')->name('items.uom-options');
         Route::get('/items/create', [ItemController::class, 'create'])->middleware('permission:wms.items.create')->name('items.create');
         Route::post('/items', [ItemController::class, 'store'])->middleware('permission:wms.items.create')->name('items.store');
-        Route::get('/items/{item}/cover-image', [ItemController::class, 'coverImage'])->middleware('permission:wms.items.update')->name('items.cover-image');
+        Route::get('/items/{item}/cover-image', [ItemController::class, 'coverImage'])->middleware('permission:wms.items.view')->name('items.cover-image');
         Route::get('/items/{item}/additional-images/{index}', [ItemController::class, 'additionalImage'])->whereNumber('index')->middleware('permission:wms.items.update')->name('items.additional-image');
         Route::get('/items/{item}/edit', [ItemController::class, 'edit'])->middleware('permission:wms.items.update')->name('items.edit');
         Route::put('/items/{item}', [ItemController::class, 'update'])->middleware('permission:wms.items.update')->name('items.update');

@@ -1,6 +1,6 @@
 @extends('Accounting::layout')
 
-@section('title', ($journalEntry->exists ? 'แก้ไข' : 'เพิ่ม').'รายการบัญชี | New ERP')
+@section('title', ($journalEntry->exists ? 'แก้ไข' : 'เพิ่ม').'รายการบัญชี | MintERP')
 
 @section('content')
     @php($lines = old('lines', $journalEntry->exists ? $journalEntry->lines->map->only(['account_id', 'description', 'debit', 'credit', 'tax_code_id', 'tax_base', 'tax_amount', 'tax_point_date', 'tax_settlement_date'])->all() : [['account_id' => '', 'description' => '', 'debit' => '0.00', 'credit' => '0.00', 'tax_code_id' => '', 'tax_base' => '', 'tax_amount' => '', 'tax_point_date' => '', 'tax_settlement_date' => ''], ['account_id' => '', 'description' => '', 'debit' => '0.00', 'credit' => '0.00', 'tax_code_id' => '', 'tax_base' => '', 'tax_amount' => '', 'tax_point_date' => '', 'tax_settlement_date' => '']]))

@@ -41,8 +41,6 @@ final class StockCountController extends Controller
         if ($request->filled('status') && in_array($request->string('status')->toString(), ['DRAFT', 'COUNTED', 'APPROVED', 'POSTED', 'VOID', 'REVERSED'], true)) $query->where('status', $request->string('status')->toString());
         if ($request->filled('date_from')) $query->whereDate('document_date', '>=', $request->date('date_from'));
         if ($request->filled('date_to')) $query->whereDate('document_date', '<=', $request->date('date_to'));
-        $query->latest('id');
-
         return DataTables::eloquent($query)
             ->addColumn('date_label', fn ($r) => $r->document_date?->format('d/m/Y') ?: '-')
             ->addColumn('status_label', fn ($r) => $labels[$r->status] ?? $r->status)

@@ -27,6 +27,7 @@
                 <table id="counts" class="table table-hover align-middle w-100" data-url="{{ route('wms.stock-counts.data') }}">
                     <thead>
                         <tr>
+                            <th>ลำดับ</th>
                             <th>เลขที่เอกสาร</th>
                             <th>วันที่</th>
                             <th class="text-end">รายการ</th>
@@ -64,9 +65,10 @@ $(function () {
                 data.date_to = filters.find('.js-wms-filter-to').val();
             }
         },
-        order: [[1, 'desc']],
+        order: [[2, 'desc']],
         buttons: [window.erpExcelButton(tableElement)],
         columns: [
+            window.erpRowNumberColumn(),
             { data: 'document_number', render: escape.display },
             { data: 'date_label', render: escape.display },
             { data: 'line_count', className: 'text-end', render: function (value) { return escape.display(value); } },

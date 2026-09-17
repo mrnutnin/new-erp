@@ -17,6 +17,7 @@ use Brick\Math\RoundingMode;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
 use Yajra\DataTables\Facades\DataTables;
@@ -71,9 +72,7 @@ final class TransferController extends Controller
         $direction = (string) ($request->route('direction') ?: $request->query('direction', 'all'));
         $query = Transfer::query()
             ->with(['sourceWarehouse:id,branch_id,code,name', 'sourceWarehouse.branch:id,code,name', 'destinationWarehouse:id,branch_id,code,name', 'destinationWarehouse.branch:id,code,name', 'events:id,transfer_id,event_type,base_quantity'])
-            ->withSum('lines as planned_base_quantity_total', 'planned_base_quantity')
-            ->orderByDesc('document_date')
-            ->orderByDesc('id');
+            ->withSum('lines as planned_base_quantity_total', 'planned_base_quantity');
         if ($request->filled('status') && in_array($request->string('status')->toString(), ['DRAFT', 'DISPATCHED', 'PARTIALLY_ACCEPTED', 'ACCEPTED', 'REJECTED', 'VOID'], true)) $query->where('status', $request->string('status')->toString());
         if ($request->filled('date_from')) $query->whereDate('document_date', '>=', $request->date('date_from'));
         if ($request->filled('date_to')) $query->whereDate('document_date', '<=', $request->date('date_to'));
@@ -108,6 +107,8 @@ final class TransferController extends Controller
             ->addColumn('can_delete', fn (Transfer $r) => $request->user()->hasPermission('wms.transfers.delete') && $r->status === 'DRAFT' && (int) $r->source_warehouse_id === $warehouseId && $r->events->isEmpty())
             ->addColumn('delete_url', fn (Transfer $r) => route('wms.transfers.destroy', $r))
             ->addColumn('detail_url', fn (Transfer $r) => route('wms.transfers.show', $r))
+            ->addColumn('edit_url', fn (Transfer $r) => route('wms.transfers.edit', $r))
+            ->addColumn('can_edit', fn (Transfer $r) => $r->status === 'DRAFT' && (int) $r->source_warehouse_id === $warehouseId && $request->user()->hasPermission('wms.transfers.update'))
             ->filterColumn('document_date', fn ($query, $keyword) => $this->filterDocumentDate($query, $keyword, (string) $settings->value('date_format')))
             ->filterColumn('source_label', fn ($query, $keyword) => $this->filterWarehouseLabel($query, 'sourceWarehouse', $keyword))
             ->filterColumn('destination_label', fn ($query, $keyword) => $this->filterWarehouseLabel($query, 'destinationWarehouse', $keyword))
@@ -129,6 +130,8 @@ final class TransferController extends Controller
             'events:id,transfer_id,transfer_line_id,event_type,base_quantity,business_date,reason,created_by,created_at',
             'events.creator:id,name',
             'events.line:id,line_number',
+            'photos:id,transfer_id,stage,original_name,mime_type,uploaded_by,created_at',
+            'photos.uploadedBy:id,name',
         ]);
 
         $receiptSummary = $this->receiptSummary($transfer);
@@ -141,6 +144,13 @@ final class TransferController extends Controller
             'transferStatusLabels' => self::STATUS_LABELS,
             'transferStatusClasses' => self::STATUS_CLASSES,
             'receiptStatusLabels' => self::RECEIPT_STATUS_LABELS,
+            'transferPhotos' => $transfer->photos->groupBy('stage'),
+            'canUploadOutgoingPhotos' => (int) $transfer->source_warehouse_id === $warehouseId
+                && $request->user()->hasPermission('wms.transfers.dispatch')
+                && $transfer->status === 'DRAFT',
+            'canUploadIncomingPhotos' => (int) $transfer->destination_warehouse_id === $warehouseId
+                && $request->user()->hasPermission('wms.transfers.complete')
+                && in_array($transfer->status, ['DISPATCHED', 'PARTIALLY_ACCEPTED'], true),
         ]);
     }
 
@@ -162,13 +172,21 @@ final class TransferController extends Controller
         abort_unless((int) $transfer->destination_warehouse_id === $warehouseId, 404);
         abort_unless(in_array($transfer->status, ['DISPATCHED', 'PARTIALLY_ACCEPTED'], true), 404);
 
-        $transfer->load(['sourceWarehouse:id,name', 'destinationWarehouse:id,name']);
+        $transfer->load([
+            'sourceWarehouse:id,name',
+            'destinationWarehouse:id,name',
+            'photos:id,transfer_id,stage,original_name,mime_type,uploaded_by,created_at',
+            'photos.uploadedBy:id,name',
+        ]);
 
         return view('Wms::transfers.receive', [
             'transfer' => $transfer,
             'lines' => $this->linePayloads($transfer, $settings),
             'dateFormat' => (string) $settings->value('date_format'),
             'decimalPlaces' => WmsDecimal::places(),
+            'transferPhotos' => $transfer->photos->groupBy('stage'),
+            'canUploadOutgoingPhotos' => false,
+            'canUploadIncomingPhotos' => true,
         ]);
     }
 
@@ -193,7 +211,22 @@ final class TransferController extends Controller
             ->with('branch:id,code,name')
             ->get(['warehouses.id', 'warehouses.name', 'warehouses.branch_id']);
 
-        return view('Wms::transfers.form', ['sourceWarehouse' => $sourceWarehouse, 'warehouses' => $warehouses, 'itemOptions' => Item::query()->where('is_active', true)->orderBy('code')->limit(1)->get(['id', 'code', 'name'])]);
+        return view('Wms::transfers.form', ['transfer' => new Transfer(), 'sourceWarehouse' => $sourceWarehouse, 'warehouses' => $warehouses]);
+    }
+
+    public function edit(Request $request, Transfer $transfer): View
+    {
+        $warehouseId = (int) $request->attributes->get('selectedWarehouse')->id;
+        abort_unless((int) $transfer->source_warehouse_id === $warehouseId, 404);
+        abort_unless($transfer->status === 'DRAFT' && ! $transfer->events()->exists(), 422, 'แก้ไขได้เฉพาะใบโอนร่างที่ยังไม่มีการเคลื่อนไหว');
+        $transfer->load(['lines.item:id,code,name,base_uom_id', 'lines.uom:id,code,name']);
+        $sourceWarehouse = $request->attributes->get('selectedWarehouse')->loadMissing('branch');
+
+        return view('Wms::transfers.form', [
+            'transfer' => $transfer,
+            'sourceWarehouse' => $sourceWarehouse,
+            'warehouses' => $this->destinationWarehouses($request, $warehouseId)->get(),
+        ]);
     }
 
     public function itemOptions(Request $request, StockBalanceService $balances): JsonResponse
@@ -216,7 +249,7 @@ final class TransferController extends Controller
 
     public function store(Request $request, TransferMovementService $service, DocumentSequenceService $sequences): JsonResponse
     {
-        $values = $request->validate(['source_warehouse_id' => ['required', 'integer', 'min:1'], 'destination_warehouse_id' => ['required', 'integer', 'min:1'], 'document_date' => ['required', 'date_format:Y-m-d', 'before_or_equal:today'], 'idempotency_key' => ['required', 'string', 'max:160'], 'lines' => ['required', 'array', 'min:1'], 'lines.*.item_id' => ['required', 'integer', 'min:1'], 'lines.*.uom_id' => ['nullable', 'integer', 'min:1'], 'lines.*.planned_quantity' => ['required', 'numeric', 'gt:0'], 'lines.*.planned_base_quantity' => ['nullable', 'numeric', 'gt:0']]);
+        $values = $request->validate(['source_warehouse_id' => ['required', 'integer', 'min:1'], 'destination_warehouse_id' => ['required', 'integer', 'min:1'], 'document_date' => ['required', 'date_format:Y-m-d', 'before_or_equal:today'], 'note' => ['nullable', 'string', 'max:1000'], 'idempotency_key' => ['required', 'string', 'max:160'], 'lines' => ['required', 'array', 'min:1'], 'lines.*.item_id' => ['required', 'integer', 'min:1'], 'lines.*.uom_id' => ['nullable', 'integer', 'min:1'], 'lines.*.planned_quantity' => ['required', 'numeric', 'gt:0'], 'lines.*.planned_base_quantity' => ['nullable', 'numeric', 'gt:0']]);
         $sourceWarehouse = $request->user()->warehouses()->where('is_active', true)->whereKey($values['source_warehouse_id'])->with('branch')->firstOrFail();
         $source = (int) $sourceWarehouse->id;
         $this->destinationWarehouses($request, $source)->whereKey($values['destination_warehouse_id'])->firstOrFail();
@@ -233,6 +266,31 @@ final class TransferController extends Controller
         }
 
         return response()->json(['status' => true, 'msg' => "สร้างใบโอนสินค้าออก {$transfer->document_number} แล้ว", 'redirect' => route('wms.transfers.outgoing.index')]);
+    }
+
+    public function update(Request $request, Transfer $transfer, TransferMovementService $service, AuditLogger $audit): JsonResponse
+    {
+        $warehouseId = (int) $request->attributes->get('selectedWarehouse')->id;
+        abort_unless((int) $transfer->source_warehouse_id === $warehouseId, 404);
+        $values = $request->validate([
+            'destination_warehouse_id' => ['required', 'integer', 'min:1'],
+            'document_date' => ['required', 'date_format:Y-m-d', 'before_or_equal:today'],
+            'note' => ['nullable', 'string', 'max:1000'],
+            'lines' => ['required', 'array', 'min:1'],
+            'lines.*.item_id' => ['required', 'integer', 'min:1'],
+            'lines.*.uom_id' => ['nullable', 'integer', 'min:1'],
+            'lines.*.planned_quantity' => ['required', 'numeric', 'gt:0'],
+            'lines.*.planned_base_quantity' => ['nullable', 'numeric', 'gt:0'],
+        ]);
+        $this->destinationWarehouses($request, $warehouseId)->whereKey($values['destination_warehouse_id'])->firstOrFail();
+
+        DB::transaction(function () use ($request, $transfer, $values, $service, $audit): void {
+            $before = $transfer->fresh()->load('lines')->toArray();
+            $updated = $service->updateDraft($transfer, $values, $values['lines']);
+            $audit->record('wms.transfer.updated', $updated, $before, $updated->fresh()->load('lines')->toArray(), $request->user(), $request);
+        });
+
+        return response()->json(['status' => true, 'msg' => 'แก้ไขร่างใบโอนสินค้าแล้ว', 'redirect' => route('wms.transfers.show', $transfer)]);
     }
 
     public function dispatch(Request $request, Transfer $transfer, TransferMovementService $service): JsonResponse

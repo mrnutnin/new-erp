@@ -26,7 +26,7 @@
                         data-can-delete="{{ auth()->user()->hasPermission('pos.customers.delete') ? 1 : 0 }}"
                     >
                         <thead>
-                            <tr>
+                            <tr><th>ลำดับ</th>
                                 <th>รหัส</th>
                                 <th>ชื่อลูกค้า</th>
                                 <th>กลุ่มลูกค้า</th>
@@ -54,6 +54,7 @@
             var $table = $('#customers-table');
             var text = $.fn.dataTable.render.text();
             var columns = [
+                window.erpRowNumberColumn(),
                 { data: 'code', name: 'parties.code', render: text.display },
                 { data: 'name', name: 'parties.name', render: text.display },
                 { data: 'group_label', name: 'customer_group_name', render: text.display },
@@ -97,7 +98,7 @@
 
             $table.DataTable($.extend(true, {}, window.erpDataTableDefaults, {
                 ajax: $table.data('url'),
-                order: [[0, 'asc']],
+                order: [[1, 'asc']],
                 buttons: [window.erpExcelButton($table)],
                 columns: columns
             }));

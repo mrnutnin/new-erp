@@ -80,6 +80,51 @@ final class TransferMovementService
         }, 3);
     }
 
+    public function updateDraft(Transfer $transfer, array $attributes, array $lines): Transfer
+    {
+        if ($lines === []) {
+            throw ValidationException::withMessages(['lines' => 'ต้องมีรายการสินค้าอย่างน้อยหนึ่งรายการ']);
+        }
+
+        return DB::transaction(function () use ($transfer, $attributes, $lines): Transfer {
+            $transfer = Transfer::query()->lockForUpdate()->findOrFail($transfer->id);
+            if ($transfer->status !== 'DRAFT' || $transfer->events()->exists()) {
+                throw ValidationException::withMessages(['status' => 'แก้ไขได้เฉพาะใบโอนร่างที่ยังไม่มีการเคลื่อนไหว']);
+            }
+
+            $items = Item::query()->where('is_active', true)->where('is_stock_item', true)
+                ->whereIn('id', collect($lines)->pluck('item_id'))->lockForUpdate()->get(['id', 'base_uom_id'])->keyBy('id');
+            foreach ($lines as $index => &$line) {
+                $item = $items->get((int) ($line['item_id'] ?? 0));
+                if (! $item || ! $item->base_uom_id) {
+                    throw ValidationException::withMessages(["lines.$index.item_id" => 'สินค้านี้ไม่มีหน่วย Stock หรือไม่ใช่สินค้าคงคลัง']);
+                }
+                $line['uom_id'] = (int) $item->base_uom_id;
+                $line['planned_base_quantity'] = $line['planned_quantity'];
+            }
+            unset($line);
+
+            $transfer->update([
+                'destination_warehouse_id' => $attributes['destination_warehouse_id'],
+                'document_date' => $attributes['document_date'],
+                'note' => filled($attributes['note'] ?? null) ? trim((string) $attributes['note']) : null,
+            ]);
+            $transfer->lines()->delete();
+            foreach (array_values($lines) as $index => $line) {
+                TransferLine::query()->create([
+                    'transfer_id' => $transfer->id,
+                    'item_id' => $this->positiveInt($line['item_id'] ?? null, 'item_id'),
+                    'uom_id' => $this->positiveInt($line['uom_id'] ?? null, 'uom_id'),
+                    'line_number' => $index + 1,
+                    'planned_quantity' => TransferContract::normalizeQuantity($line['planned_quantity'] ?? null, 'planned_quantity'),
+                    'planned_base_quantity' => TransferContract::normalizeQuantity($line['planned_base_quantity'] ?? null, 'planned_base_quantity'),
+                ]);
+            }
+
+            return $transfer->fresh('lines');
+        }, 3);
+    }
+
     public function dispatch(Transfer $transfer, int $warehouseId, User $actor, string $reason, ?string $businessDate = null): Transfer
     {
         return DB::transaction(function () use ($transfer, $warehouseId, $actor, $reason, $businessDate): Transfer {
@@ -395,7 +440,7 @@ final class TransferMovementService
 
     private function assertSameDraft(Transfer $existing, array $header, array $lines): void
     {
-        foreach (['source_warehouse_id', 'destination_warehouse_id', 'document_date', 'document_number'] as $field) {
+        foreach (['source_warehouse_id', 'destination_warehouse_id', 'document_date', 'document_number', 'note'] as $field) {
             if ((string) $existing->{$field} !== (string) ($header[$field] ?? '')) {
                 throw ValidationException::withMessages(['idempotency_key' => 'Transfer key ถูกใช้กับข้อมูลคนละชุด']);
             }

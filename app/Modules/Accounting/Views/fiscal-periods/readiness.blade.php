@@ -1,6 +1,6 @@
 @extends('Accounting::layout')
 
-@section('title', 'ตรวจรายการค้าง | New ERP')
+@section('title', 'ตรวจรายการค้าง | MintERP')
 
 @section('content')
     <div class="container-fluid px-3 px-lg-4 py-4">

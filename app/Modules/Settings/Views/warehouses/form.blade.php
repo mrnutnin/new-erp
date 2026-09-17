@@ -1,6 +1,6 @@
 @extends('Settings::layout')
 
-@section('title', ($warehouse->exists ? 'แก้ไข' : 'เพิ่ม').'คลัง | New ERP')
+@section('title', ($warehouse->exists ? 'แก้ไข' : 'เพิ่ม').'คลัง | MintERP')
 
 @section('content')
     <div class="container-fluid px-3 px-lg-4 py-4">

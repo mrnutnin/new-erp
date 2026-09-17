@@ -1,5 +1,5 @@
 @extends('Accounting::layout')
-@section('title', 'Tax Code | New ERP')
+@section('title', 'Tax Code | MintERP')
 @section('content')
 <div class="container-fluid px-3 px-lg-4 py-4"><div class="d-flex justify-content-between align-items-end mb-4"><div><p class="eyebrow mb-2">ACCOUNTING / TAX</p><h1 class="h3 mb-2">Tax Code</h1><p class="text-secondary mb-0">จัดการ VAT IN, VAT OUT, NONE VAT และ WHT</p></div>@if(auth()->user()->hasPermission('accounting.tax-codes.create'))<a class="btn btn-dark" href="{{ route('accounting.tax-codes.create') }}"><i class="bx bx-plus me-1" aria-hidden="true"></i>เพิ่ม Tax Code</a>@endif</div><div class="card border-0 shadow-sm"><div class="card-body p-4"><table class="table table-hover align-middle w-100" id="tax-codes-table" data-url="{{ route('accounting.tax-codes.data') }}" data-can-update="{{ auth()->user()->hasPermission('accounting.tax-codes.update') ? 1 : 0 }}" data-can-delete="{{ auth()->user()->hasPermission('accounting.tax-codes.delete') ? 1 : 0 }}"><thead><tr><th>รหัส</th><th>ชื่อ</th><th>ประเภท</th><th>อัตรา (%)</th><th>สถานะ</th><th class="text-end">จัดการ</th></tr></thead></table></div></div></div>
 @endsection

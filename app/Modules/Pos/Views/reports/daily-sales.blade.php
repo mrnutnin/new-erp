@@ -41,7 +41,7 @@
                     <table id="daily-sales-table" class="table table-hover align-middle w-100"
                         data-url="{{ route('pos.sales-reports.daily.data') }}">
                         <thead>
-                            <tr>
+                            <tr><th>ลำดับ</th>
                                 <th>วันที่</th>
                                 <th class="text-end">HS</th>
                                 <th class="text-end">IV</th>
@@ -67,7 +67,7 @@
                     <table id="daily-tenders-table" class="table table-hover align-middle w-100"
                         data-url="{{ route('pos.sales-reports.daily.tenders') }}">
                         <thead>
-                            <tr>
+                            <tr><th>ลำดับ</th>
                                 <th>บัญชีเงินสด/ธนาคาร</th>
                                 <th>ประเภท</th>
                                 <th class="text-end">รับ HS</th>
@@ -105,10 +105,10 @@
                     data: filters
                 },
                 order: [
-                    [0, 'desc']
+                    [1, 'desc']
                 ],
                 buttons: [window.erpExcelButton($('#daily-sales-table'))],
-                columns: [{
+                columns: [window.erpRowNumberColumn(),{
                     data: 'report_date',
                     render: date
                 }, {
@@ -151,10 +151,10 @@
                     data: filters
                 },
                 order: [
-                    [0, 'asc']
+                    [1, 'asc']
                 ],
                 buttons: [window.erpExcelButton($('#daily-tenders-table'))],
-                columns: [{
+                columns: [window.erpRowNumberColumn(),{
                     data: null,
                     render: (row, type) => type === 'display' ? text.display(
                         `${row.code} · ${row.name}`) : `${row.code} ${row.name}`

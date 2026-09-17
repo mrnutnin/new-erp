@@ -1,12 +1,13 @@
 @extends('Wms::layout')
 @php
+    $quantityStep = \App\Modules\Wms\Support\WmsDecimal::step();
     $initialLines = isset($document)
         ? $document->lines->map(fn ($line) => [
             'item_id' => $line->item_id,
             'text' => trim(($line->item?->code ?? '') . ' · ' . ($line->item?->name ?? ''), ' ·'),
             'uom_id' => $line->uom_id,
             'uom_label' => trim(($line->uom?->code ?? '') . ' · ' . ($line->uom?->name ?? ''), ' ·'),
-            'counted_quantity' => (string) $line->counted_quantity,
+            'counted_quantity' => \App\Modules\Wms\Support\WmsDecimal::input($line->counted_quantity),
             'note' => $line->note,
         ])->values()->all()
         : [];
@@ -24,7 +25,7 @@ $(function () {
             '<tr>' +
             '<td><select class="form-select js-item" name="lines[' + n + '][item_id]" required><option value="">ค้นหาสินค้า</option></select></td>' +
             '<td><input class="form-control js-uom-label" readonly><input type="hidden" class="js-uom" name="lines[' + n + '][uom_id]"></td>' +
-            '<td><input class="form-control text-end" type="number" min="0" step="any" name="lines[' + n + '][counted_quantity]" required></td>' +
+            '<td><input class="form-control text-end" type="number" min="0" step="{{ $quantityStep }}" name="lines[' + n + '][counted_quantity]" required></td>' +
             '<td><input class="form-control" name="lines[' + n + '][note]"></td>' +
             '<td><button type="button" class="btn btn-sm btn-outline-danger js-remove" title="ลบรายการ" aria-label="ลบรายการ"><i class="bx bx-trash"></i></button></td>' +
             '</tr>'

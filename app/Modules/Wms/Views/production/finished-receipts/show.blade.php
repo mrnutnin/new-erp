@@ -159,6 +159,7 @@
                 </div>
             </div>
         </div>
+        @include('Wms::partials.document-photos', ['photoTitle' => 'รูปหลักฐานการรับสินค้าผลิตเสร็จ', 'photoStoreRoute' => 'wms.production.finished-receipts.photos.store', 'photoPreviewRoute' => 'wms.production.finished-receipts.photos.preview', 'photoUploadPermission' => 'wms.inventory-adjustments.create'])
         @if ($productionMode ?? false)
             <div class="row g-3 mb-4">
                 <div class="col-12 col-md-4">

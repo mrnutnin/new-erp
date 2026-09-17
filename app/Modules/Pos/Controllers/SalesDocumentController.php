@@ -678,7 +678,7 @@ class SalesDocumentController extends Controller
 
     private function applyOrder(Builder $query, Request $request): void
     {
-        $columns = [0 => 'sales_documents.document_number', 1 => 'sales_documents.document_type', 2 => 'sales_documents.document_date', 3 => 'sales_documents.due_date', 4 => 'sales_documents.party_code', 5 => 'sales_documents.total_amount', 6 => 'payments.payment_remaining', 7 => 'payments.payment_remaining', 8 => 'journal_entries.entry_number', 9 => 'sales_documents.status'];
-        $query->reorder($columns[(int) $request->input('order.0.column', 2)] ?? 'sales_documents.document_date', $request->input('order.0.dir') === 'asc' ? 'asc' : 'desc')->orderByDesc('sales_documents.id');
+        $columns = [1 => 'sales_documents.document_number', 2 => 'sales_documents.document_type', 3 => 'sales_documents.document_date', 4 => 'sales_documents.due_date', 5 => 'sales_documents.party_code', 6 => 'sales_documents.total_amount', 7 => 'payments.payment_remaining', 8 => 'payments.payment_remaining', 9 => 'journal_entries.entry_number', 10 => 'sales_documents.status'];
+        $query->reorder($columns[(int) $request->input('order.0.column', 3)] ?? 'sales_documents.document_date', $request->input('order.0.dir') === 'asc' ? 'asc' : 'desc')->orderByDesc('sales_documents.id');
     }
 }

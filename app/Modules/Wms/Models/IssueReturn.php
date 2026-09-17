@@ -36,4 +36,9 @@ final class IssueReturn extends Model
     {
         return $this->hasMany(IssueReturnLine::class, 'return_id')->orderBy('line_number');
     }
+
+    public function photos(): HasMany
+    {
+        return $this->hasMany(DocumentPhoto::class, 'document_id')->where('document_type', 'ISSUE_RETURN')->orderBy('id');
+    }
 }

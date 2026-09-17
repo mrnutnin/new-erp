@@ -24,6 +24,8 @@
         </div>
     </div>
 
+    @include('Wms::transfers._photos')
+
     <div class="card border-0 shadow-sm mb-4">
         <div class="card-body p-3 p-lg-4">
             <h2 class="h5 mb-3">รายการสินค้าที่รอรับ</h2>

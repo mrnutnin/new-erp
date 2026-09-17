@@ -3,6 +3,7 @@
 namespace Tests\Unit;
 
 use App\Modules\Wms\Support\ManualProductionReceiptContract;
+use Illuminate\Support\Facades\Blade;
 use Illuminate\Validation\ValidationException;
 use Tests\TestCase;
 
@@ -29,6 +30,15 @@ final class ManualProductionReceiptContractTest extends TestCase
 
         self::assertFalse($result['ready']);
         self::assertSame('POSTING_EVENT_DEFERRED', $result['blockers'][0]['code']);
+    }
+
+    public function test_create_view_initializes_its_editing_state_in_compiled_php(): void
+    {
+        $view = file_get_contents(dirname(__DIR__, 2).'/app/Modules/Wms/Views/production/finished-receipts/create.blade.php');
+        $compiled = Blade::compileString($view);
+
+        self::assertStringContainsString('$editing = filled($document);', $compiled);
+        self::assertStringNotContainsString('@php', $compiled);
     }
 
     public function test_writer_and_gate_c_keep_the_multi_source_bridge_contract(): void

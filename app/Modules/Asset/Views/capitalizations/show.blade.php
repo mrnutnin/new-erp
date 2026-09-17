@@ -1,5 +1,5 @@
 @extends('Asset::layout')
-@section('title', $capitalization->document_number.' | New ERP')
+@section('title', $capitalization->document_number.' | MintERP')
 
 @section('content')
 @php

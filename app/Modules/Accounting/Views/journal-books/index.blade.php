@@ -1,6 +1,6 @@
 @extends('Accounting::layout')
 
-@section('title', 'สมุดบัญชี | New ERP')
+@section('title', 'สมุดบัญชี | MintERP')
 
 @section('content')
     @php($canUpdate = auth()->user()->hasPermission('accounting.journal-books.update'))

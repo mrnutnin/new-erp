@@ -1,6 +1,6 @@
 @extends('Asset::layout')
 
-@section('title', ($assetCategory->exists ? 'แก้ไข' : 'เพิ่ม').'หมวดสินทรัพย์ | New ERP')
+@section('title', ($assetCategory->exists ? 'แก้ไข' : 'เพิ่ม').'หมวดสินทรัพย์ | MintERP')
 
 @section('content')
     <div class="container-fluid px-3 px-lg-4 py-4"><div class="mb-4"><p class="eyebrow mb-2">ASSET / MASTER DATA</p><h1 class="h3 mb-2">{{ $assetCategory->exists ? 'แก้ไข' : 'เพิ่ม' }}หมวดสินทรัพย์</h1><p class="text-secondary mb-0">ค่าเริ่มต้นนี้จะใช้กับสินทรัพย์ที่สร้างใหม่เท่านั้น</p></div>

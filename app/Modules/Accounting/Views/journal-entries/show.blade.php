@@ -1,7 +1,7 @@
 @extends('Accounting::layout')
 @php($accountingDecimalPlaces = max(0, min(4, (int) (\App\Models\CompanySetting::query()->value('tax_decimal_places') ?? 2))))
 
-@section('title', $journalEntry->entry_number.' | New ERP')
+@section('title', $journalEntry->entry_number.' | MintERP')
 
 @section('content')
     @php($statusLabels = ['DRAFT' => 'ร่าง', 'VALIDATED' => 'รออนุมัติ', 'POSTED' => 'ลงบัญชีแล้ว', 'REVERSED' => 'กลับรายการแล้ว'])

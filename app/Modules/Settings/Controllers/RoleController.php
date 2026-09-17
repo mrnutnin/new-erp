@@ -161,14 +161,38 @@ class RoleController extends Controller
 
     private function formView(Role $role): View
     {
-        $permissionGroups = Permission::query()
-            ->orderBy('code')
-            ->get()
-            ->groupBy(fn (Permission $permission) => Str::beforeLast($permission->code, '.'));
+        $moduleLabels = [
+            'accounting' => 'บัญชี',
+            'asset' => 'สินทรัพย์',
+            'dashboard' => 'แดชบอร์ดผู้บริหาร',
+            'finance' => 'การเงิน',
+            'pos' => 'ขายและหน้าร้าน',
+            'purchasing' => 'จัดซื้อ',
+            'settings' => 'ตั้งค่าระบบ',
+            'wms' => 'คลังสินค้า',
+        ];
+        $permissionModules = Permission::query()->orderBy('code')->get()
+            ->groupBy(fn (Permission $permission) => Str::before($permission->code, '.'))
+            ->map(fn ($permissions, string $module) => [
+                'label' => $moduleLabels[$module] ?? Str::headline($module),
+                'groups' => $permissions->groupBy(fn (Permission $permission) => explode('.', $permission->code)[1] ?? $permission->code)
+                    ->map(function ($groupPermissions, string $feature) use ($module): array {
+                        $name = $groupPermissions->firstWhere('code', $module.'.'.$feature.'.view')?->name
+                            ?? $groupPermissions->first(fn (Permission $permission) => Str::endsWith($permission->code, '.view'))?->name
+                            ?? $groupPermissions->first()->name;
+
+                        return [
+                            'code' => $feature,
+                            'label' => preg_replace('/^ดู/u', '', $name) ?: $name,
+                            'permissions' => $groupPermissions,
+                        ];
+                    }),
+                'count' => $permissions->count(),
+            ]);
 
         return view('Settings::roles.form', [
             'role' => $role,
-            'permissionGroups' => $permissionGroups,
+            'permissionModules' => $permissionModules,
             'selectedPermissions' => $role->exists ? $role->permissions->pluck('id')->all() : [],
         ]);
     }

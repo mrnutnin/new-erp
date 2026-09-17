@@ -1,5 +1,5 @@
 @extends('Asset::layout')
-@section('title', 'รายละเอียด Import Batch | New ERP')
+@section('title', 'รายละเอียด Import Batch | MintERP')
 @section('content')
 <div class="container-fluid px-3 px-lg-4 py-4">
 <div class="d-flex flex-wrap justify-content-between align-items-end gap-3 mb-4"><div><p class="eyebrow mb-2">ASSET / IMPORT BATCH</p><div class="d-flex align-items-center gap-2"><h1 class="h3 mb-0">{{ $batch->batch_reference }}</h1><span class="badge {{ ['DRAFT'=>'app-status-neutral','VALIDATED'=>'app-status-info','COMMITTED'=>'app-status-success'][$batch->status] ?? 'app-status-neutral' }}">{{ ['DRAFT'=>'ร่าง','VALIDATED'=>'ตรวจสอบแล้ว','COMMITTED'=>'นำเข้าแล้ว'][$batch->status] ?? $batch->status }}</span></div><p class="text-secondary mb-0 mt-2">Cutover {{ $batch->cutover_date?->format('d/m/Y') }} · อ้างอิง {{ $batch->reconciliation_reference }}</p></div><div class="d-flex gap-2"><a class="btn btn-app-soft" href="{{ route('asset.assets.import.index') }}">รายการทั้งหมด</a>@if($batch->status==='VALIDATED')<button class="btn btn-app-primary" id="commit-import" data-url="{{ route('asset.assets.import.commit', $batch) }}"><i class="bx bx-check me-1" aria-hidden="true"></i>นำเข้าและสร้างทะเบียน</button>@endif</div></div>

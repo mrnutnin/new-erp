@@ -1,6 +1,6 @@
 @extends('Asset::layout')
 
-@section('title', 'ตรวจสอบคำขอเปลี่ยนนโยบายค่าเสื่อม | New ERP')
+@section('title', 'ตรวจสอบคำขอเปลี่ยนนโยบายค่าเสื่อม | MintERP')
 
 @section('content')
 @php

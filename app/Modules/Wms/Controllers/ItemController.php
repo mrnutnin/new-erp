@@ -40,7 +40,7 @@ class ItemController extends Controller
             ->when($request->input('asset_capitalizable') !== null && $request->input('asset_capitalizable') !== '', fn ($q) => $q->where('is_asset_capitalizable', $request->boolean('asset_capitalizable')))
             ->when($request->input('is_active') !== null && $request->input('is_active') !== '', fn ($q) => $q->where('is_active', $request->boolean('is_active')));
 
-        return DataTables::eloquent($query)->addColumn('category_label', fn ($r) => $r->category?->code.' · '.$r->category?->name)->addColumn('base_uom_label', fn ($r) => $r->baseUom?->code.' · '.$r->baseUom?->name ?: $r->base_uom)->addColumn('asset_capitalization_label', fn ($r) => $r->is_asset_capitalizable ? 'ได้ · '.($r->defaultAssetCategory?->name ?? '-') : 'ไม่ได้')->addColumn('status_label', fn ($r) => $r->is_active ? 'ใช้งาน' : 'ปิดใช้งาน')->addColumn('edit_url', fn ($r) => auth()->user()->hasPermission('wms.items.update') ? route('wms.items.edit', $r) : null)->addColumn('delete_url', fn ($r) => auth()->user()->hasPermission('wms.items.delete') ? route('wms.items.destroy', $r) : null)->toJson();
+        return DataTables::eloquent($query)->addColumn('cover_image_url', fn ($r) => $r->cover_image_disk && $r->cover_image_path ? route('wms.items.cover-image', $r) : null)->addColumn('category_label', fn ($r) => $r->category?->code.' · '.$r->category?->name)->addColumn('base_uom_label', fn ($r) => $r->baseUom?->code.' · '.$r->baseUom?->name ?: $r->base_uom)->addColumn('asset_capitalization_label', fn ($r) => $r->is_asset_capitalizable ? 'ได้ · '.($r->defaultAssetCategory?->name ?? '-') : 'ไม่ได้')->addColumn('status_label', fn ($r) => $r->is_active ? 'ใช้งาน' : 'ปิดใช้งาน')->addColumn('edit_url', fn ($r) => auth()->user()->hasPermission('wms.items.update') ? route('wms.items.edit', $r) : null)->addColumn('delete_url', fn ($r) => auth()->user()->hasPermission('wms.items.delete') ? route('wms.items.destroy', $r) : null)->toJson();
     }
 
     public function categoryOptions(Request $request): JsonResponse
@@ -56,7 +56,9 @@ class ItemController extends Controller
         $type = $request->input('type');
         $codes = $type === 'REVENUE' ? ['REVENUE'] : ($type === 'COGS' ? ['EXPENSE'] : ['ASSET']);
         $q = trim((string) $request->input('q'));
-        $rows = Account::query()->join('account_types', 'account_types.id', '=', 'accounts.account_type_id')->whereIn('account_types.code', $codes)->where('accounts.is_active', true)->where('accounts.is_postable', true)->whereNull('accounts.control_account_type')->when($q, fn ($x) => $x->where(fn ($y) => $y->where('accounts.code', 'like', "%$q%")->orWhere('accounts.name', 'like', "%$q%")))->orderBy('accounts.code')->forPage(max(1, $request->integer('page', 1)), 31)->get(['accounts.id', 'accounts.code', 'accounts.name']);
+        $rows = Account::query()->join('account_types', 'account_types.id', '=', 'accounts.account_type_id')->whereIn('account_types.code', $codes)->where('accounts.is_active', true)->where('accounts.is_postable', true)
+            ->when($type === 'ASSET', fn ($query) => $query->where('accounts.control_account_type', 'INVENTORY'), fn ($query) => $query->whereNull('accounts.control_account_type'))
+            ->when($q, fn ($x) => $x->where(fn ($y) => $y->where('accounts.code', 'like', "%$q%")->orWhere('accounts.name', 'like', "%$q%")))->orderBy('accounts.code')->forPage(max(1, $request->integer('page', 1)), 31)->get(['accounts.id', 'accounts.code', 'accounts.name']);
 
         return response()->json(['results' => $rows->take(30)->map(fn ($r) => ['id' => $r->id, 'text' => $r->code.' · '.$r->name])->values(), 'pagination' => ['more' => $rows->count() > 30]]);
     }
@@ -210,20 +212,21 @@ class ItemController extends Controller
     private function assertAccounts(array $values): void
     {
         $ids = collect([$values['inventory_account_id'] ?? null, $values['sales_account_id'] ?? null, $values['cogs_account_id'] ?? null])->filter()->map(fn ($id) => (int) $id)->unique();
-        $accounts = Account::query()->join('account_types', 'account_types.id', '=', 'accounts.account_type_id')->whereKey($ids)->where('accounts.is_active', true)->where('accounts.is_postable', true)->whereNull('accounts.control_account_type')->get(['accounts.id', 'account_types.code as type_code'])->keyBy('id');
-        $expected = [(int) ($values['sales_account_id'] ?? 0) => 'REVENUE'];
+        $accounts = Account::query()->join('account_types', 'account_types.id', '=', 'accounts.account_type_id')->whereKey($ids)->where('accounts.is_active', true)->where('accounts.is_postable', true)->get(['accounts.id', 'accounts.control_account_type', 'account_types.code as type_code'])->keyBy('id');
+        $expected = ['sales_account_id' => ['REVENUE', null]];
         if (! empty($values['inventory_account_id'])) {
-            $expected[(int) $values['inventory_account_id']] = 'ASSET';
+            $expected['inventory_account_id'] = ['ASSET', 'INVENTORY'];
         }
         if (! empty($values['cogs_account_id'])) {
-            $expected[(int) $values['cogs_account_id']] = 'EXPENSE';
+            $expected['cogs_account_id'] = ['EXPENSE', null];
         }
         if ($values['item_type'] === 'GOODS' && $values['is_stock_item'] && (empty($values['inventory_account_id']) || empty($values['cogs_account_id']))) {
             throw ValidationException::withMessages(['inventory_account_id' => 'สินค้าที่ติดตามสต็อกต้องมีบัญชีสินค้าคงเหลือและบัญชีต้นทุน']);
         }
-        foreach ($expected as $id => $type) {
-            if (! $accounts->has($id) || $accounts[$id]->type_code !== $type) {
-                throw ValidationException::withMessages(['sales_account_id' => 'บัญชี GL ของสินค้าไม่ตรงประเภทหรือไม่พร้อมใช้งาน']);
+        foreach ($expected as $field => [$type, $controlType]) {
+            $account = $accounts->get((int) ($values[$field] ?? 0));
+            if (! $account || $account->type_code !== $type || $account->control_account_type !== $controlType) {
+                throw ValidationException::withMessages([$field => 'บัญชี GL ของสินค้าไม่ตรงประเภทหรือไม่พร้อมใช้งาน']);
             }
         }
     }

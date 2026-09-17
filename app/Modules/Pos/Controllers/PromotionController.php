@@ -45,8 +45,8 @@ class PromotionController extends Controller
                 }
             })
             ->order(function (Builder $query) use ($request): void {
-                $columns = [0 => 'pos_promotions.code', 1 => 'pos_promotions.name', 2 => 'pos_promotions.application_scope', 3 => 'pos_promotions.customer_group_code', 4 => 'items_count', 5 => 'pos_promotions.priority', 6 => 'pos_promotions.effective_from', 7 => 'pos_promotions.is_active'];
-                $query->reorder($columns[(int) $request->input('order.0.column', 0)] ?? 'pos_promotions.priority', $request->input('order.0.dir') === 'asc' ? 'asc' : 'desc')->orderByDesc('pos_promotions.id');
+                $columns = [1 => 'pos_promotions.code', 2 => 'pos_promotions.name', 3 => 'pos_promotions.application_scope', 4 => 'pos_promotions.customer_group_code', 5 => 'items_count', 6 => 'pos_promotions.priority', 7 => 'pos_promotions.effective_from', 8 => 'pos_promotions.is_active'];
+                $query->reorder($columns[(int) $request->input('order.0.column', 1)] ?? 'pos_promotions.priority', $request->input('order.0.dir') === 'asc' ? 'asc' : 'desc')->orderByDesc('pos_promotions.id');
             })
             ->addColumn('group_label', fn (Promotion $promotion) => $promotion->customer_group_code ?: 'ทุกกลุ่ม')
             ->addColumn('scope_label', fn (Promotion $promotion) => $promotion->application_scope === 'DOCUMENT' ? 'ท้ายบิล' : 'ต่อรายการ')

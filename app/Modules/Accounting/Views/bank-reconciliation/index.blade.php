@@ -1,6 +1,6 @@
 @extends('Accounting::layout')
 
-@section('title', 'Bank Reconciliation | New ERP')
+@section('title', 'Bank Reconciliation | MintERP')
 
 @section('content')
 <div class="container-fluid px-3 px-lg-4 py-4">

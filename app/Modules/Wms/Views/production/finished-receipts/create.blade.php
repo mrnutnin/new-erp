@@ -1,6 +1,6 @@
 @extends('Wms::layout')
-@php($productionMode = true)
 @php
+    $productionMode = true;
     $document = $document ?? null;
     $editing = filled($document);
     $quantityDecimals = (int) ($quantityDecimals ?? \App\Modules\Wms\Support\WmsDecimal::places());

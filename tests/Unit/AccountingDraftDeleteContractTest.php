@@ -79,7 +79,7 @@ final class AccountingDraftDeleteContractTest extends TestCase
 
         self::assertStringContainsString("'accounting.journal-entries.delete'", $rbac);
         self::assertStringContainsString("'accounting.bank-reconciliation.delete'", $rbac);
-        self::assertStringContainsString("'core.rbac' => '1.6'", $installer);
+        self::assertStringContainsString("'core.rbac' => '1.8'", $installer);
     }
 
     public function test_all_accounting_models_exposed_to_delete_use_soft_deletes(): void

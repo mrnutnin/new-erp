@@ -116,7 +116,7 @@ class EntryController extends Controller
     private function movements(int $warehouseId): JsonResponse
     {
         $query = StockMovement::query()->join('wms_items as i', 'i.id', '=', 'wms_stock_movements.item_id')->where('wms_stock_movements.warehouse_id', $warehouseId)->where('wms_stock_movements.status', 'POSTED')
-            ->select('wms_stock_movements.id', 'wms_stock_movements.business_date', 'wms_stock_movements.movement_type', 'wms_stock_movements.direction', 'wms_stock_movements.base_quantity', 'wms_stock_movements.source_reference', 'i.code as item_code', 'i.name as item_name')->latest('wms_stock_movements.id');
+            ->select('wms_stock_movements.id', 'wms_stock_movements.business_date', 'wms_stock_movements.movement_type', 'wms_stock_movements.direction', 'wms_stock_movements.base_quantity', 'wms_stock_movements.source_reference', 'i.code as item_code', 'i.name as item_name');
 
         return DataTables::eloquent($query)->addColumn('item_label', fn ($row) => $row->item_code.' · '.$row->item_name)
             ->editColumn('business_date', fn ($row) => Carbon::parse($row->business_date)->format('d/m/Y'))->addColumn('direction_label', fn ($row) => $row->direction === 'IN' ? 'เข้า' : 'ออก')

@@ -1,6 +1,6 @@
 @extends('Accounting::layout')
 
-@section('title', ($accountMapping->exists ? 'แก้ไข' : 'เพิ่ม').' การตั้งค่าการลงบัญชี | New ERP')
+@section('title', ($accountMapping->exists ? 'แก้ไข' : 'เพิ่ม').' การตั้งค่าการลงบัญชี | MintERP')
 
 @section('content')
     @php($isLegacy = $accountMapping->exists && $accountMapping->event_code === null)

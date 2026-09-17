@@ -15,6 +15,10 @@ final class DocumentPdfRenderer
         if (! is_array($options)) {
             throw new InvalidArgumentException("Unknown PDF profile [{$profile}].");
         }
+        if (str_starts_with($profile, 'label_')) {
+            $fontOptions = array_intersect_key((array) ($profiles['a4'] ?? []), array_flip(['fontDir', 'fontdata', 'default_font']));
+            $options = array_merge($fontOptions, $options);
+        }
 
         $tempDir = storage_path('app/mpdf');
         if (! is_dir($tempDir)) {
@@ -27,7 +31,9 @@ final class DocumentPdfRenderer
             'autoScriptToLang' => true,
             'autoLangToFont' => true,
         ]));
-        $pdf->SetHTMLFooter('<div style="border-top:1px solid #cbd5e1;color:#64748b;font-family:notosansthai,sans-serif;font-size:8pt;padding-top:4px;text-align:right">หน้า {PAGENO} / {nbpg}</div>');
+        if (! str_starts_with($profile, 'label_')) {
+            $pdf->SetHTMLFooter('<div style="border-top:1px solid #cbd5e1;color:#64748b;font-family:notosansthai,sans-serif;font-size:8pt;padding-top:4px;text-align:right">หน้า {PAGENO} / {nbpg}</div>');
+        }
         // Keep the shared markup, but replace browser-only CSS with mPDF-safe primitives.
         $pdfHtml = preg_replace('~<style\b[^>]*>.*?</style>~is', '', $html) ?? $html;
         $pdfHtml = <<<'HTML'
@@ -140,6 +146,29 @@ final class DocumentPdfRenderer
 .document-render .pdf-tax-invoice.pdf-readable .pdf-product th { font-size:9pt; }
 .document-render .pdf-tax-invoice.pdf-readable .pdf-footer-heading,.document-render .pdf-tax-invoice.pdf-readable .pdf-signatures td { font-size:10pt; }
 .document-render .pdf-tax-invoice.pdf-readable .pdf-control { font-size:9.5pt; }
+.document-render .pdf-sticker { box-sizing:border-box; width:100%; overflow:hidden; text-align:center; line-height:1.05; }
+.document-render .pdf-sticker table,.document-render .pdf-sticker td { border:0; padding:0; vertical-align:middle; }
+.document-render .pdf-sticker .sticker-company { overflow:hidden; font-size:6pt; font-weight:bold; white-space:nowrap; }
+.document-render .pdf-sticker .sticker-name { margin:.45mm 0 .25mm; font-size:8pt; font-weight:bold; line-height:1.05; overflow-wrap:break-word; word-wrap:break-word; }
+.document-render .pdf-sticker .sticker-name-long { font-size:6.5pt; }
+.document-render .pdf-sticker .sticker-meta { overflow:hidden; color:#374151; font-size:5.5pt; white-space:nowrap; }
+.document-render .pdf-sticker .sticker-code { margin-top:.25mm; font-family:monospace; font-size:6.5pt; font-weight:bold; line-height:1; overflow-wrap:break-word; word-wrap:break-word; }
+.document-render .pdf-sticker .sticker-code-long { font-size:5pt; }
+.document-render .pdf-sticker .sticker-code-very-long { font-size:4.2pt; }
+.document-render .pdf-sticker .sticker-symbol { padding-top:.55mm; text-align:center; }
+.document-render .pdf-sticker .sticker-barcode-cell { width:68%; padding-right:1mm; }
+.document-render .pdf-sticker .sticker-qr-cell { width:32%; }
+.document-render .pdf-sticker-large .sticker-company { font-size:7.5pt; }
+.document-render .pdf-sticker-large .sticker-name { margin:.8mm 0 .4mm; font-size:10pt; }
+.document-render .pdf-sticker-large .sticker-name-long { font-size:8pt; }
+.document-render .pdf-sticker-large .sticker-meta { font-size:7pt; }
+.document-render .pdf-sticker-large .sticker-code { font-size:7.5pt; }
+.document-render .pdf-sticker-large .sticker-code-long { font-size:6pt; }
+.document-render .pdf-sticker-large .sticker-code-very-long { font-size:5pt; }
+.document-render .pdf-label-sheet,.document-render .pdf-label-sheet td { border:0; padding:0; }
+.document-render .pdf-label-sheet { width:100%; table-layout:fixed; border-collapse:collapse; }
+.document-render .pdf-label-sheet td { box-sizing:border-box; padding:1.1mm; vertical-align:middle; }
+.document-render .pdf-label-cell { box-sizing:border-box; width:100%; padding:1.5mm; overflow:hidden; border:.2mm dashed #cbd5e1; }
 </style>
 HTML
         .'<main class="document-render">'.$pdfHtml.'</main>';

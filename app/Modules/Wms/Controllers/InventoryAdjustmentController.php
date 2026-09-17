@@ -62,8 +62,6 @@ final class InventoryAdjustmentController extends Controller
         if ($request->filled('date_to')) {
             $query->whereDate('document_date', '<=', $request->date('date_to'));
         }
-        $query->latest('id');
-
         return DataTables::eloquent($query)
             ->addColumn('document_number', fn ($r) => $r->document_number)
             ->addColumn('line_count', fn ($r) => $r->lines->count())

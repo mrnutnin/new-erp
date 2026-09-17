@@ -1,6 +1,6 @@
 @extends('Settings::layout')
 
-@section('title', 'คลัง | New ERP')
+@section('title', 'คลัง | MintERP')
 
 @section('content')
     <div class="container-fluid px-3 px-lg-4 py-4">

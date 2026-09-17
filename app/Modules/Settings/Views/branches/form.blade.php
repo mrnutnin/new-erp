@@ -1,6 +1,6 @@
 @extends('Settings::layout')
 
-@section('title', ($branch->exists ? 'แก้ไข' : 'เพิ่ม').'สาขา | New ERP')
+@section('title', ($branch->exists ? 'แก้ไข' : 'เพิ่ม').'สาขา | MintERP')
 
 @section('content')
     <div class="container-fluid px-3 px-lg-4 py-4">

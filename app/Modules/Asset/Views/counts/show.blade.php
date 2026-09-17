@@ -1,6 +1,6 @@
 @extends('Asset::layout')
 
-@section('title', $count->document_number.' | New ERP')
+@section('title', $count->document_number.' | MintERP')
 
 @section('content')
 @php($audit = collect([

@@ -29,7 +29,7 @@ class StockPolicyController extends Controller
     {
         $warehouse = $request->attributes->get('selectedWarehouse');
 
-        return DataTables::eloquent(StockPolicy::query()->with(['warehouse', 'item'])->where('warehouse_id', $warehouse->id)->latest('id'))
+        return DataTables::eloquent(StockPolicy::query()->with(['warehouse', 'item'])->where('warehouse_id', $warehouse->id))
             ->addColumn('warehouse_label', fn (StockPolicy $row) => $row->warehouse?->code.' · '.$row->warehouse?->name)
             ->addColumn('item_label', fn (StockPolicy $row) => $row->item ? $row->item->code.' · '.$row->item->name : 'ค่าเริ่มต้นทั้งคลัง')
             ->editColumn('min_quantity', fn (StockPolicy $row) => WmsDecimal::format($row->min_quantity))
@@ -131,7 +131,7 @@ class StockPolicyController extends Controller
 
     public function issueTypeData(Request $request): JsonResponse
     {
-        return DataTables::eloquent(IssueType::query()->whereNull('warehouse_id')->latest('id'))
+        return DataTables::eloquent(IssueType::query()->whereNull('warehouse_id'))
             ->addColumn('warehouse_label', fn (IssueType $row) => 'ทั้งองค์กร')
             ->addColumn('status_label', fn (IssueType $row) => $row->is_active ? 'ใช้งาน' : 'ปิดใช้งาน')
             ->addColumn('in_use', fn (IssueType $row) => IssueDocument::withTrashed()

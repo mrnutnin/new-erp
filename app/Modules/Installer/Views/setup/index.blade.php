@@ -19,7 +19,7 @@
 <body>
 <main class="setup-shell px-3">
     <div class="mb-4">
-        <p class="text-uppercase text-secondary small fw-semibold mb-2">New ERP · Implementation</p>
+        <p class="text-uppercase text-secondary small fw-semibold mb-2">MintERP · Implementation</p>
         <h1 class="display-6 fw-semibold mb-2">System Setup</h1>
         <p class="text-secondary mb-0">ตรวจสอบ environment ก่อนเริ่มเตรียมฐานข้อมูลและติดตั้ง ERP Defaults</p>
     </div>

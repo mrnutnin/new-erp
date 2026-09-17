@@ -19,7 +19,7 @@
         </div></div>
         <div class="card border-0 shadow-sm"><div class="card-body p-3 p-lg-4"><div class="mb-3"><h2 class="h5 mb-1">รายการเอกสารขาย</h2><p class="text-secondary small mb-0">เปิดรายละเอียดเพื่ออนุมัติ ลงบัญชี หรือยกเลิกเอกสารตามสิทธิ์และสถานะ</p></div><div class="table-responsive">
             <table id="sales-documents-table" class="table table-hover align-middle w-100" data-url="{{ route('pos.sales-documents.data') }}">
-                <thead><tr><th>เลขที่</th><th>ประเภท</th><th>วันที่</th><th>ครบกำหนด</th><th>ลูกค้า</th><th class="text-end">ยอดสุทธิ</th><th class="text-end">คงเหลือ</th><th>สถานะรับชำระ</th><th>สมุดรายวัน</th><th>สถานะเอกสาร</th><th class="text-end">จัดการ</th></tr></thead>
+                <thead><tr><th>ลำดับ</th><th>เลขที่</th><th>ประเภท</th><th>วันที่</th><th>ครบกำหนด</th><th>ลูกค้า</th><th class="text-end">ยอดสุทธิ</th><th class="text-end">คงเหลือ</th><th>สถานะรับชำระ</th><th>สมุดรายวัน</th><th>สถานะเอกสาร</th><th class="text-end">จัดการ</th></tr></thead>
             </table>
         </div></div></div>
     </div>
@@ -32,8 +32,8 @@ $(function () {
     var status = {DRAFT:'app-badge-soft', APPROVED:'app-badge-info', POSTED:'app-badge-success', VOID:'text-bg-danger'};
     var paymentStatus = {UNPAID:'app-badge-warning', PARTIAL:'app-badge-info', PAID:'app-badge-success', CHECK:'text-bg-danger'};
     var table = $table.DataTable($.extend(true, {}, window.erpDataTableDefaults, {
-        ajax: {url:$table.data('url'), data:function (data) { data.payment_status=$('#sales-document-payment-status').val(); }}, order: [[2, 'desc']], buttons: [window.erpExcelButton($table)],
-        columns: [
+        ajax: {url:$table.data('url'), data:function (data) { data.payment_status=$('#sales-document-payment-status').val(); }}, order: [[3, 'desc']], buttons: [window.erpExcelButton($table)],
+        columns: [window.erpRowNumberColumn(),
             {data:'document_number', render:function (value, type, row) { return type === 'display' && row.show_url ? '<a href="'+text.display(row.show_url)+'">'+text.display(value)+'</a>' : value; }}, {data:'type_label', render:text.display}, {data:'document_date_label', name:'sales_documents.document_date'},
             {data:'due_date_label', name:'sales_documents.due_date'}, {data:'party_label', name:'sales_documents.party_code', render:text.display},
             {data:'total_amount', className:'text-end', render:$.fn.dataTable.render.number(',', '.', 2)},

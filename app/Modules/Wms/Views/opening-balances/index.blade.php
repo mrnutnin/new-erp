@@ -22,7 +22,7 @@
         <div class="card-body p-3 p-lg-4">
             <div class="table-responsive">
                 <table class="table table-hover align-middle w-100" id="opening-balances-table" data-url="{{ route('wms.opening-balances.data') }}">
-                    <thead><tr><th>วันที่ยอดยกมา</th><th>วิธีต้นทุน</th><th>จำนวนรายการ</th><th class="text-end">มูลค่ารวม</th><th>สถานะ</th><th class="text-end">จัดการ</th></tr></thead>
+                    <thead><tr><th>ลำดับ</th><th>วันที่ยอดยกมา</th><th>วิธีต้นทุน</th><th>จำนวนรายการ</th><th class="text-end">มูลค่ารวม</th><th>สถานะ</th><th class="text-end">จัดการ</th></tr></thead>
                 </table>
             </div>
         </div>
@@ -48,9 +48,10 @@ $(function () {
                 data.date_to = filters.find('.js-wms-filter-to').val();
             }
         },
-        order: [[0, 'desc']],
+        order: [[1, 'desc']],
         buttons: [window.erpExcelButton(tableElement)],
         columns: [
+            window.erpRowNumberColumn(),
             {data: 'cutover_date', name: 'cutover_date', render: escape.display},
             {data: 'costing_method_label', name: 'costing_method', render: escape.display},
             {data: 'line_count', name: 'line_count', className: 'text-end', render: escape.display},

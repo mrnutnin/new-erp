@@ -59,7 +59,7 @@ final class ProductionFinishedReceiptController extends Controller
             $query->where('document_date', '<', $request->date('date_to')->addDay()->startOfDay());
         }
 
-        return DataTables::eloquent($query->latest('id'))
+        return DataTables::eloquent($query)
             ->addColumn('line_count', fn ($r) => $r->lines->count())
             ->addColumn('item_label', fn ($r) => $r->lines->map(fn ($line) => trim(($line->item?->code ?: '').' · '.($line->item?->name ?: '-'), ' ·'))->unique()->implode(', '))
             ->addColumn('business_date', fn ($r) => $r->document_date?->format((string) ($settings->value('date_format') ?: 'd/m/Y')) ?: '-')
@@ -187,7 +187,7 @@ final class ProductionFinishedReceiptController extends Controller
 
         $this->scope($request, $document);
         $this->assertProduction($document);
-        $document->load(['warehouse:id,code,name', 'lines.item:id,code,name', 'lines.uom:id,code,name', 'lines.movement', 'lines.allocation.journalEntry.lines.account:id,code,name', 'creator:id,name']);
+        $document->load(['warehouse:id,code,name', 'lines.item:id,code,name', 'lines.uom:id,code,name', 'lines.movement', 'lines.allocation.journalEntry.lines.account:id,code,name', 'creator:id,name', 'photos.uploadedBy:id,name']);
         [$sourceIssue, $sourceIssueCostTotal] = $this->sourceIssue($request, (int) $document->source_issue_id);
         $totalQuantity = $document->lines->reduce(fn (BigDecimal $total, $line): BigDecimal => $total->plus((string) $line->quantity), BigDecimal::zero())->toScale(8, RoundingMode::HALF_UP);
         $totalValue = $document->lines->reduce(fn (BigDecimal $total, $line): BigDecimal => $total->plus((string) $line->value), BigDecimal::zero())->toScale(8, RoundingMode::HALF_UP);

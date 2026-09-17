@@ -18,7 +18,7 @@
     <div class="card border-0 shadow-sm">
         <div class="card-body">
             <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3"><div><h2 class="h5 mb-1">รายการที่ต้องตรวจสอบ</h2><p class="small text-secondary mb-0">ค้นหาและเรียงลำดับได้จากตารางด้านล่าง</p></div><span class="small text-secondary">ข้อมูลโหลดแบบ server-side</span></div>
-            <div class="table-responsive"><table id="legacy-review-table" class="table table-hover align-middle w-100" data-url="{{ route('wms.legacy-allocation-reviews.data') }}"><thead><tr><th>Allocation / Revision</th><th>Warehouse</th><th>สินค้า</th><th>Movement</th><th>สถานะ</th><th>จัดการ</th></tr></thead></table></div>
+            <div class="table-responsive"><table id="legacy-review-table" class="table table-hover align-middle w-100" data-url="{{ route('wms.legacy-allocation-reviews.data') }}"><thead><tr><th>ลำดับ</th><th>Allocation / Revision</th><th>Warehouse</th><th>สินค้า</th><th>Movement</th><th>สถานะ</th><th>จัดการ</th></tr></thead></table></div>
         </div>
     </div>
 </div>
@@ -26,7 +26,7 @@
 
 @push('scripts')
 <script>
-$(function () { var table = $('#legacy-review-table'); table.DataTable($.extend(true, {}, window.erpDataTableDefaults, { processing: true, serverSide: true, ajax: table.data('url'), buttons: [window.erpExcelButton(table)], columns: [
+$(function () { var table = $('#legacy-review-table'); table.DataTable($.extend(true, {}, window.erpDataTableDefaults, { processing: true, serverSide: true, ajax: table.data('url'), buttons: [window.erpExcelButton(table)], order: [[1, 'asc']], columns: [window.erpRowNumberColumn(),
  {data:'allocation_label',name:'allocation_id'}, {data:'warehouse_label',name:'warehouse_label',orderable:false}, {data:'item_label',name:'item_label',orderable:false}, {data:'movement_label',name:'movement_label',orderable:false}, {data:'status_label',name:'status',orderable:false,searchable:false}, {data:'action',name:'action',orderable:false,searchable:false,className:'text-end'}
 ] })); });
 </script>

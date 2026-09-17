@@ -1,6 +1,6 @@
 @extends('Finance::layout')
 
-@section('title', 'เติมเงินสดย่อย | New ERP')
+@section('title', 'เติมเงินสดย่อย | MintERP')
 
 @section('content')
     <div class="container-fluid px-3 px-lg-4 py-4">

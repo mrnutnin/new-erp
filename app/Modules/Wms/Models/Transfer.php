@@ -15,7 +15,7 @@ class Transfer extends Model
     protected $table = 'wms_transfers';
 
     protected $fillable = [
-        'source_warehouse_id', 'destination_warehouse_id', 'document_number', 'document_date',
+        'source_warehouse_id', 'destination_warehouse_id', 'document_number', 'document_date', 'note',
         'status', 'idempotency_key', 'dispatch_reason', 'reject_reason', 'created_by',
         'dispatched_by', 'dispatched_at', 'completed_by', 'completed_at',
         'void_reason', 'voided_by', 'voided_at',
@@ -65,6 +65,11 @@ class Transfer extends Model
     public function events()
     {
         return $this->hasMany(TransferEvent::class);
+    }
+
+    public function photos()
+    {
+        return $this->hasMany(TransferPhoto::class);
     }
 
     public function creator()

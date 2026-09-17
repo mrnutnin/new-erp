@@ -14,5 +14,7 @@ final class WmsDecimalFormatTest extends TestCase
         self::assertSame('-1,234.568', WmsDecimal::format(BigDecimal::of('-1234.5678'), 3));
         self::assertSame('0', WmsDecimal::format('0', 0));
         self::assertSame('-', WmsDecimal::format(null, 2));
+        self::assertSame('2.00', WmsDecimal::input('2.00000000', 2));
+        self::assertSame('1.235', WmsDecimal::input('1.23456', 3));
     }
 }

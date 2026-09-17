@@ -1,6 +1,6 @@
 @extends('Settings::layout')
 
-@section('title', 'บทบาทและสิทธิ์ | New ERP')
+@section('title', 'บทบาทและสิทธิ์ | MintERP')
 
 @section('content')
     <div class="container-fluid px-3 px-lg-4 py-4">

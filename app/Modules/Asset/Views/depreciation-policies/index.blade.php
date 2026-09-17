@@ -1,6 +1,6 @@
 @extends('Asset::layout')
 
-@section('title', 'คำขอเปลี่ยนนโยบายค่าเสื่อม | New ERP')
+@section('title', 'คำขอเปลี่ยนนโยบายค่าเสื่อม | MintERP')
 
 @section('content')
     <div class="container-fluid px-3 px-lg-4 py-4">

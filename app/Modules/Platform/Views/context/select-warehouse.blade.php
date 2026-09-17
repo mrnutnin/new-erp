@@ -1,6 +1,6 @@
 @extends('layouts.app')
 
-@section('title', 'เลือกคลัง | New ERP')
+@section('title', 'เลือกคลัง | MintERP')
 
 @section('content')
     <div class="selection-shell container py-5">

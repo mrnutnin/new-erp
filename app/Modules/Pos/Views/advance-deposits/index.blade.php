@@ -33,7 +33,7 @@
             </div>
             <div class="table-responsive">
                 <table id="advance-deposits-table" class="table table-hover align-middle w-100 mb-0" data-url="{{ route('pos.advance-deposits.data') }}">
-                    <thead class="table-light"><tr><th>เลขที่เอกสาร</th><th>วันที่</th><th>ลูกค้า</th><th>VAT</th><th class="text-end">ยอดรับ</th><th class="text-end">ใช้แล้ว</th><th class="text-end">คงเหลือ</th><th>ใช้กับ HS</th><th>อ้างอิง GL</th><th>สถานะ</th><th class="text-end">จัดการ</th></tr></thead>
+                    <thead class="table-light"><tr><th>ลำดับ</th><th>เลขที่เอกสาร</th><th>วันที่</th><th>ลูกค้า</th><th>VAT</th><th class="text-end">ยอดรับ</th><th class="text-end">ใช้แล้ว</th><th class="text-end">คงเหลือ</th><th>ใช้กับ HS</th><th>อ้างอิง GL</th><th>สถานะ</th><th class="text-end">จัดการ</th></tr></thead>
                 </table>
             </div>
         </div>
@@ -50,10 +50,10 @@ $(function () {
     const statusBadge = status => ({ DRAFT: 'app-badge-soft', POSTED: 'app-badge-success', PARTIAL: 'app-badge-info', APPLIED: 'app-badge-success', VOID: 'text-bg-danger' }[status] || 'app-badge-soft');
     const dt = table.DataTable($.extend(true, {}, window.erpDataTableDefaults, {
         ajax: { url: table.data('url'), data: d => { d.date_from = $('#ai-from').val(); d.date_to = $('#ai-to').val(); d.status = $('#ai-status').val(); d.party_id = $('#ai-party').val(); } },
-        order: [[1, 'desc']],
+        order: [[2, 'desc']],
         language: { search: 'ค้นหา:' },
         buttons: [window.erpExcelButton(table)],
-        columns: [
+        columns: [window.erpRowNumberColumn(),
             { data: 'document_number', render: (d, _, r) => '<a href="' + esc.display(r.show_url) + '">' + esc.display(d) + '</a>' },
             { data: 'document_date_label', render: esc.display }, { data: 'party_label', render: esc.display }, { data: 'tax_treatment_label', render: esc.display },
             { data: 'original_amount', className: 'text-end', render: money }, { data: 'applied_amount', className: 'text-end', render: money }, { data: 'remaining_amount', className: 'text-end fw-semibold', render: money },

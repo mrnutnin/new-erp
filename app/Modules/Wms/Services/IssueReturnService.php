@@ -51,6 +51,47 @@ final class IssueReturnService
         });
     }
 
+    public function updateIssue(IssueDocument $document, array $values, Warehouse $warehouse, User $user, AuditLogger $audit, Request $request): IssueDocument
+    {
+        return DB::transaction(function () use ($document, $values, $warehouse, $user, $audit, $request): IssueDocument {
+            $document = IssueDocument::query()->lockForUpdate()->findOrFail($document->id);
+            if ($document->status !== 'DRAFT') {
+                throw ValidationException::withMessages(['status' => 'แก้ไขได้เฉพาะใบเบิกร่าง']);
+            }
+            if ((int) $document->warehouse_id !== (int) $warehouse->id || (int) $document->branch_id !== (int) $warehouse->branch_id) {
+                throw ValidationException::withMessages(['warehouse_id' => 'คลังและสาขาของเอกสารไม่ตรงกับบริบทที่กำลังใช้งาน']);
+            }
+
+            $items = Item::query()->whereIn('id', collect($values['lines'])->pluck('item_id'))->get(['id', 'base_uom_id'])->keyBy('id');
+            foreach ($values['lines'] as $index => $line) {
+                $item = $items->get((int) $line['item_id']);
+                if (! $item || (int) $item->base_uom_id !== (int) $line['uom_id']) {
+                    throw ValidationException::withMessages(['lines.'.$index.'.uom_id' => 'ใบเบิกใช้หน่วย Stock ของสินค้าเท่านั้น']);
+                }
+            }
+
+            $before = $document->load('lines')->toArray();
+            $document->update([
+                'document_date' => $values['document_date'],
+                'issue_type' => $values['issue_type'],
+                'reason' => $values['reason'],
+            ]);
+            $document->lines()->delete();
+            foreach (array_values($values['lines']) as $index => $line) {
+                IssueLine::query()->create([
+                    'document_id' => $document->id,
+                    'item_id' => $line['item_id'],
+                    'uom_id' => $line['uom_id'],
+                    'quantity' => $line['quantity'],
+                    'line_number' => $index + 1,
+                ]);
+            }
+            $audit->record('wms.issue.updated', $document, $before, $document->fresh()->load('lines')->toArray(), $user, $request);
+
+            return $document->fresh('lines');
+        });
+    }
+
     public function approve(IssueDocument|IssueReturn $d, User $u, AuditLogger $audit, Request $r): IssueDocument|IssueReturn
     {
         return DB::transaction(function () use ($d, $u, $audit, $r) {

@@ -306,9 +306,9 @@ class CustomerController extends Controller
 
     private function applyOrder(Builder $query, Request $request): void
     {
-        $columns = [0 => 'parties.code', 1 => 'parties.name', 2 => 'parties.type', 3 => 'parties.tax_id', 4 => 'parties.contact_name',
-            5 => 'payment_terms.code', 6 => 'customer_roles.credit_limit', 7 => 'customer_roles.is_active'];
-        $column = $columns[(int) $request->input('order.0.column', 0)] ?? 'parties.code';
+        $columns = [1 => 'parties.code', 2 => 'parties.name', 3 => 'customer_group_name', 4 => 'parties.type', 5 => 'parties.tax_id', 6 => 'parties.contact_name',
+            7 => 'payment_terms.code', 8 => 'customer_roles.credit_limit', 9 => 'customer_roles.is_active'];
+        $column = $columns[(int) $request->input('order.0.column', 1)] ?? 'parties.code';
         $query->reorder($column, $request->input('order.0.dir') === 'desc' ? 'desc' : 'asc')->orderBy('parties.id');
     }
 

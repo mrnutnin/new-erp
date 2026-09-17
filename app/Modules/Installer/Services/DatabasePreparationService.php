@@ -171,13 +171,16 @@ class DatabasePreparationService
             'users' => ['profile_image_disk', 'profile_image_path', 'signature_disk', 'signature_path', 'signature_checksum', 'signature_mime_type', 'position', 'deleted_at'],
             'roles' => ['deleted_at'],
             'wms_inventory_adjustments' => ['deleted_at'],
+            'wms_transfers' => ['note', 'deleted_at'],
             'wms_inventory_adjustment_documents' => ['document_context', 'deleted_at'],
             'wms_opening_balance_batches' => ['deleted_at'],
             'wms_stock_count_documents' => ['deleted_at'],
             'wms_items' => ['cover_image_disk', 'cover_image_path', 'additional_images', 'deleted_at'],
+            'wms_transfer_photos' => ['transfer_id', 'stage', 'disk', 'path', 'original_name', 'mime_type', 'bytes', 'checksum', 'uploaded_by'],
+            'wms_document_photos' => ['document_type', 'document_id', 'disk', 'path', 'original_name', 'mime_type', 'bytes', 'checksum', 'uploaded_by'],
             'wms_production_receipt_sources' => ['receipt_document_id', 'issue_document_id', 'issue_line_id', 'source_allocation_id', 'source_allocation_revision', 'consumed_quantity', 'consumed_value'],
         ];
-        $requiredTables = ['wms_cost_revaluation_batches', 'wms_cost_revaluation_runs', 'wms_cost_revaluation_deltas', 'wms_production_receipt_sources', 'document_signature_snapshots'];
+        $requiredTables = ['wms_cost_revaluation_batches', 'wms_cost_revaluation_runs', 'wms_cost_revaluation_deltas', 'wms_production_receipt_sources', 'wms_transfer_photos', 'wms_document_photos', 'document_signature_snapshots'];
 
         foreach ($requiredTables as $table) {
             if (! Schema::hasTable($table)) {

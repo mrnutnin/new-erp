@@ -40,6 +40,11 @@ return [
                 'margin_bottom' => 16,
                 'margin_left' => 12,
             ],
+            'label_40x30' => ['format' => [40, 30], 'margin_top' => 2.5, 'margin_right' => 2.5, 'margin_bottom' => 2.5, 'margin_left' => 2.5],
+            'label_50x30' => ['format' => [50, 30], 'margin_top' => 2.5, 'margin_right' => 2.5, 'margin_bottom' => 2.5, 'margin_left' => 2.5],
+            'label_60x40' => ['format' => [60, 40], 'margin_top' => 3, 'margin_right' => 3, 'margin_bottom' => 3, 'margin_left' => 3],
+            'label_100x50' => ['format' => [100, 50], 'margin_top' => 4, 'margin_right' => 4, 'margin_bottom' => 4, 'margin_left' => 4],
+            'label_a4' => ['format' => 'A4', 'orientation' => 'P', 'margin_top' => 7, 'margin_right' => 6, 'margin_bottom' => 7, 'margin_left' => 6],
             // 9.5 x 5.5 inch continuous form; keep markup table-like.
             'dot_matrix' => [
                 'format' => [241.3, 139.7],

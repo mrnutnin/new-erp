@@ -54,7 +54,6 @@ final class IssueReturnController extends Controller
         if (!$productionMode && $request->filled('issue_type') && $issueTypeOptions->has($request->string('issue_type')->toString())) $query->where('issue_type', $request->string('issue_type')->toString());
         if ($request->filled('date_from')) $query->whereDate('document_date', '>=', $request->date('date_from'));
         if ($request->filled('date_to')) $query->whereDate('document_date', '<=', $request->date('date_to'));
-        $query->latest('id');
 
         return DataTables::eloquent($query)
             ->addColumn('business_date', fn ($row) => $row->document_date?->format((string) ($settings->value('date_format') ?: 'd/m/Y')) ?: '-')
@@ -72,6 +71,8 @@ final class IssueReturnController extends Controller
                 return $return->document_number.' · '.($labels[$return->status] ?? $return->status).' · '.WmsDecimal::format($return->lines->sum('quantity'));
             })->implode(' | ') ?: 'ยังไม่มีใบรับคืน')
             ->addColumn('show_url', fn ($row) => $productionMode ? route('wms.production.material-issues.show', $row) : route('wms.issues.show', $row))
+            ->addColumn('edit_url', fn ($row) => $productionMode ? route('wms.production.material-issues.edit', $row) : route('wms.issues.edit', $row))
+            ->addColumn('can_edit', fn ($row) => $row->status === 'DRAFT' && $request->user()->hasPermission('wms.issues.update'))
             ->addColumn('can_approve', fn ($row) => $row->status === 'DRAFT' && $request->user()->hasPermission('wms.issues.approve'))
             ->addColumn('can_post', fn ($row) => $row->status === 'APPROVED' && $request->user()->hasPermission('wms.issues.post'))
             ->addColumn('can_delete', fn ($row) => $row->status === 'DRAFT' && $request->user()->hasPermission('wms.issues.delete'))
@@ -108,10 +109,36 @@ final class IssueReturnController extends Controller
         ]);
     }
 
+    public function issueEdit(Request $request, IssueDocument $document): View
+    {
+        $this->scopeIssue($request, $document);
+        abort_unless($document->status === 'DRAFT' && $document->issue_type !== 'PRODUCTION', 422, 'แก้ไขได้เฉพาะใบเบิกร่าง');
+        $document->load(['lines.item:id,code,name', 'lines.uom:id,code,name']);
+
+        return view('Wms::issues.create', [
+            'document' => $document,
+            'issueTypes' => IssueType::query()->whereNull('warehouse_id')->where('is_active', true)->orderBy('name')->get(['code', 'name']),
+            'productionMode' => false,
+        ]);
+    }
+
+    public function issueUpdate(SaveIssueDocumentRequest $request, IssueDocument $document, IssueReturnService $service, AuditLogger $audit): JsonResponse
+    {
+        $this->scopeIssue($request, $document);
+        abort_unless($document->issue_type !== 'PRODUCTION', 404);
+        $values = $request->validated();
+        if (($values['issue_type'] ?? null) === 'PRODUCTION') {
+            throw ValidationException::withMessages(['issue_type' => 'เบิกเข้าผลิตต้องสร้างผ่านเมนูผลิตแบบ Manual']);
+        }
+        $service->updateIssue($document, $values, $request->attributes->get('selectedWarehouse'), $request->user(), $audit, $request);
+
+        return response()->json(['status' => true, 'msg' => 'แก้ไขร่างใบเบิกสินค้าแล้ว', 'redirect' => route('wms.issues.show', $document)]);
+    }
+
     public function issueShow(Request $request, IssueDocument $document, GlobalSettings $settings): View
     {
         $this->scopeIssue($request, $document);
-        $relations = ['warehouse:id,code,name', 'lines.item:id,code,name', 'lines.uom:id,code,name', 'lines.movement', 'lines.allocation', 'creator:id,name', 'issueReturns.lines.issueLine.item:id,code,name', 'issueReturns.lines.issueLine.uom:id,code,name'];
+        $relations = ['warehouse:id,code,name', 'lines.item:id,code,name', 'lines.uom:id,code,name', 'lines.movement', 'lines.allocation', 'creator:id,name', 'photos.uploadedBy:id,name', 'issueReturns.lines.issueLine.item:id,code,name', 'issueReturns.lines.issueLine.uom:id,code,name'];
         if ($document->issue_type === 'PRODUCTION' && Schema::hasColumn('wms_inventory_adjustment_documents', 'source_issue_id')) {
             $relations[] = 'finishedReceipts.lines.item:id,code,name';
             $relations[] = 'finishedReceipts.lines.uom:id,code,name';
@@ -203,7 +230,6 @@ final class IssueReturnController extends Controller
         if ($request->filled('status') && in_array($request->string('status')->toString(), ['DRAFT', 'APPROVED', 'POSTED', 'VOID', 'REVERSED'], true)) $query->where('status', $request->string('status')->toString());
         if ($request->filled('date_from')) $query->whereDate('document_date', '>=', $request->date('date_from'));
         if ($request->filled('date_to')) $query->whereDate('document_date', '<=', $request->date('date_to'));
-        $query->latest('id');
 
         return DataTables::eloquent($query)
             ->addColumn('business_date', fn ($row) => $row->document_date?->format((string) ($settings->value('date_format') ?: 'd/m/Y')) ?: '-')
@@ -246,7 +272,7 @@ final class IssueReturnController extends Controller
     public function returnShow(Request $request, IssueReturn $document, GlobalSettings $settings): View
     {
         $this->scopeReturn($request, $document);
-        $document->load(['warehouse:id,code,name', 'issue:id,document_number,document_date,issue_type,status,reason,warehouse_id', 'issue.lines.item:id,code,name', 'issue.lines.uom:id,code,name', 'lines.issueLine.item:id,code,name', 'lines.issueLine.uom:id,code,name', 'lines.movement', 'lines.allocation', 'lines.sourceAllocations.sourceAllocation', 'lines.sourceAllocations.movement', 'lines.sourceAllocations.allocation']);
+        $document->load(['warehouse:id,code,name', 'issue:id,document_number,document_date,issue_type,status,reason,warehouse_id', 'issue.lines.item:id,code,name', 'issue.lines.uom:id,code,name', 'lines.issueLine.item:id,code,name', 'lines.issueLine.uom:id,code,name', 'lines.movement', 'lines.allocation', 'lines.sourceAllocations.sourceAllocation', 'lines.sourceAllocations.movement', 'lines.sourceAllocations.allocation', 'photos.uploadedBy:id,name']);
         $history = AuditLog::query()->with('user:id,name')->where('subject_type', $document->getMorphClass())->where('subject_id', $document->id)->latest('created_at')->latest('id')->get();
 
         return view('Wms::issue-returns.show', ['document' => $document, 'history' => $history, 'dateFormat' => (string) ($settings->value('date_format') ?: 'd/m/Y')]);

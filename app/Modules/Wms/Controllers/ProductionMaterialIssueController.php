@@ -34,7 +34,7 @@ final class ProductionMaterialIssueController extends Controller
         $relations = ['lines.item:id,code,name', 'issueReturns.lines'];
         if (Schema::hasColumn('wms_inventory_adjustment_documents', 'source_issue_id')) $relations[] = 'finishedReceipts.lines';
         $query = IssueDocument::query()->with($relations)
-            ->where('warehouse_id', $warehouseId)->where('issue_type', 'PRODUCTION')->latest('id');
+            ->where('warehouse_id', $warehouseId)->where('issue_type', 'PRODUCTION');
         if ($request->filled('status')) $query->where('status', $request->string('status')->toString());
         if ($request->filled('date_from')) $query->whereDate('document_date', '>=', $request->date('date_from'));
         if ($request->filled('date_to')) $query->whereDate('document_date', '<=', $request->date('date_to'));
@@ -48,7 +48,9 @@ final class ProductionMaterialIssueController extends Controller
                 ? ($row->finishedReceipts->map(fn ($receipt) => $receipt->document_number.' · '.($labels[$receipt->status] ?? $receipt->status))->implode(' | ') ?: 'ยังไม่มีใบรับผลิต') : '-')
             ->addColumn('status_label', fn ($row) => $labels[$row->status] ?? $row->status)
             ->addColumn('show_url', fn ($row) => route('wms.production.material-issues.show', $row))
+            ->addColumn('edit_url', fn ($row) => route('wms.production.material-issues.edit', $row))
             ->addColumn('delete_url', fn ($row) => route('wms.production.material-issues.destroy', $row))
+            ->addColumn('can_edit', fn ($row) => $row->status === 'DRAFT' && $request->user()->hasPermission('wms.issues.update'))
             ->addColumn('can_delete', fn ($row) => $row->status === 'DRAFT' && $request->user()->hasPermission('wms.issues.delete'))
             ->toJson();
     }
@@ -69,7 +71,11 @@ final class ProductionMaterialIssueController extends Controller
 
     public function create(): View
     {
-        return view('Wms::production.material-issues.create');
+        return view('Wms::issues.create', [
+            'document' => new IssueDocument(),
+            'issueTypes' => collect([(object) ['code' => 'PRODUCTION', 'name' => 'เบิกเข้าผลิต']]),
+            'productionMode' => true,
+        ]);
     }
 
     public function store(SaveIssueDocumentRequest $request, IssueReturnService $service, DocumentSequenceService $sequences, AuditLogger $audit): JsonResponse
@@ -80,11 +86,34 @@ final class ProductionMaterialIssueController extends Controller
         return response()->json(['status' => true, 'msg' => 'บันทึกร่างใบเบิกวัตถุดิบผลิตแล้ว', 'redirect' => route('wms.production.material-issues.show', $document)]);
     }
 
+    public function edit(Request $request, IssueDocument $document): View
+    {
+        $this->scope($request, $document);
+        abort_unless($document->status === 'DRAFT', 422, 'แก้ไขได้เฉพาะใบเบิกร่าง');
+        $document->load(['lines.item:id,code,name', 'lines.uom:id,code,name']);
+
+        return view('Wms::issues.create', [
+            'document' => $document,
+            'issueTypes' => collect([(object) ['code' => 'PRODUCTION', 'name' => 'เบิกเข้าผลิต']]),
+            'productionMode' => true,
+        ]);
+    }
+
+    public function update(SaveIssueDocumentRequest $request, IssueDocument $document, IssueReturnService $service, AuditLogger $audit): JsonResponse
+    {
+        $this->scope($request, $document);
+        $values = $request->validated();
+        $values['issue_type'] = 'PRODUCTION';
+        $service->updateIssue($document, $values, $request->attributes->get('selectedWarehouse'), $request->user(), $audit, $request);
+
+        return response()->json(['status' => true, 'msg' => 'แก้ไขร่างใบเบิกวัตถุดิบผลิตแล้ว', 'redirect' => route('wms.production.material-issues.show', $document)]);
+    }
+
     public function show(Request $request, IssueDocument $document, GlobalSettings $settings): View
     {
         $this->scope($request, $document);
         abort_unless($document->issue_type === 'PRODUCTION', 404);
-        $document->load(['warehouse:id,code,name', 'lines.item:id,code,name', 'lines.uom:id,code,name', 'lines.movement', 'lines.allocation', 'creator:id,name', 'issueReturns.lines.issueLine.item:id,code,name', 'issueReturns.lines.issueLine.uom:id,code,name']);
+        $document->load(['warehouse:id,code,name', 'lines.item:id,code,name', 'lines.uom:id,code,name', 'lines.movement', 'lines.allocation', 'creator:id,name', 'photos.uploadedBy:id,name', 'issueReturns.lines.issueLine.item:id,code,name', 'issueReturns.lines.issueLine.uom:id,code,name']);
         if (Schema::hasColumn('wms_inventory_adjustment_documents', 'source_issue_id')) $document->load('finishedReceipts.lines.item:id,code,name');
         else $document->setRelation('finishedReceipts', collect());
         $stockBalances = StockBalance::query()->where('warehouse_id', $document->warehouse_id)->whereIn('item_id', $document->lines->pluck('item_id'))->get(['item_id', 'uom_id', 'available'])->keyBy(fn (StockBalance $balance): string => $balance->item_id.':'.$balance->uom_id);

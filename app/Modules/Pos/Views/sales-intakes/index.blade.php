@@ -42,7 +42,7 @@
                     <table id="si-table" class="table table-hover align-middle w-100 mb-0"
                         data-url="{{ route('pos.sales-intakes.data') }}">
                         <thead class="table-light">
-                            <tr>
+                            <tr><th>ลำดับ</th>
                                 <th>เลขที่</th>
                                 <th>วันที่</th>
                                 <th>ลูกค้า</th>
@@ -89,7 +89,7 @@
             const table = $('#si-table');
             const t = table.DataTable($.extend(true, {}, window.erpDataTableDefaults, {
                 order: [
-                    [1, 'desc']
+                    [2, 'desc']
                 ],
                 language: {
                     search: 'ค้นหา:'
@@ -104,7 +104,7 @@
                         d.status = $('#si-status').val();
                     }
                 },
-                columns: [{
+                columns: [window.erpRowNumberColumn(),{
                     data: 'document_number',
                     render: (d, _, r) => `<a href="${esc(r.show_url)}">${esc(d)}</a>`
                 }, {

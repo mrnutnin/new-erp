@@ -1,5 +1,5 @@
 @extends('Accounting::layout')
-@section('title', 'กระแสเงินสด | New ERP')
+@section('title', 'กระแสเงินสด | MintERP')
 @section('content')
 @php($selectedPeriodId = (int) ($selectedPeriodId ?? request('period_id')))
 <div class="container-fluid px-3 px-lg-4 py-4">

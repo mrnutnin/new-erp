@@ -1,5 +1,5 @@
 @extends('Accounting::layout')
-@section('title', 'กระทบยอดบัญชีคุม | New ERP')
+@section('title', 'กระทบยอดบัญชีคุม | MintERP')
 @section('content')
 @php($defaultPeriod = $periods->first(fn ($period) => now()->between($period->start_date, $period->end_date)) ?: $periods->first())
 @php($selectedPeriodId = (int) request('period_id', optional($defaultPeriod)->id))

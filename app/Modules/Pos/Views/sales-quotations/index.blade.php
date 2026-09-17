@@ -37,7 +37,7 @@
                     <table id="quotation-table" class="table table-hover align-middle w-100"
                         data-url="{{ route('pos.sales-quotations.data') }}">
                         <thead>
-                            <tr>
+                            <tr><th>ลำดับ</th>
                                 <th>เลขที่</th>
                                 <th>วันที่</th>
                                 <th>ลูกค้า</th>
@@ -81,7 +81,8 @@
                     }
                 },
                 buttons: [window.erpExcelButton(table)],
-                columns: [{
+                order: [[1, 'asc']],
+                columns: [window.erpRowNumberColumn(),{
                     data: 'document_number',
                     render: (d, _, r) => `<a href="${r.show_url}">${esc(d)}</a>`
                 }, {

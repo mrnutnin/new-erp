@@ -21,7 +21,7 @@
         <div class="col-6 col-lg"><div class="card border-0 shadow-sm h-100"><div class="card-body"><div class="text-secondary small">ต้นทุนเฉลี่ย</div><div class="h4 mb-0" id="stock-average-unit-cost">-</div></div></div></div>
         <div class="col-6 col-lg"><div class="card border-0 shadow-sm h-100"><div class="card-body"><div class="text-secondary small">มูลค่าคงเหลือ</div><div class="h4 mb-0" id="stock-inventory-value">-</div></div></div></div>
     </div>
-    <div class="card border-0 shadow-sm"><div class="card-body p-3 p-lg-4"><div class="table-responsive"><table id="stock-table" class="table table-hover w-100" data-url="{{ route('wms.stock.summary') }}" data-movement-url="{{ route('wms.stock.data') }}"><thead><tr><th>สินค้า</th><th>หน่วย</th><th>คงเหลือ ณ วันที่</th><th>ต้นทุนเฉลี่ย</th><th>มูลค่า</th><th>จัดการ</th></tr></thead></table></div></div></div>
+    <div class="card border-0 shadow-sm"><div class="card-body p-3 p-lg-4"><div class="table-responsive"><table id="stock-table" class="table table-hover w-100" data-url="{{ route('wms.stock.summary') }}" data-movement-url="{{ route('wms.stock.data') }}"><thead><tr><th>ลำดับ</th><th>สินค้า</th><th>หน่วย</th><th>คงเหลือ ณ วันที่</th><th>ต้นทุนเฉลี่ย</th><th>มูลค่า</th><th>จัดการ</th></tr></thead></table></div></div></div>
 </div>
 @endsection
 
@@ -33,7 +33,9 @@ $(function () {
     var table = tableElement.DataTable($.extend(true, {}, window.erpDataTableDefaults, {
         ajax: {url: tableElement.data('url'), data: function (data) { data.as_of = $('#stock-as-of').val(); data.stock_status = $('#stock-status').val(); }},
         buttons: [window.erpExcelButton(tableElement)],
+        order: [[1, 'asc']],
         columns: [
+            window.erpRowNumberColumn(),
             {data: 'item_label', name: 'wms_items.code', render: textRenderer.display},
             {data: 'uom_label', name: 'wms_uoms.code', searchable: false, render: textRenderer.display},
             {data: 'on_hand', searchable: false, className: 'text-end', render: textRenderer.display},

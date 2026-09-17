@@ -24,7 +24,7 @@ final class TransferContract
             self::fail('idempotency_key', 'ต้องระบุ idempotency key ไม่เกิน 160 ตัวอักษร');
         }
 
-        return [...$attributes, 'source_warehouse_id' => $source, 'destination_warehouse_id' => $destination, 'document_date' => $date, 'idempotency_key' => $key];
+        return [...$attributes, 'source_warehouse_id' => $source, 'destination_warehouse_id' => $destination, 'document_date' => $date, 'note' => filled($attributes['note'] ?? null) ? trim((string) $attributes['note']) : null, 'idempotency_key' => $key];
     }
 
     public static function normalizeQuantity(mixed $value, string $field = 'quantity'): string

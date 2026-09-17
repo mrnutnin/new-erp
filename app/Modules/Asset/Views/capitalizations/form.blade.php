@@ -1,5 +1,5 @@
 @extends('Asset::layout')
-@section('title', 'สร้าง'.$documentLabel.' | New ERP')
+@section('title', 'สร้าง'.$documentLabel.' | MintERP')
 @section('content')
     @php($isManual = old('source_type', request('source_type')) === 'MANUAL_RECLASS')
     <div class="container-fluid px-3 px-lg-4 py-4"><div class="mb-4"><p class="eyebrow mb-2">ASSET / {{ $isAddition ? 'ADDITION' : 'CAPITALIZATION' }}</p><h1 class="h3 mb-2">สร้าง{{ $documentLabel }}</h1><p class="text-secondary mb-0">{{ $isAddition ? 'เพิ่มต้นทุนของสินทรัพย์ Active จากใบแจ้งหนี้ซื้อหรือบัญชีพักสินทรัพย์' : 'รับรู้จากใบแจ้งหนี้ซื้อ หรือโอนจากบัญชีพัก/ค่าใช้จ่ายสำหรับสินทรัพย์ที่เพิ่มเอง' }}</p></div>

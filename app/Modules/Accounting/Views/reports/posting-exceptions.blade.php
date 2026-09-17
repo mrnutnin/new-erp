@@ -1,5 +1,5 @@
 @extends('Accounting::layout')
-@section('title', 'Posting Error / Exception | New ERP')
+@section('title', 'Posting Error / Exception | MintERP')
 @section('content')
 <div class="container-fluid px-3 px-lg-4 py-4">
     <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-end gap-3 mb-4"><div><p class="eyebrow mb-2">ACCOUNTING / AUDIT & CONTROL</p><h1 class="h3 mb-2">Posting Error / Exception</h1><p class="text-secondary mb-0">ตรวจสอบรายการที่ระบบ Post ไม่สำเร็จและดำเนินการแก้ไข</p></div><a class="btn btn-outline-secondary" href="{{ route('accounting.workflow.index') }}"><i class="bx bx-map-alt me-1"></i>เปิดคู่มือการทำงาน</a></div>

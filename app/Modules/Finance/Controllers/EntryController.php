@@ -150,6 +150,7 @@ class EntryController extends Controller
         }
 
         $unbalanced = DB::table('journal_entries as je')->join('journal_entry_lines as jel', 'jel.journal_entry_id', '=', 'je.id')
+            ->select('je.id')
             ->whereIn('je.source_type', ['FINANCE_PETTY_CASH', 'FINANCE_PETTY_CASH_TOP_UP', 'FINANCE_PETTY_CASH_CLEARING', 'FINANCE_EMPLOYEE_ADVANCE', 'FIN_EMP_ADV_CLEARING'])
             ->whereIn('je.warehouse_id', $warehouseIds)->groupBy('je.id')
             ->havingRaw('ABS(ROUND(SUM(jel.debit), 2) - ROUND(SUM(jel.credit), 2)) >= 0.005')->get()->count();

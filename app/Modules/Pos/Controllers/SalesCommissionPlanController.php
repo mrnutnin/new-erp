@@ -44,8 +44,8 @@ class SalesCommissionPlanController extends Controller
                 }
             })
             ->order(function (Builder $query) use ($request): void {
-                $columns = [0 => 'code', 1 => 'name', 2 => 'basis', 3 => 'rate', 4 => 'effective_from', 5 => 'effective_to', 6 => 'assignments_count', 7 => 'is_active'];
-                $query->reorder($columns[(int) $request->input('order.0.column', 0)] ?? 'code', $request->input('order.0.dir') === 'desc' ? 'desc' : 'asc')->orderByDesc('id');
+                $columns = [1 => 'code', 2 => 'name', 3 => 'basis', 4 => 'rate', 5 => 'effective_from', 6 => 'effective_to', 7 => 'assignments_count', 8 => 'is_active'];
+                $query->reorder($columns[(int) $request->input('order.0.column', 1)] ?? 'code', $request->input('order.0.dir') === 'desc' ? 'desc' : 'asc')->orderByDesc('id');
             })
             ->addColumn('basis_label', fn (SalesCommissionPlan $plan) => $this->basisLabel($plan->basis))
             ->editColumn('effective_from', fn (SalesCommissionPlan $plan) => $plan->effective_from?->format('d/m/Y') ?: '—')

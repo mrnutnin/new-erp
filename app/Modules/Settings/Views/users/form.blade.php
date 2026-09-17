@@ -1,6 +1,6 @@
 @extends('Settings::layout')
 
-@section('title', ($user->exists ? 'แก้ไข' : 'เพิ่ม').'ผู้ใช้งาน | New ERP')
+@section('title', ($user->exists ? 'แก้ไข' : 'เพิ่ม').'ผู้ใช้งาน | MintERP')
 
 @section('content')
     <div class="container-fluid px-3 px-lg-4 py-4">

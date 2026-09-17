@@ -1,6 +1,6 @@
 @extends('Accounting::layout')
 
-@section('title', ($account->exists ? 'แก้ไข' : 'เพิ่ม').'บัญชี | New ERP')
+@section('title', ($account->exists ? 'แก้ไข' : 'เพิ่ม').'บัญชี | MintERP')
 
 @section('content')
     @php($accountClass = old('account_class', $account->control_account_type ? 'CONTROL' : ($account->is_postable ? 'SUBACCOUNT' : 'SUMMARY')))

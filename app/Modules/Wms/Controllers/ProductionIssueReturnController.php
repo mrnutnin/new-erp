@@ -27,7 +27,7 @@ final class ProductionIssueReturnController extends Controller
     {
         $warehouseId = (int) $request->attributes->get('selectedWarehouse')->id;
         $labels = ['DRAFT' => 'ร่าง', 'APPROVED' => 'อนุมัติแล้ว', 'POSTED' => 'ลง Stock แล้ว', 'VOID' => 'ยกเลิกเอกสาร', 'REVERSED' => 'ยกเลิกเอกสารแล้ว'];
-        $query = IssueReturn::query()->with(['issue:id,document_number,issue_type', 'lines'])->where('warehouse_id', $warehouseId)->whereHas('issue', fn ($issue) => $issue->where('issue_type', 'PRODUCTION'))->latest('id');
+        $query = IssueReturn::query()->with(['issue:id,document_number,issue_type', 'lines'])->where('warehouse_id', $warehouseId)->whereHas('issue', fn ($issue) => $issue->where('issue_type', 'PRODUCTION'));
         if ($request->filled('status')) $query->where('status', $request->string('status')->toString());
         if ($request->filled('date_from')) $query->whereDate('document_date', '>=', $request->date('date_from'));
         if ($request->filled('date_to')) $query->whereDate('document_date', '<=', $request->date('date_to'));

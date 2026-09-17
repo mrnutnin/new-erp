@@ -1,5 +1,5 @@
 @extends('Asset::layout')
-@section('title', 'Import Batch สินทรัพย์ | New ERP')
+@section('title', 'Import Batch สินทรัพย์ | MintERP')
 @section('content')
 <div class="container-fluid px-3 px-lg-4 py-4">
     <div class="d-flex flex-wrap justify-content-between align-items-end gap-3 mb-4"><div><p class="eyebrow mb-2">ASSET / IMPORT BATCHES</p><h1 class="h3 mb-2">Import Batch สินทรัพย์</h1><p class="text-secondary mb-0">ติดตามชุดข้อมูลยอดยกมาที่อัปโหลด ตรวจสอบ และนำเข้าสู่ทะเบียนสินทรัพย์</p></div><a class="btn btn-app-primary" href="{{ route('asset.assets.import.create') }}"><i class="bx bx-upload me-1" aria-hidden="true"></i>นำเข้าไฟล์ใหม่</a></div>

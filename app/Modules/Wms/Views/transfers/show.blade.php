@@ -28,6 +28,9 @@
         </div>
         <div class="d-flex flex-wrap gap-2">
             <a class="btn btn-outline-secondary" href="{{ route($backRoute) }}"><i class="bx bx-arrow-back me-1" aria-hidden="true"></i>กลับหน้ารายการ</a>
+            @if($transfer->status === 'DRAFT' && $isSource && auth()->user()->hasPermission('wms.transfers.update'))
+                <a class="btn btn-app-soft" href="{{ route('wms.transfers.edit', $transfer) }}"><i class="bx bx-edit me-1" aria-hidden="true"></i>แก้ไข</a>
+            @endif
             @if($transfer->status === 'DRAFT' && $isSource && auth()->user()->hasPermission('wms.transfers.dispatch'))
                 <button class="btn btn-app-primary" id="transfer-dispatch" type="button" data-url="{{ route('wms.transfers.dispatch', $transfer) }}"><i class="bx bx-send me-1" aria-hidden="true"></i>ส่งออกจากคลัง</button>
             @endif
@@ -60,6 +63,7 @@
                 <div class="col-12 col-md-3"><div class="text-secondary small">คลังต้นทาง</div><div class="fw-semibold">{{ collect([$transfer->sourceWarehouse?->code, $transfer->sourceWarehouse?->name])->filter()->implode(' · ') ?: '-' }}</div></div>
                 <div class="col-12 col-md-3"><div class="text-secondary small">คลังปลายทาง</div><div class="fw-semibold">{{ collect([$transfer->destinationWarehouse?->code, $transfer->destinationWarehouse?->name])->filter()->implode(' · ') ?: '-' }}</div></div>
                 <div class="col-12 col-md-3"><div class="text-secondary small">ผู้สร้าง</div><div class="fw-semibold">{{ $transfer->creator?->name ?: '-' }}</div></div>
+                <div class="col-12"><div class="text-secondary small">หมายเหตุ</div><div class="fw-semibold text-break">{{ $transfer->note ?: '-' }}</div></div>
                 @if($transfer->dispatched_at)
                     <div class="col-12 col-md-3"><div class="text-secondary small">วันที่ส่งออก</div><div class="fw-semibold">{{ $transfer->dispatched_at->format($dateFormat.' H:i') }}</div></div>
                 @endif
@@ -92,6 +96,8 @@
             </div>
         </div>
     </div>
+
+    @include('Wms::transfers._photos')
 
     <div class="card border-0 shadow-sm mb-4">
         <div class="card-body p-3 p-lg-4">

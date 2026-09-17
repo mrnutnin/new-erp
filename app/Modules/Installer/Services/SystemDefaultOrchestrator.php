@@ -21,7 +21,7 @@ class SystemDefaultOrchestrator
 {
     /** @var array<string, string> */
     private const SEED_VERSIONS = [
-        'core.rbac' => '1.6',
+        'core.rbac' => '1.8',
         'core.programs' => '1.0',
         'accounting.journal_books' => '1.0',
         'accounting.chart_of_accounts' => '1.5',

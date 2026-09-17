@@ -1,6 +1,6 @@
 @extends('Accounting::layout')
 
-@section('title', 'Journal Approval Queue | New ERP')
+@section('title', 'Journal Approval Queue | MintERP')
 
 @section('content')
     <div class="container-fluid px-3 px-lg-4 py-4">

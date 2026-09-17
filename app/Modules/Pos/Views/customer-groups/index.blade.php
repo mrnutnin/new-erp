@@ -12,7 +12,7 @@
     </div>
     <div class="card border-0 shadow-sm"><div class="card-body p-3 p-lg-4"><div class="table-responsive">
         <table id="customer-groups-table" class="table table-hover align-middle w-100" data-url="{{ route('pos.customer-groups.data') }}" data-can-update="{{ auth()->user()->hasPermission('pos.customer-groups.update') ? 1 : 0 }}" data-can-delete="{{ auth()->user()->hasPermission('pos.customer-groups.delete') ? 1 : 0 }}">
-            <thead><tr><th>รหัส</th><th>ชื่อกลุ่ม</th><th>ลูกค้าที่ใช้</th><th>สถานะ</th><th class="text-end">จัดการ</th></tr></thead>
+            <thead><tr><th>ลำดับ</th><th>รหัส</th><th>ชื่อกลุ่ม</th><th>ลูกค้าที่ใช้</th><th>สถานะ</th><th class="text-end">จัดการ</th></tr></thead>
         </table>
     </div></div></div>
 </div>
@@ -23,8 +23,8 @@
 $(function () {
     var table = $('#customer-groups-table'), text = $.fn.dataTable.render.text();
     table.DataTable($.extend(true, {}, window.erpDataTableDefaults, {
-        ajax: table.data('url'), order: [[0, 'asc']], buttons: [window.erpExcelButton(table)],
-        columns: [
+        ajax: table.data('url'), order: [[1, 'asc']], buttons: [window.erpExcelButton(table)],
+        columns: [window.erpRowNumberColumn(),
             {data:'code', name:'code', render:text.display},
             {data:'name', name:'name', render:text.display},
             {data:'party_count', name:'party_count', className:'text-end'},

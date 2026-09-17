@@ -43,8 +43,8 @@ class PriceListController extends Controller
                 }
             })
             ->order(function (Builder $query) use ($request): void {
-                $columns = [0 => 'pos_price_lists.code', 1 => 'pos_price_lists.name', 2 => 'pos_price_lists.customer_group_code', 3 => 'pos_price_lists.currency', 4 => 'pos_price_lists.priority', 5 => 'pos_price_lists.effective_from', 6 => 'pos_price_lists.is_active'];
-                $column = $columns[(int) $request->input('order.0.column', 0)] ?? 'pos_price_lists.code';
+                $columns = [1 => 'pos_price_lists.code', 2 => 'pos_price_lists.name', 3 => 'pos_price_lists.customer_group_code', 4 => 'pos_price_lists.currency', 5 => 'items_count', 6 => 'pos_price_lists.effective_from', 7 => 'pos_price_lists.effective_to', 8 => 'pos_price_lists.priority', 9 => 'pos_price_lists.is_active'];
+                $column = $columns[(int) $request->input('order.0.column', 1)] ?? 'pos_price_lists.code';
                 $query->reorder($column, $request->input('order.0.dir') === 'desc' ? 'desc' : 'asc')->orderBy('pos_price_lists.id', 'desc');
             })
             ->addColumn('group_label', fn (PriceList $priceList) => $priceList->customer_group_code ?: 'ทุกกลุ่ม')

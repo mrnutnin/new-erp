@@ -20,7 +20,7 @@
             <div class="app-shell">
                 <aside class="app-sidebar">
                     <div class="d-flex align-items-center justify-content-between gap-2">
-                        <a class="app-brand text-decoration-none text-dark" href="{{ route('entry') }}">New ERP</a>
+                        <a class="app-brand text-decoration-none text-dark" href="{{ route('entry') }}">MintERP</a>
                         <button id="app-sidebar-toggle" class="btn btn-sm btn-outline-secondary" type="button" aria-label="ย่อเมนู" aria-expanded="true" title="ย่อเมนู"><i class="bx bx-menu" aria-hidden="true"></i></button>
                     </div>
                     <nav class="app-sidebar-nav mt-4" aria-label="เมนูหลัก">
@@ -43,6 +43,7 @@
                                 <i class="bx bx-log-out" aria-hidden="true"></i><span>ออกจากระบบ</span>
                             </button>
                         </form>
+                        <p class="app-sidebar-copyright mb-0">© {{ now()->year }} AlexiaSoft Company Limited</p>
                     </div>
                 </aside>
                 <button id="app-sidebar-backdrop" class="app-sidebar-backdrop" type="button" aria-label="ปิดเมนู"></button>
@@ -85,7 +86,7 @@
         @else
             <header class="app-header border-bottom bg-white">
                 <div class="container-fluid d-flex align-items-center justify-content-between py-3">
-                    <a class="app-brand text-decoration-none text-dark" href="{{ route('entry') }}">New ERP</a>
+                    <a class="app-brand text-decoration-none text-dark" href="{{ route('entry') }}">MintERP</a>
                     <div class="d-flex align-items-center gap-3">
                         <a class="app-header-profile text-secondary small text-decoration-none" href="{{ route('profile.edit') }}">
                             <span class="app-user-avatar">
