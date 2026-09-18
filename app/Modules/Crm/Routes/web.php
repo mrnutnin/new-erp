@@ -14,6 +14,7 @@ use App\Modules\Crm\Controllers\NotificationController;
 use App\Modules\Crm\Controllers\OpportunityController;
 use App\Modules\Crm\Controllers\OwnershipTransferController;
 use App\Modules\Crm\Controllers\ProductInterestController;
+use App\Modules\Crm\Controllers\ReportController;
 use App\Modules\Crm\Controllers\SalesTeamController;
 use App\Modules\Crm\Controllers\TeamWorkController;
 use App\Modules\Crm\Controllers\WorkflowController;
@@ -27,6 +28,9 @@ Route::middleware(['auth', 'program:crm', 'branch'])->prefix('crm')->name('crm.'
     Route::get('/calendar/export', [CalendarController::class, 'export'])->middleware('permission:crm.calendar.view')->name('calendar.export');
     Route::get('/calendar/owner-options', [CalendarController::class, 'ownerOptions'])->middleware('permission:crm.calendar.view')->name('calendar.owner-options');
     Route::get('/calendar/opportunity-options', [CalendarController::class, 'opportunityOptions'])->middleware(['permission:crm.calendar.view', 'permission:crm.activities.create'])->name('calendar.opportunity-options');
+    Route::get('/reports', [ReportController::class, 'index'])->middleware('permission:crm.forecast.view')->name('reports.index');
+    Route::get('/reports/data', [ReportController::class, 'data'])->middleware('permission:crm.forecast.view')->name('reports.data');
+    Route::get('/reports/export', [ReportController::class, 'export'])->middleware('permission:crm.forecast.view')->name('reports.export');
     Route::get('/forecast', [ForecastController::class, 'index'])->middleware('permission:crm.forecast.view')->name('forecast.index');
     Route::get('/forecast/data', [ForecastController::class, 'data'])->middleware('permission:crm.forecast.view')->name('forecast.data');
     Route::get('/forecast/owner-options', [ForecastController::class, 'ownerOptions'])->middleware('permission:crm.forecast.view')->name('forecast.owner-options');

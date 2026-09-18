@@ -62,6 +62,19 @@
 - [x] วิเคราะห์แหล่งที่มา สินค้าที่สนใจ และเหตุผล Lost ตามเดือน/ทีม/ผู้รับผิดชอบแบบ Top 8
 - [x] แจ้งดีลเสี่ยงจาก Next action, วันที่คาดปิด และ inactivity ผ่าน Forecast พร้อม In-app/Web Push รายวันแบบ idempotent
 
+### Reports & Analytics — แผนถัดไป
+
+> Implementation specification: [`CRM_REPORTS_DESIGN.md`](CRM_REPORTS_DESIGN.md)
+
+- [x] มีข้อมูล Pipeline, Weighted Forecast, Target เทียบ Actual จาก POS, Conversion, Win rate, Sales cycle และ Stage duration ใน Sales Forecast
+- [x] มีการวิเคราะห์ Source, Product Interest, Lost reason และ Opportunity เสี่ยงตามเดือน/ทีม/ผู้รับผิดชอบ
+- [ ] ปรับ Sales Forecast เป็นศูนย์ `รายงานและวิเคราะห์` โดย reuse query และนิยามตัวเลขเดิม ไม่สร้างข้อมูลสรุปซ้ำ
+- [ ] เพิ่มรายงานกิจกรรมทีมขาย: Call/Meeting/Task, Planned/Completed/Overdue, Completion rate และกิจกรรมที่สัมพันธ์กับ WON
+- [ ] รองรับตัวกรองช่วงวันที่ ทีม และผู้รับผิดชอบ โดย enforce branch/team scope ฝั่ง Server
+- [ ] Drill-down จากตัวเลขไปยัง Opportunity/Activity ต้นทาง และส่งออก Excel ตามผลลัพธ์ที่กรอง
+- [ ] ใช้ยอดขายจริงจาก POS และข้อมูลการเงินจาก Finance เป็น Source of Truth; CRM ไม่คำนวณยอดจริงซ้ำ
+- [ ] ยังไม่ทำ Generic Report Builder, รายงาน PDF หรือกราฟที่ไม่มี Action ต่อ จนกว่าจะมีความต้องการใช้งานจริง
+
 ### Lead Management — เลื่อนไปหลัง MVP
 - [ ] รับ Lead จากเว็บ, QR และ Import Excel
 - [ ] มอบหมายตามสาขา เขต ประเภทลูกค้า หรือ workload

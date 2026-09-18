@@ -94,9 +94,15 @@
 
 ## 8. Reporting & Future Extensions
 
-- [ ] Conversion funnel และ average sales cycle
-- [ ] Lost reason/source performance
-- [ ] Activity productivity รายพนักงาน
+> แบบหน้าจอ นิยามตัวเลข Routes และ Acceptance Criteria: [`CRM_REPORTS_DESIGN.md`](CRM_REPORTS_DESIGN.md)
+
+- [x] Conversion funnel, Win rate, average sales cycle และ Stage duration
+- [x] Lost reason, source และ Product Interest performance
+- [x] Forecast เทียบ Target และ Actual ที่ POSTED จาก POS
+- [ ] รวม Sales Forecast เดิมเป็นศูนย์ `รายงานและวิเคราะห์` โดยไม่สร้าง query หรือนิยามตัวเลขซ้ำ
+- [ ] Activity productivity รายพนักงาน/ทีม: Planned, Completed, Overdue, Completion rate และความสัมพันธ์กับ WON
+- [ ] ตัวกรองช่วงวันที่/ทีม/ผู้รับผิดชอบ, Server-side scope, Drill-down และ Excel export สำหรับรายงาน CRM
+- [ ] Generic Report Builder และ PDF report — เลื่อนจนกว่าจะมี Use case ที่รายงานมาตรฐานรองรับไม่ได้
 - [ ] Campaign/segment management
 - [ ] Customer service case/ticket และ SLA
 - [ ] Import/export leads แบบตรวจสอบข้อมูลก่อน commit

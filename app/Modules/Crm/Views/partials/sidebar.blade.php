@@ -1,5 +1,5 @@
 @php
-    $analyticsMenuActive = request()->routeIs('crm.forecast.*') || request()->routeIs('crm.customers.duplicates*');
+    $analyticsMenuActive = request()->routeIs('crm.forecast.*') || request()->routeIs('crm.reports.*') || request()->routeIs('crm.customers.duplicates*');
     $teamMenuActive = request()->routeIs('crm.team-work.*') || request()->routeIs('crm.teams.*') || request()->routeIs('crm.ownership-transfers.*');
 @endphp
 
@@ -29,7 +29,7 @@
     <div class="list-group mb-4">
         <button class="list-group-item list-group-item-action d-flex align-items-center justify-content-between {{ $analyticsMenuActive ? 'active' : '' }}" type="button" data-bs-toggle="collapse" data-bs-target="#crm-analytics-menu" aria-expanded="{{ $analyticsMenuActive ? 'true' : 'false' }}" aria-controls="crm-analytics-menu"><span><i class="bx bx-line-chart me-2" aria-hidden="true"></i>วิเคราะห์และติดตาม</span><i class="bx bx-chevron-down" aria-hidden="true"></i></button>
         <div id="crm-analytics-menu" class="collapse {{ $analyticsMenuActive ? 'show' : '' }}">
-            @if(auth()->user()->hasPermission('crm.forecast.view'))<a class="list-group-item list-group-item-action border-0 small fw-normal ps-5 {{ request()->routeIs('crm.forecast.*') ? 'active' : '' }}" href="{{ route('crm.forecast.index') }}">Sales Forecast</a>@endif
+            @if(auth()->user()->hasPermission('crm.forecast.view'))<a class="list-group-item list-group-item-action border-0 small fw-normal ps-5 {{ request()->routeIs('crm.forecast.*') ? 'active' : '' }}" href="{{ route('crm.reports.index', ['tab' => 'sales']) }}">รายงานและวิเคราะห์</a>@endif
             @if(auth()->user()->hasPermission('crm.customers.update'))<a class="list-group-item list-group-item-action border-0 small fw-normal ps-5 {{ request()->routeIs('crm.customers.duplicates*') ? 'active' : '' }}" href="{{ route('crm.customers.duplicates') }}">ตรวจสอบลูกค้าซ้ำ</a>@endif
         </div>
     </div>
