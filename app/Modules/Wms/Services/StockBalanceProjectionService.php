@@ -52,7 +52,9 @@ final class StockBalanceProjectionService
             });
 
         $reserved = DB::table('wms_stock_reservations')
-            ->where($key)->where('status', 'OPEN')->sum('quantity');
+            ->where($key)->where('status', 'OPEN')
+            ->selectRaw('COALESCE(SUM(quantity - consumed_quantity), 0) AS quantity')
+            ->value('quantity');
         $onHand = $onHand->toScale(8, RoundingMode::UNNECESSARY);
         $reserved = BigDecimal::of((string) $reserved)->toScale(8, RoundingMode::UNNECESSARY);
         $inventoryValue = $onHand->isZero()

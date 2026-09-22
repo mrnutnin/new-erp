@@ -3,6 +3,7 @@
 namespace App\Modules\Wms\Services;
 
 use App\Models\User;
+use App\Models\Warehouse;
 use App\Modules\Settings\Services\GlobalSettings;
 use App\Modules\Wms\Models\CostAllocation;
 use App\Modules\Wms\Models\Item;
@@ -39,6 +40,7 @@ final class TransferMovementService
         if ($lines === []) {
             throw ValidationException::withMessages(['lines' => 'ต้องมีรายการสินค้าอย่างน้อยหนึ่งรายการ']);
         }
+        $this->assertSameBranch($header);
 
         return DB::transaction(function () use ($header, $lines, $actorId): Transfer {
             $existing = Transfer::query()->where('idempotency_key', $header['idempotency_key'])->lockForUpdate()->first();
@@ -88,6 +90,7 @@ final class TransferMovementService
 
         return DB::transaction(function () use ($transfer, $attributes, $lines): Transfer {
             $transfer = Transfer::query()->lockForUpdate()->findOrFail($transfer->id);
+            $this->assertSameBranch(['source_warehouse_id' => $transfer->source_warehouse_id, 'destination_warehouse_id' => $attributes['destination_warehouse_id'] ?? null]);
             if ($transfer->status !== 'DRAFT' || $transfer->events()->exists()) {
                 throw ValidationException::withMessages(['status' => 'แก้ไขได้เฉพาะใบโอนร่างที่ยังไม่มีการเคลื่อนไหว']);
             }
@@ -435,6 +438,17 @@ final class TransferMovementService
         $expected = $side === 'source' ? $transfer->source_warehouse_id : $transfer->destination_warehouse_id;
         if ($expected !== $warehouseId) {
             throw ValidationException::withMessages(['warehouse' => 'Warehouse context ไม่ตรงกับฝั่งของ Transfer']);
+        }
+    }
+
+    private function assertSameBranch(array $header): void
+    {
+        $branches = Warehouse::query()
+            ->whereIn('id', [(int) ($header['source_warehouse_id'] ?? 0), (int) ($header['destination_warehouse_id'] ?? 0)])
+            ->pluck('branch_id')
+            ->unique();
+        if ($branches->count() !== 1) {
+            throw ValidationException::withMessages(['destination_warehouse_id' => 'คลังต้นทางและปลายทางต้องอยู่สาขาเดียวกัน']);
         }
     }
 

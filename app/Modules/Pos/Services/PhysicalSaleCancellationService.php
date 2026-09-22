@@ -219,11 +219,16 @@ final class PhysicalSaleCancellationService
                 // make Allocation exceed the reversal Journal amount.
                 $allocation = CostAllocation::query()
                     ->where('stock_movement_id', $reversal->id)
-                    ->where('parent_allocation_id', $source->id)
                     ->where('status', '!=', 'REVERSED')
                     ->lockForUpdate()->first();
                 if (! $allocation) {
                     throw ValidationException::withMessages(['stock' => 'ไม่พบ reversal allocation ที่สร้างจาก Movement นี้']);
+                }
+                if ($allocation->parent_allocation_id === null) {
+                    $allocation->forceFill(['parent_allocation_id' => $source->id])->save();
+                }
+                if ((int) $allocation->parent_allocation_id !== (int) $source->id) {
+                    throw ValidationException::withMessages(['stock' => 'reversal allocation ไม่ตรงกับต้นทุนขาย']);
                 }
                 $sourceLineId = CostAllocationJournalLine::query()->where('allocation_id', $source->id)->value('journal_entry_line_id');
                 $line = $sourceLineId ? $reversalCogs->lines()->where('line_number', JournalEntryLine::query()->findOrFail($sourceLineId)->line_number)->first() : null;

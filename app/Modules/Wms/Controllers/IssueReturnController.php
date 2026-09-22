@@ -179,7 +179,7 @@ final class IssueReturnController extends Controller
         return response()->json(['status' => true, 'msg' => 'ใบเบิกสินค้าลง Stock แล้ว']);
     }
 
-    public function issueCancel(Request $request, IssueDocument $document, AuditLogger $audit): JsonResponse
+    public function issueCancel(Request $request, IssueDocument $document, AuditLogger $audit, IssueReturnService $service): JsonResponse
     {
         $this->scopeIssue($request, $document);
         $request->validate(['reason' => ['required', 'string', 'min:5', 'max:500']]);
@@ -187,6 +187,7 @@ final class IssueReturnController extends Controller
 
         $before = $document->toArray();
         $document->forceFill(['status' => 'VOID'])->save();
+        if ($document->issue_type === 'PRODUCTION') $service->syncProductionOrderAfterMaterialIssueVoided($document->fresh(), $request->user());
         $audit->record('wms.issue.cancelled', $document, $before, $document->fresh()->toArray(), $request->user(), $request);
 
         $production = $document->issue_type === 'PRODUCTION';

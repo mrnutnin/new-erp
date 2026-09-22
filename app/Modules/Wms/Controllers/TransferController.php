@@ -3,6 +3,7 @@
 namespace App\Modules\Wms\Controllers;
 
 use App\Http\Controllers\Controller;
+use App\Models\Warehouse;
 use App\Modules\Finance\Models\DocumentSequence;
 use App\Modules\Finance\Services\DocumentSequenceService;
 use App\Modules\Platform\Services\AuditLogger;
@@ -353,6 +354,7 @@ final class TransferController extends Controller
     {
         return $request->user()->warehouses()
             ->where('is_active', true)
+            ->where('branch_id', Warehouse::query()->whereKey($sourceWarehouseId)->value('branch_id'))
             ->whereKeyNot($sourceWarehouseId)
             ->orderBy('name');
     }

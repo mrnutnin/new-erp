@@ -59,7 +59,8 @@ final class StockBalanceProjectionReconciliationService
             ->where('uom_id', $uomId)
             ->where('status', 'OPEN')
             ->when($asOf, fn ($query) => $query->where('created_at', '<=', $asOf.' 23:59:59'))
-            ->sum('quantity');
+            ->selectRaw('COALESCE(SUM(quantity - consumed_quantity), 0) AS quantity')
+            ->value('quantity');
 
         $balance = StockBalance::query()
             ->where('warehouse_id', $warehouseId)

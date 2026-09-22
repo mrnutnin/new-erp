@@ -217,6 +217,7 @@ final class CostPropagationTriggerPlanner
             'OPENING_BALANCE' => $this->opening(OpeningBalanceBatch::query()->with('lines')->findOrFail($id), $revision),
             'INVENTORY_ADJUSTMENT' => $this->adjustment(InventoryAdjustmentDocument::query()->with('lines')->findOrFail($id), $revision, 'INVENTORY_ADJUSTMENT'),
             'PRODUCTION_FINISHED_RECEIPT' => $this->adjustment(InventoryAdjustmentDocument::query()->with('lines')->findOrFail($id), $revision, 'PRODUCTION_FINISHED_RECEIPT'),
+            'PRODUCTION_SCRAP_RECEIPT' => $this->adjustment(InventoryAdjustmentDocument::query()->with('lines')->findOrFail($id), $revision, 'PRODUCTION_SCRAP_RECEIPT'),
             'ISSUE_DOCUMENT' => $this->issue(IssueDocument::withTrashed()->with('lines')->findOrFail($id), $revision),
             'ISSUE_RETURN' => $this->issueReturn(IssueReturn::withTrashed()->with('lines.sourceAllocations')->findOrFail($id), $revision),
             'WMS_TRANSFER' => $this->transfer(Transfer::withTrashed()->with(['lines', 'events'])->findOrFail($id), $revision),

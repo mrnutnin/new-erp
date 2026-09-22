@@ -8,6 +8,7 @@ use App\Modules\Finance\Models\DocumentSequence;
 use App\Modules\Finance\Services\DocumentSequenceService;
 use App\Modules\Platform\Services\AuditLogger;
 use App\Modules\Pos\Models\PhysicalSale;
+use App\Modules\Production\Models\ProductionOrder;
 use App\Modules\Pos\Models\SalesIntake;
 use App\Modules\Pos\Models\SalesOrder;
 use App\Modules\Pos\Models\SalesQuotation;
@@ -62,6 +63,7 @@ class SalesOrderController extends Controller
             ->addColumn('physical_sale_status', fn (SalesOrder $row) => $row->physicalSales->contains(fn (PhysicalSale $sale) => $sale->status !== 'VOID') ? 'CREATED' : ($row->physicalSales->isNotEmpty() ? 'VOIDED' : 'NONE'))
             ->addColumn('physical_sale_label', fn (SalesOrder $row) => $row->physicalSales->where('status', '!=', 'VOID')->map(fn (PhysicalSale $sale) => "{$sale->document_type} · {$sale->document_number}")->implode(', ') ?: '—')
             ->addColumn('physical_sale_url', fn (SalesOrder $row) => ($sale = $row->physicalSales->first(fn (PhysicalSale $item) => $item->status !== 'VOID')) ? route('pos.physical-sales.show', $sale) : null)
+            ->addColumn('physical_sale_create_url', fn (SalesOrder $row) => $row->status === 'CONFIRMED' && ! $row->physicalSales->contains(fn (PhysicalSale $sale) => $sale->status !== 'VOID') && $request->user()->hasPermission('pos.physical-sales.create') ? route('pos.physical-sales.create', ['sales_order_id' => $row->id]) : null)
             ->addColumn('show_url', fn (SalesOrder $row) => route('pos.sales-orders.show', $row))
             ->addColumn('pdf_url', fn (SalesOrder $row) => $request->user()->hasPermission('pos.sales-orders.print') ? route('pos.sales-orders.pdf', $row) : null)
             ->addColumn('delete_url', fn (SalesOrder $row) => $row->status === 'DRAFT' && $request->user()->hasPermission('pos.sales-orders.delete') ? route('pos.sales-orders.destroy', $row) : null)
@@ -112,9 +114,14 @@ class SalesOrderController extends Controller
     {
         $this->scope($request, $salesOrder);
         $order = $salesOrder->load(['lines', 'quotation.sourceIntake.preparedBy', 'quotation.rfq.sourceIntake.preparedBy', 'rfq.sourceIntake.preparedBy', 'sourceIntake.preparedBy', 'party', 'physicalSales']);
+        $productionOrders = ProductionOrder::query()
+            ->where('sales_order_id', $order->id)
+            ->whereNot('status', 'CANCELLED')
+            ->get(['id', 'sales_order_line_id', 'document_number', 'status', 'completed_quantity', 'planned_quantity'])
+            ->keyBy('sales_order_line_id');
         $history = AuditLog::query()->with('user:id,name')->where('subject_type', $order->getMorphClass())->where('subject_id', $order->id)->latest()->get();
 
-        return view('Pos::sales-orders.show', ['order' => $order, 'history' => $history, 'flowDocuments' => SalesDocumentTrail::for($order)]);
+        return view('Pos::sales-orders.show', ['order' => $order, 'history' => $history, 'flowDocuments' => SalesDocumentTrail::for($order), 'productionOrders' => $productionOrders]);
     }
 
     public function fromIntake(Request $request, SalesIntake $salesIntake, DocumentSequenceService $sequences, AuditLogger $audit): JsonResponse|RedirectResponse
@@ -270,6 +277,9 @@ class SalesOrderController extends Controller
             }
             if ($action === 'cancel' && PhysicalSale::query()->where('warehouse_id', $order->warehouse_id)->where('source_type', 'SALES_ORDER')->where('source_id', $order->id)->where('status', '!=', 'VOID')->exists()) {
                 throw ValidationException::withMessages(['status' => 'ใบสั่งขายนี้มีเอกสารขายปลายทางแล้ว ต้องยกเลิกเอกสารปลายทางก่อน']);
+            }
+            if ($action === 'cancel' && ProductionOrder::query()->where('sales_order_id', $order->id)->where('status', '!=', 'CANCELLED')->exists()) {
+                throw ValidationException::withMessages(['status' => 'SALES_ORDER_CANCELLED: ใบสั่งขายนี้มี WO ที่ยังไม่ยกเลิก ต้องยกเลิก WO ก่อน']);
             }
             try {
                 $status = SalesOrderState::{$action}($order->status);

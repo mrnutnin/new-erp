@@ -225,7 +225,7 @@ class FinanceReportController extends Controller
             ->join('branches as br', 'br.id', '=', 'w.branch_id')
             ->leftJoin('parties as p', 'p.id', '=', 's.party_id')
             ->leftJoin('journal_entries as j', 'j.id', '=', 's.journal_entry_id')
-            ->whereIn('b.warehouse_id', $this->reportWarehouseIds($request))
+            ->whereIn('b.warehouse_id', $this->authorizedWarehouseIds($request))
             ->whereNull('s.deleted_at')
             ->when($request->filled('status'), fn ($q) => $q->where('s.status', $request->input('status')))
             ->when($request->filled('document_type'), fn ($q) => $q->where('s.document_type', $request->input('document_type')))

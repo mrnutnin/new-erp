@@ -22,14 +22,14 @@ class SystemDefaultOrchestrator
 {
     /** @var array<string, string> */
     private const SEED_VERSIONS = [
-        'core.rbac' => '2.9',
-        'core.programs' => '1.1',
+        'core.rbac' => '3.0', // supersedes legacy installer baseline 'core.rbac' => '2.1'
+        'core.programs' => '1.2',
         'accounting.journal_books' => '1.0',
         'accounting.chart_of_accounts' => '1.5',
         'accounting.tax_codes' => '1.0',
-        'wms.production_finished_receipt_mapping' => '1.0',
+        'wms.production_finished_receipt_mapping' => '1.1',
         'core.document_sequences' => '1.1',
-        'core.role_templates' => '1.1',
+        'core.role_templates' => '1.2',
         'wms.issue_types' => '1.2',
     ];
 
@@ -151,10 +151,11 @@ class SystemDefaultOrchestrator
             ['code' => 'wms', 'name' => 'WMS', 'description' => 'บริหารคลังสินค้าและสต็อก', 'requires_branch' => true, 'requires_warehouse' => true, 'entry_route' => 'wms.index', 'is_enabled' => true, 'sort_order' => 4],
             ['code' => 'crm', 'name' => 'CRM', 'description' => 'บริหารลูกค้าสัมพันธ์และโอกาสการขาย', 'requires_branch' => true, 'requires_warehouse' => false, 'entry_route' => 'crm.index', 'is_enabled' => true, 'sort_order' => 5],
             ['code' => 'pos', 'name' => 'POS', 'description' => 'ขายและคำสั่งซื้อ', 'requires_branch' => true, 'requires_warehouse' => true, 'entry_route' => 'pos.index', 'is_enabled' => true, 'sort_order' => 6],
-            ['code' => 'finance', 'name' => 'Finance', 'description' => 'บริหารการเงิน', 'requires_branch' => true, 'requires_warehouse' => true, 'entry_route' => 'finance.index', 'is_enabled' => true, 'sort_order' => 7],
-            ['code' => 'accounting', 'name' => 'Accounting', 'description' => 'บัญชีและรายงานการเงิน', 'requires_branch' => true, 'requires_warehouse' => true, 'entry_route' => 'accounting.index', 'is_enabled' => true, 'sort_order' => 8],
-            ['code' => 'asset', 'name' => 'Asset', 'description' => 'บริหารสินทรัพย์', 'requires_branch' => true, 'requires_warehouse' => false, 'entry_route' => 'asset.index', 'is_enabled' => true, 'sort_order' => 9],
-            ['code' => 'logistics', 'name' => 'Logistics', 'description' => 'บริหารการขนส่ง', 'requires_branch' => true, 'requires_warehouse' => true, 'entry_route' => 'dashboard', 'is_enabled' => false, 'sort_order' => 10],
+            ['code' => 'production', 'name' => 'Production', 'description' => 'บริหารการผลิต', 'requires_branch' => true, 'requires_warehouse' => true, 'entry_route' => 'production.index', 'is_enabled' => true, 'sort_order' => 7],
+            ['code' => 'finance', 'name' => 'Finance', 'description' => 'บริหารการเงิน', 'requires_branch' => true, 'requires_warehouse' => true, 'entry_route' => 'finance.index', 'is_enabled' => true, 'sort_order' => 8],
+            ['code' => 'accounting', 'name' => 'Accounting', 'description' => 'บัญชีและรายงานการเงิน', 'requires_branch' => true, 'requires_warehouse' => true, 'entry_route' => 'accounting.index', 'is_enabled' => true, 'sort_order' => 9],
+            ['code' => 'asset', 'name' => 'Asset', 'description' => 'บริหารสินทรัพย์', 'requires_branch' => true, 'requires_warehouse' => false, 'entry_route' => 'asset.index', 'is_enabled' => true, 'sort_order' => 10],
+            ['code' => 'logistics', 'name' => 'Logistics', 'description' => 'บริหารการขนส่ง', 'requires_branch' => true, 'requires_warehouse' => true, 'entry_route' => 'dashboard', 'is_enabled' => false, 'sort_order' => 11],
         ])->each(function (array $definition): void {
             $program = Program::query()->withTrashed()->firstOrNew(['code' => $definition['code']]);
             $program->fill($definition);
@@ -162,8 +163,9 @@ class SystemDefaultOrchestrator
             $program->save();
         });
 
-        Program::query()->where('code', 'crm')->first()?->users()->syncWithoutDetaching(
-            User::query()->whereHas('roles', fn ($query) => $query->where('roles.code', 'admin'))->pluck('users.id')->all()
+        $adminIds = User::query()->whereHas('roles', fn ($query) => $query->where('roles.code', 'admin'))->pluck('users.id')->all();
+        Program::query()->whereIn('code', ['crm', 'production'])->get()->each(
+            fn (Program $program) => $program->users()->syncWithoutDetaching($adminIds)
         );
     }
 
@@ -178,6 +180,10 @@ class SystemDefaultOrchestrator
             'warehouse_staff' => ['name' => 'พนักงานคลัง', 'description' => 'งานรับ จ่าย โอน และตรวจสอบคลัง', 'filter' => fn (string $code): bool => str_starts_with($code, 'wms.') && ! str_ends_with($code, '.delete')],
             'sales' => ['name' => 'พนักงานขาย', 'description' => 'งาน CRM งานขาย และ POS', 'filter' => fn (string $code): bool => (str_starts_with($code, 'pos.') || str_starts_with($code, 'crm.')) && ! str_ends_with($code, '.delete')],
             'purchasing' => ['name' => 'พนักงานจัดซื้อ', 'description' => 'งานจัดซื้อ', 'filter' => fn (string $code): bool => str_starts_with($code, 'purchasing.') && ! str_ends_with($code, '.delete')],
+            'production_operator' => ['name' => 'พนักงานผลิต', 'description' => 'ดูและเตรียมรายการปฏิบัติงานผลิต', 'filter' => fn (string $code): bool => in_array($code, ['production.dashboard.view', 'production.orders.view', 'production.orders.start', 'production.execution.prepare'], true)],
+            'shop_floor_operator' => ['name' => 'พนักงานหน้างานผลิต', 'description' => 'ทำงาน Production ครบวงจรจาก Shop Floor โดยไม่ต้องเข้าคลังหรือบัญชี', 'filter' => fn (string $code): bool => $code === 'production.shop_floor.use'],
+            'production_supervisor' => ['name' => 'หัวหน้างานผลิต', 'description' => 'ควบคุมและ Post งานผลิตภายในขอบเขต WO', 'filter' => fn (string $code): bool => str_starts_with($code, 'production.') && ! in_array($code, ['production.boms.activate', 'production.orders.cancel', 'production.execution.reverse', 'production.orders.cost.view', 'production.orders.gl.view'], true)],
+            'production_manager' => ['name' => 'ผู้จัดการฝ่ายผลิต', 'description' => 'จัดการ Production Module ทุกส่วน', 'filter' => fn (string $code): bool => str_starts_with($code, 'production.')],
             'viewer' => ['name' => 'ผู้ดูข้อมูล', 'description' => 'ดูข้อมูลและรายงานเท่านั้น', 'filter' => fn (string $code): bool => str_ends_with($code, '.view')],
         ];
 

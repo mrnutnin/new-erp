@@ -34,7 +34,6 @@ class DatabaseSeeder extends Seeder
         $this->call(RbacSeeder::class);
         $this->call(JournalBookSeeder::class);
         $this->call(SystemTaxCodeSeeder::class);
-
         $branch = Branch::query()->updateOrCreate(['code' => 'HQ'], [
             'name' => 'สำนักงานใหญ่',
             'is_active' => true,
@@ -52,7 +51,7 @@ class DatabaseSeeder extends Seeder
             ['code' => 'purchasing', 'name' => 'Purchasing', 'description' => 'บริหารจัดซื้อ', 'requires_branch' => true, 'requires_warehouse' => true, 'entry_route' => 'purchasing.index'],
             ['code' => 'wms', 'name' => 'WMS', 'description' => 'บริหารคลังสินค้าและสต็อก', 'requires_branch' => true, 'requires_warehouse' => true, 'entry_route' => 'wms.index'],
             ['code' => 'pos', 'name' => 'POS', 'description' => 'ขายและคำสั่งซื้อ', 'requires_branch' => true, 'requires_warehouse' => true, 'entry_route' => 'pos.index'],
-            ['code' => 'production', 'name' => 'Production', 'description' => 'บริหารการผลิต', 'requires_branch' => true, 'requires_warehouse' => true, 'entry_route' => 'dashboard'],
+            ['code' => 'production', 'name' => 'Production', 'description' => 'บริหารการผลิต', 'requires_branch' => true, 'requires_warehouse' => true, 'entry_route' => 'production.index'],
             ['code' => 'finance', 'name' => 'Finance', 'description' => 'บริหารการเงิน', 'requires_branch' => true, 'requires_warehouse' => true, 'entry_route' => 'finance.index'],
             ['code' => 'accounting', 'name' => 'Accounting', 'description' => 'บัญชีและรายงานการเงิน', 'requires_branch' => true, 'requires_warehouse' => true, 'entry_route' => 'accounting.index'],
             ['code' => 'logistics', 'name' => 'Logistics', 'description' => 'บริหารการขนส่ง', 'requires_branch' => true, 'requires_warehouse' => true, 'entry_route' => 'dashboard'],
@@ -64,6 +63,8 @@ class DatabaseSeeder extends Seeder
                 'sort_order' => $index + 1,
             ]);
         });
+
+        $this->call(SystemDocumentSequenceSeeder::class);
 
         $user->programs()->sync($programs->pluck('id'));
         $user->warehouses()->sync([$warehouse->id]);

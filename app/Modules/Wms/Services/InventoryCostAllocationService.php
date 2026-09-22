@@ -13,6 +13,7 @@ use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 
@@ -216,19 +217,23 @@ final class InventoryCostAllocationService
      */
     public function canonicalAsOf(string $date): Builder
     {
-        return $this->asOf($date)->where(function (Builder $query) use ($date): void {
+        $query = $this->asOf($date)->where(function (Builder $query) use ($date): void {
             $query->where('wms_cost_allocations.allocation_type', '!=', 'RECOST')
                 ->orWhere(function (Builder $query) use ($date): void {
                     $query->where('wms_cost_allocations.allocation_type', 'RECOST')
                         ->whereRaw(
-                            'wms_cost_allocations.id = (SELECT MAX(latest.id) FROM wms_cost_allocations AS latest WHERE latest.stock_movement_id = wms_cost_allocations.stock_movement_id AND latest.allocation_type = "RECOST" AND latest.business_date <= ? AND latest.status != "REVERSED" AND NOT EXISTS (SELECT 1 FROM wms_cost_allocation_corrections AS latest_correction WHERE latest_correction.allocation_id = latest.id))',
+                            'wms_cost_allocations.id = (SELECT MAX(latest.id) FROM wms_cost_allocations AS latest WHERE latest.stock_movement_id = wms_cost_allocations.stock_movement_id AND latest.allocation_type = "RECOST" AND latest.business_date <= ? AND latest.status != "REVERSED"'.(Schema::hasTable('wms_cost_allocation_corrections') ? ' AND NOT EXISTS (SELECT 1 FROM wms_cost_allocation_corrections AS latest_correction WHERE latest_correction.allocation_id = latest.id)' : '').')',
                             [$date],
                         );
                 });
-        })->whereNotExists(fn ($correction) => $correction
-            ->selectRaw('1')
-            ->from('wms_cost_allocation_corrections')
-            ->whereColumn('wms_cost_allocation_corrections.allocation_id', 'wms_cost_allocations.id'));
+        });
+
+        return Schema::hasTable('wms_cost_allocation_corrections')
+            ? $query->whereNotExists(fn ($correction) => $correction
+                ->selectRaw('1')
+                ->from('wms_cost_allocation_corrections')
+                ->whereColumn('wms_cost_allocation_corrections.allocation_id', 'wms_cost_allocations.id'))
+            : $query;
     }
 
     public function valuation(string $date, ?int $warehouseId = null, ?int $itemId = null): array

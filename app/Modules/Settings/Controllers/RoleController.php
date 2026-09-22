@@ -168,6 +168,7 @@ class RoleController extends Controller
             'dashboard' => 'แดชบอร์ดผู้บริหาร',
             'finance' => 'การเงิน',
             'pos' => 'ขายและหน้าร้าน',
+            'production' => 'การผลิต',
             'purchasing' => 'จัดซื้อ',
             'settings' => 'ตั้งค่าระบบ',
             'wms' => 'คลังสินค้า',

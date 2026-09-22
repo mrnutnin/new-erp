@@ -13,7 +13,8 @@ class EnsurePermission
      */
     public function handle(Request $request, Closure $next, string $permission): Response
     {
-        abort_unless($request->user()?->hasPermission($permission), 403);
+        $allowed = collect(explode('|', $permission))->contains(fn (string $candidate): bool => $request->user()?->hasPermission($candidate));
+        abort_unless($allowed, 403);
 
         return $next($request);
     }

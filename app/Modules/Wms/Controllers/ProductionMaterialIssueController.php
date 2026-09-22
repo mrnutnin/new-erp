@@ -133,19 +133,20 @@ final class ProductionMaterialIssueController extends Controller
         return response()->json(['status' => true, 'msg' => 'ใบเบิกวัตถุดิบผลิตลง Stock แล้ว']);
     }
 
-    public function cancel(Request $request, IssueDocument $document, AuditLogger $audit): JsonResponse
+    public function cancel(Request $request, IssueDocument $document, AuditLogger $audit, IssueReturnService $service): JsonResponse
     {
         $this->scope($request, $document); $request->validate(['reason' => ['required', 'string', 'min:5', 'max:500']]);
         abort_unless(in_array($document->status, ['DRAFT', 'APPROVED'], true), 422, 'ยกเลิกได้เฉพาะใบเบิกที่ยังไม่ลง Stock');
         $before = $document->toArray(); $document->forceFill(['status' => 'VOID'])->save();
+        $service->syncProductionOrderAfterMaterialIssueVoided($document->fresh(), $request->user());
         $audit->record('wms.production_material_issue.cancelled', $document, $before, $document->fresh()->toArray(), $request->user(), $request);
         return response()->json(['status' => true, 'msg' => 'ยกเลิกใบเบิกวัตถุดิบผลิตแล้ว', 'redirect' => route('wms.production.material-issues.index')]);
     }
 
-    public function destroy(Request $request, IssueDocument $document, AuditLogger $audit): JsonResponse
+    public function destroy(Request $request, IssueDocument $document, AuditLogger $audit, IssueReturnService $service): JsonResponse
     {
         $this->scope($request, $document); abort_unless($document->status === 'DRAFT', 422, 'ลบได้เฉพาะใบเบิกร่าง');
-        $before = $document->load('lines')->toArray(); $document->lines()->delete(); $document->delete();
+        $before = $document->load('lines')->toArray(); $service->syncProductionOrderAfterMaterialIssueVoided($document, $request->user(), 'material_issue_deleted'); $document->lines()->delete(); $document->delete();
         $audit->record('wms.production_material_issue.deleted', $document, $before, [], $request->user(), $request);
         return response()->json(['status' => true, 'msg' => 'ลบร่างใบเบิกวัตถุดิบผลิตแล้ว', 'redirect' => route('wms.production.material-issues.index')]);
     }

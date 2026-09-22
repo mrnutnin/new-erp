@@ -11,8 +11,8 @@ final class BranchWarehouseEndToEndQualityGateTest extends TestCase
         $root = dirname(__DIR__, 2);
 
         foreach ([
-            'app/Modules/Wms/Models/PurchaseOrder.php',
-            'app/Modules/Wms/Models/GoodsReceipt.php',
+            'app/Modules/Purchasing/Models/PurchaseOrder.php',
+            'app/Modules/Purchasing/Models/GoodsReceipt.php',
             'app/Modules/Pos/Models/PhysicalSale.php',
             'app/Modules/Pos/Models/SalesReturn.php',
         ] as $path) {
@@ -83,7 +83,7 @@ final class BranchWarehouseEndToEndQualityGateTest extends TestCase
         $returns = file_get_contents($root.'/app/Modules/Pos/Controllers/SalesReturnController.php');
         $deposits = file_get_contents($root.'/app/Modules/Pos/Controllers/AdvanceDepositController.php');
         $purchasingPdf = file_get_contents($root.'/app/Modules/Purchasing/Controllers/PurchaseDocumentPdfController.php');
-        $wmsPdf = file_get_contents($root.'/app/Modules/Wms/Controllers/PurchaseDocumentPdfController.php');
+        $wmsPdf = file_get_contents($root.'/app/Modules/Wms/Controllers/InventoryAdjustmentController.php');
 
         self::assertStringContainsString("where('pos_physical_sales.branch_id', \$branch->id)", $physicalSales);
         self::assertStringContainsString('ensureCurrentBranch($request, $physicalSale)', $physicalSales);
@@ -92,7 +92,7 @@ final class BranchWarehouseEndToEndQualityGateTest extends TestCase
         self::assertStringContainsString('aiQuery((int) $request->attributes->get(\'selectedBranch\')->id)', $deposits);
         self::assertStringContainsString("where('branch_id', (int) \$request->attributes->get('selectedBranch')->id)", $purchasingPdf);
         self::assertStringContainsString("where('is_active', true)", $purchasingPdf);
-        self::assertStringContainsString('(int) $model->warehouse_id === (int) $request->attributes->get(\'selectedWarehouse\')->id', $wmsPdf);
+        self::assertStringContainsString('(int) $document->warehouse_id === (int) $request->attributes->get(\'selectedWarehouse\')->id', $wmsPdf);
     }
 
     public function test_posted_documents_cannot_be_cancelled_as_drafts_or_cross_their_source_warehouse(): void

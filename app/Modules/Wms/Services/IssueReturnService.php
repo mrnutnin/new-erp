@@ -17,10 +17,14 @@ use App\Modules\Wms\Models\IssueReturn;
 use App\Modules\Wms\Models\IssueReturnLine;
 use App\Modules\Wms\Models\IssueReturnLineAllocation;
 use App\Modules\Wms\Models\Item;
+use App\Modules\Wms\Models\StockBalance;
+use App\Modules\Wms\Models\StockMovement;
+use App\Modules\Wms\Models\StockReservation;
 use Brick\Math\BigDecimal;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Validation\ValidationException;
 
 final class IssueReturnService
@@ -124,10 +128,18 @@ final class IssueReturnService
             }
             if ($x->status !== 'APPROVED') {
                 throw ValidationException::withMessages(['status' => 'ลง Stock ได้เฉพาะเอกสารที่อนุมัติแล้ว']);
-            }$accountingRows = collect();
+            }
+            $this->assertProductionMaterialIssueCanPost($x);
+            $accountingRows = collect();
             foreach ($x->lines as $l) {
                 $m = app(StockMovementService::class)->recordIntent(['warehouse_id' => $w->id, 'item_id' => $l->item_id, 'uom_id' => $l->uom_id, 'movement_type' => 'ISSUE', 'direction' => 'OUT', 'quantity' => (string) $l->quantity, 'base_quantity' => (string) $l->quantity, 'business_date' => $x->document_date->format('Y-m-d'), 'source_type' => 'ISSUE_DOCUMENT', 'source_id' => (string) $x->id, 'source_reference' => $x->document_number, 'idempotency_key' => 'issue:'.$x->id.':line:'.$l->id, 'metadata' => ['issue_type' => $x->issue_type]]);
-                $m = app(StockMovementService::class)->post($m);
+                $reservation = $this->productionMaterialReservation($x, $l);
+                if ($reservation) {
+                    app(StockReservationService::class)->consume($reservation, (string) $l->quantity, $m, fn ($movement) => app(StockMovementService::class)->post($movement));
+                    $m = $m->fresh();
+                } else {
+                    $m = app(StockMovementService::class)->post($m);
+                }
                 $movementAllocations = CostAllocation::query()
                     ->where('stock_movement_id', $m->id)
                     ->where('status', '!=', 'REVERSED')
@@ -145,9 +157,72 @@ final class IssueReturnService
             $b = $x->toArray();
             $x->update(['status' => 'POSTED', 'posted_by' => $u->id]);
             $audit->record('wms.issue.posted', $x, $b, $x->fresh()->load('lines')->toArray(), $u, $r);
+            $this->syncProductionOrderInProgress($x, $u);
             $this->costPropagation->dispatchIfEnabled('ISSUE_DOCUMENT', $x->id, 0, [], $u->id);
 
             return $x->fresh();
+        }, 3);
+    }
+
+    public function reverseIssue(IssueDocument $d, User $u, string $reason, AuditLogger $audit, Request $r): IssueDocument
+    {
+        return DB::transaction(function () use ($d, $u, $reason, $audit, $r): IssueDocument {
+            $x = IssueDocument::with('lines')->lockForUpdate()->findOrFail($d->id);
+            if ($x->status === 'REVERSED') return $x;
+            if ($x->status !== 'POSTED') throw ValidationException::withMessages(['status' => 'กลับรายการได้เฉพาะใบเบิกที่ลง Stock แล้ว']);
+            $this->assertIssueHasNoOpenProductionChildren($x);
+
+            $rows = $x->lines->flatMap(fn (IssueLine $line) => CostAllocation::query()
+                ->with('movement')
+                ->where('stock_movement_id', $line->stock_movement_id)
+                ->where('status', '!=', 'REVERSED')
+                ->orderBy('id')
+                ->lockForUpdate()
+                ->get()
+                ->map(fn (CostAllocation $allocation) => ['line' => $line, 'allocation' => $allocation]));
+            if ($rows->isEmpty() || $rows->contains(fn (array $row) => ! $row['allocation']->movement || $row['allocation']->movement->status !== 'POSTED' || $row['allocation']->cost_status === 'PENDING' || ! $row['allocation']->journal_entry_id)) {
+                throw ValidationException::withMessages(['status' => 'ไม่พบ Stock Movement, Cost Allocation หรือ Journal ที่พร้อมกลับรายการ']);
+            }
+
+            $journalIds = $rows->pluck('allocation.journal_entry_id')->unique()->values();
+            if ($journalIds->count() !== 1) throw ValidationException::withMessages(['journal' => 'ใบเบิกต้องอ้างอิง Journal ต้นทางเพียงหนึ่งรายการ']);
+            $sourceJournal = JournalEntry::query()->lockForUpdate()->findOrFail($journalIds->first());
+            $expectedEvent = strtoupper((string) $x->issue_type) === 'PRODUCTION' ? 'production.material_issue' : 'inventory.issue';
+            if ($sourceJournal->status !== 'POSTED' || $sourceJournal->source_type !== 'WMS_ISSUE' || $sourceJournal->source_event !== $expectedEvent || (string) $sourceJournal->source_id !== (string) $x->id) {
+                throw ValidationException::withMessages(['journal' => 'Journal ต้นทางไม่ตรงกับใบเบิก']);
+            }
+
+            $revision = (int) ($x->reversal_revision ?? 0) + 1;
+            $key = "issue:{$x->id}:reversal:{$revision}";
+            $reversalJournal = $this->journals->reverseWithinTransaction($sourceJournal, ['source_type' => 'WMS_ISSUE', 'source_id' => $key, 'reversal_date' => $x->document_date->format('Y-m-d'), 'reason' => $reason], $u);
+            $reversalLines = $reversalJournal->lines()->orderBy('line_number')->get();
+            if ($reversalLines->count() !== $rows->count() * 2) throw ValidationException::withMessages(['journal' => 'Journal กลับรายการมีบรรทัดไม่ครบทุก Cost Allocation']);
+
+            $linkedLines = [];
+            foreach ($rows->values() as $index => $row) {
+                $line = $row['line'];
+                $sourceAllocation = $row['allocation'];
+                $sourceMovement = $sourceAllocation->movement;
+                $reversalMovement = app(StockMovementService::class)->reverseWithinTransaction($sourceMovement, ['idempotency_key' => $key.':allocation:'.$sourceAllocation->id.':movement', 'business_date' => $sourceMovement->business_date, 'created_by' => $u->id, 'parent_allocation_id' => $sourceAllocation->id]);
+                $reversalAllocation = CostAllocation::query()->where('stock_movement_id', $reversalMovement->id)->latest('id')->lockForUpdate()->first();
+                if (! $reversalAllocation) throw ValidationException::withMessages(['allocation' => 'ไม่พบ Cost Allocation ของ Movement กลับรายการ']);
+                $reversalAllocation->forceFill(['parent_allocation_id' => $sourceAllocation->id, 'cost_status' => $sourceAllocation->cost_status, 'unit_cost' => $sourceAllocation->unit_cost, 'value' => BigDecimal::of((string) $sourceAllocation->value)->negated()->toScale(8)->__toString(), 'metadata' => [...(is_array($reversalAllocation->metadata) ? $reversalAllocation->metadata : []), 'reversal_of_issue_id' => $x->id, 'reversal_of_allocation_id' => $sourceAllocation->id]])->save();
+                $journalLine = $reversalLines->get(($index * 2) + 1);
+                if (! $journalLine) throw ValidationException::withMessages(['journal' => 'ไม่พบบรรทัด Inventory สำหรับ Cost Allocation กลับรายการ']);
+                $this->allocations->linkJournalLineWithinTransaction($reversalAllocation, $journalLine);
+                if (! isset($linkedLines[$line->id])) {
+                    $line->forceFill(['reversal_movement_id' => $reversalMovement->id, 'reversal_allocation_id' => $reversalAllocation->id])->save();
+                    $linkedLines[$line->id] = true;
+                }
+            }
+
+            $before = $x->toArray();
+            $x->forceFill(['status' => 'REVERSED', 'reversed_by' => $u->id, 'reversed_at' => now(), 'reversal_reason' => $reason, 'reversal_revision' => $revision])->save();
+            $this->syncProductionOrderAfterMaterialIssueReversed($x->fresh('lines'), $u);
+            $audit->record('wms.issue.reversed', $x, $before, $x->fresh()->load('lines')->toArray(), $u, $r);
+            $this->costPropagation->dispatchIfEnabled('ISSUE_DOCUMENT', $x->id, $revision, [], $u->id);
+
+            return $x->fresh('lines');
         }, 3);
     }
 
@@ -157,6 +232,11 @@ final class IssueReturnService
             $issue = IssueDocument::with('lines')->where('warehouse_id', $w->id)->lockForUpdate()->findOrFail($v['issue_document_id']);
             if ($issue->status !== 'POSTED') {
                 throw ValidationException::withMessages(['issue_document_id' => 'รับคืนได้เฉพาะใบเบิกที่ลง Stock แล้ว']);
+            }
+            $idempotencyKey = (string) ($v['idempotency_key'] ?? 'issue-return:'.bin2hex(random_bytes(12)));
+            $existing = IssueReturn::query()->where('idempotency_key', $idempotencyKey)->lockForUpdate()->first();
+            if ($existing) {
+                return $existing->load('lines');
             }
             $requested = [];
             foreach ($v['lines'] as $l) {
@@ -183,7 +263,7 @@ final class IssueReturnService
             $s = $this->sequence($w, 'INVENTORY_RETURN');
             $date = Carbon::parse((string) $v['document_date']);
             $n = $seq->issueAvailableForBranch($s, $this->branch($w), $date, fn (string $number): bool => IssueReturn::withTrashed()->where('document_number', $number)->exists());
-            $d = IssueReturn::create(['warehouse_id' => $w->id, 'document_number' => $n, 'document_date' => $date->toDateString(), 'issue_document_id' => $issue->id, 'reason' => $v['reason'], 'idempotency_key' => 'issue-return:'.bin2hex(random_bytes(12)), 'created_by' => $u->id]);
+            $d = IssueReturn::create(['warehouse_id' => $w->id, 'document_number' => $n, 'document_date' => $date->toDateString(), 'issue_document_id' => $issue->id, 'reason' => $v['reason'], 'idempotency_key' => $idempotencyKey, 'created_by' => $u->id]);
             $seq->recordIssued($s->fresh(), $n, 'wms_issue_returns', $d->id, $date, $u->id);
             foreach ($v['lines'] as $i => $l) {
                 $line = $lockedLines[(int) $l['issue_line_id']] ?? null;
@@ -263,6 +343,7 @@ final class IssueReturnService
             $this->accounting->post($x, $w, $u, $accountingRows, true, (string) $x->issue?->issue_type);
             $b = $x->toArray();
             $x->update(['status' => 'POSTED', 'posted_by' => $u->id]);
+            $this->syncProductionOrderMaterialReturnEvent($x->fresh('issue'), $u, 'material_return_posted');
             $audit->record('wms.issue_return.posted', $x, $b, $x->fresh()->load('lines')->toArray(), $u, $r);
             $this->costPropagation->dispatchIfEnabled('ISSUE_RETURN', $x->id, 0, [], $u->id);
 
@@ -348,11 +429,146 @@ final class IssueReturnService
 
             $before = $x->toArray();
             $x->forceFill(['status' => 'REVERSED', 'reversed_by' => $u->id, 'reversed_at' => now(), 'reversal_reason' => $reason, 'reversal_revision' => $revision])->save();
+            $this->syncProductionOrderMaterialReturnEvent($x->fresh('issue'), $u, 'material_return_reversed');
             $audit->record('wms.issue_return.reversed', $x, $before, $x->fresh()->load('lines')->toArray(), $u, $r);
             $this->costPropagation->dispatchIfEnabled('ISSUE_RETURN', $x->id, $revision, [], $u->id);
 
             return $x->fresh();
         }, 3);
+    }
+
+    private function syncProductionOrderMaterialReturnEvent(IssueReturn $return, User $user, string $eventType): void
+    {
+        $issue = $return->issue;
+        if (! $issue || $issue->issue_type !== 'PRODUCTION' || ! Schema::hasTable('production_order_events')) {
+            return;
+        }
+        $event = DB::table('production_order_events')->where('event_type', 'material_issue_created')->where('source_id', (string) $issue->id)->latest('id')->first();
+        if (! $event) return;
+        if (! DB::table('production_order_events')->where('event_type', $eventType)->where('source_id', (string) $return->id)->exists()) {
+            DB::table('production_order_events')->insert(['production_order_id' => $event->production_order_id, 'event_type' => $eventType, 'source_type' => IssueReturn::class, 'source_id' => (string) $return->id, 'payload' => json_encode(['document_number' => $return->document_number, 'issue_document_id' => $issue->id]), 'occurred_at' => now(), 'created_by' => $user->id, 'created_at' => now(), 'updated_at' => now()]);
+        }
+    }
+
+    private function assertIssueHasNoOpenProductionChildren(IssueDocument $issue): void
+    {
+        if ($issue->issue_type !== 'PRODUCTION') return;
+        if (IssueReturn::query()->where('issue_document_id', $issue->id)->whereIn('status', ['DRAFT', 'APPROVED', 'POSTED'])->whereNull('deleted_at')->exists()) {
+            throw ValidationException::withMessages(['issue_returns' => 'ต้องยกเลิก/กลับรายการใบรับคืนวัตถุดิบก่อน']);
+        }
+        if (Schema::hasColumn('wms_inventory_adjustment_documents', 'source_issue_id') && DB::table('wms_inventory_adjustment_documents')->where('source_issue_id', $issue->id)->whereIn('status', ['DRAFT', 'APPROVED', 'POSTED'])->where(fn ($q) => $q->whereNull('reversal_status')->orWhere('reversal_status', '!=', 'REVERSED'))->whereNull('deleted_at')->exists()) {
+            throw ValidationException::withMessages(['production_documents' => 'ต้องยกเลิก/กลับรายการใบรับผลิตหรือใบรับเศษผลิตก่อน']);
+        }
+    }
+
+    public function syncProductionOrderAfterMaterialIssueReversed(IssueDocument $issue, User $user): void
+    {
+        if ($issue->issue_type !== 'PRODUCTION' || ! Schema::hasTable('production_order_events') || ! Schema::hasTable('production_orders')) return;
+        $event = DB::table('production_order_events')->where('event_type', 'material_issue_created')->where('source_id', (string) $issue->id)->latest('id')->first();
+        if (! $event) return;
+
+        foreach ($issue->lines as $line) {
+            if (! $line->stock_movement_id) continue;
+            $rows = DB::table('wms_stock_reservation_consumptions')->where('stock_movement_id', $line->stock_movement_id)->get();
+            foreach ($rows as $row) {
+                $reservation = StockReservation::query()->lockForUpdate()->find($row->stock_reservation_id);
+                if (! $reservation || $reservation->source_type !== 'PRODUCTION_ORDER' || (string) $reservation->source_id !== (string) $event->production_order_id || $reservation->status !== 'CONSUMED') continue;
+                $quantity = BigDecimal::of((string) $reservation->quantity)->minus((string) $reservation->consumed_quantity)->abs();
+                if ($quantity->isZero()) $quantity = BigDecimal::of((string) $reservation->quantity);
+                $balance = StockBalance::query()->where(['warehouse_id' => $reservation->warehouse_id, 'item_id' => $reservation->item_id, 'uom_id' => $reservation->uom_id])->lockForUpdate()->first();
+                if ($balance && ! BigDecimal::of((string) $balance->available)->isLessThan($quantity)) {
+                    $balance->forceFill(['reserved' => BigDecimal::of((string) $balance->reserved)->plus($quantity)->toScale(8)->__toString(), 'available' => BigDecimal::of((string) $balance->available)->minus($quantity)->toScale(8)->__toString()])->save();
+                    $reservation->forceFill(['consumed_quantity' => '0.00000000', 'status' => 'OPEN'])->save();
+                }
+            }
+        }
+
+        DB::table('production_orders')->where('id', $event->production_order_id)->where('status', 'IN_PROGRESS')->update(['status' => 'RELEASED', 'started_at' => null, 'started_by' => null, 'updated_by' => $user->id, 'updated_at' => now()]);
+        if (! DB::table('production_order_events')->where('event_type', 'material_issue_reversed')->where('source_id', (string) $issue->id)->exists()) {
+            DB::table('production_order_events')->insert(['production_order_id' => $event->production_order_id, 'event_type' => 'material_issue_reversed', 'source_type' => IssueDocument::class, 'source_id' => (string) $issue->id, 'payload' => json_encode(['document_number' => $issue->document_number]), 'occurred_at' => now(), 'created_by' => $user->id, 'created_at' => now(), 'updated_at' => now()]);
+        }
+    }
+
+    public function syncProductionOrderAfterMaterialIssueVoided(IssueDocument $issue, User $user, string $eventType = 'material_issue_cancelled'): void
+    {
+        if ($issue->issue_type !== 'PRODUCTION' || ! Schema::hasTable('production_order_events') || ! Schema::hasTable('production_orders')) {
+            return;
+        }
+        $event = DB::table('production_order_events')->where('event_type', 'material_issue_created')->where('source_id', (string) $issue->id)->latest('id')->first();
+        if (! $event) return;
+        $hasPosted = DB::table('production_order_events')
+            ->where('production_order_id', $event->production_order_id)
+            ->where('event_type', 'material_issue_created')
+            ->pluck('source_id')
+            ->filter()
+            ->contains(fn ($id): bool => IssueDocument::withTrashed()->whereKey($id)->where('status', 'POSTED')->exists());
+        if (! $hasPosted) {
+            DB::table('production_orders')->where('id', $event->production_order_id)->where('status', 'IN_PROGRESS')->update(['status' => 'RELEASED', 'started_at' => null, 'started_by' => null, 'updated_by' => $user->id, 'updated_at' => now()]);
+        }
+        if (! DB::table('production_order_events')->where('event_type', $eventType)->where('source_id', (string) $issue->id)->exists()) {
+            DB::table('production_order_events')->insert(['production_order_id' => $event->production_order_id, 'event_type' => $eventType, 'source_type' => IssueDocument::class, 'source_id' => (string) $issue->id, 'payload' => json_encode(['document_number' => $issue->document_number, 'has_posted_material_issue' => $hasPosted]), 'occurred_at' => now(), 'created_by' => $user->id, 'created_at' => now(), 'updated_at' => now()]);
+        }
+    }
+
+    private function productionMaterialReservation(IssueDocument $issue, IssueLine $line): ?StockReservation
+    {
+        if ($issue->issue_type !== 'PRODUCTION' || ! Schema::hasTable('production_order_events') || ! Schema::hasTable('production_order_materials')) {
+            return null;
+        }
+        $event = DB::table('production_order_events')->where('event_type', 'material_issue_created')->where('source_id', (string) $issue->id)->latest('id')->first();
+        if (! $event) return null;
+        $materialId = DB::table('production_order_materials')
+            ->where('production_order_id', $event->production_order_id)
+            ->where('line_number', $line->line_number)
+            ->where('item_id', $line->item_id)
+            ->where('uom_id', $line->uom_id)
+            ->value('id');
+        if (! $materialId) return null;
+
+        return StockReservation::query()
+            ->where('source_type', 'PRODUCTION_ORDER')
+            ->where('source_id', (string) $event->production_order_id)
+            ->where('idempotency_key', "production-order:{$event->production_order_id}:material:{$materialId}:reservation")
+            ->where('status', 'OPEN')
+            ->first();
+    }
+
+    private function assertProductionMaterialIssueCanPost(IssueDocument $issue): void
+    {
+        if ($issue->issue_type !== 'PRODUCTION' || ! Schema::hasTable('production_order_events') || ! Schema::hasTable('production_orders')) return;
+        $event = DB::table('production_order_events')->where('event_type', 'material_issue_created')->where('source_id', (string) $issue->id)->latest('id')->first();
+        if (! $event) return;
+        $order = DB::table('production_orders')->where('id', $event->production_order_id)->lockForUpdate()->first();
+        if (! $order || $order->status !== 'RELEASED') {
+            throw ValidationException::withMessages(['production_order' => 'ลง Stock ใบเบิกได้เฉพาะ WO ที่ Release และยังไม่ปิด/ยกเลิก']);
+        }
+        $activeOther = DB::table('production_order_events')
+            ->join('wms_issue_documents', 'wms_issue_documents.id', '=', 'production_order_events.source_id')
+            ->where('production_order_events.production_order_id', $event->production_order_id)
+            ->where('production_order_events.event_type', 'material_issue_created')
+            ->where('wms_issue_documents.id', '!=', $issue->id)
+            ->where('wms_issue_documents.issue_type', 'PRODUCTION')
+            ->whereIn('wms_issue_documents.status', ['DRAFT', 'APPROVED', 'POSTED'])
+            ->whereNull('wms_issue_documents.deleted_at')
+            ->exists();
+        if ($activeOther) {
+            throw ValidationException::withMessages(['production_order' => '1 WO มีใบเบิกวัตถุดิบได้เพียงใบเดียว']);
+        }
+    }
+
+    private function syncProductionOrderInProgress(IssueDocument $issue, User $user): void
+    {
+        if ($issue->issue_type !== 'PRODUCTION' || ! Schema::hasTable('production_order_events') || ! Schema::hasTable('production_orders')) {
+            return;
+        }
+        $event = DB::table('production_order_events')->where('event_type', 'material_issue_created')->where('source_id', (string) $issue->id)->latest('id')->first();
+        if (! $event) {
+            return;
+        }
+        $updated = DB::table('production_orders')->where('id', $event->production_order_id)->where('status', 'RELEASED')->update(['status' => 'IN_PROGRESS', 'updated_by' => $user->id, 'updated_at' => now()]);
+        if ($updated) {
+            DB::table('production_order_events')->insert(['production_order_id' => $event->production_order_id, 'event_type' => 'material_issue_posted', 'source_type' => IssueDocument::class, 'source_id' => (string) $issue->id, 'payload' => json_encode(['document_number' => $issue->document_number]), 'occurred_at' => now(), 'created_by' => $user->id, 'created_at' => now(), 'updated_at' => now()]);
+        }
     }
 
     private function sequence(Warehouse $w, string $type): DocumentSequence

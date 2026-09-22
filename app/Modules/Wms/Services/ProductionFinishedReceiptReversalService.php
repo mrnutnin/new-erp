@@ -10,9 +10,11 @@ use App\Modules\Wms\Models\CostAllocation;
 use App\Modules\Wms\Models\InventoryAdjustmentDocument;
 use App\Modules\Wms\Models\StockBalance;
 use App\Modules\Wms\Models\StockMovement;
+use App\Modules\Wms\Models\StockReservation;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Validation\ValidationException;
 
 /** Reverses the immutable Stock/Cost/GL chain created by a Finished Receipt. */
@@ -22,6 +24,7 @@ final class ProductionFinishedReceiptReversalService
         private readonly JournalPostingService $journals,
         private readonly StockMovementService $movements,
         private readonly InventoryCostAllocationService $allocations,
+        private readonly StockReservationService $reservations,
         private readonly AuditLogger $audit,
         private readonly CostPropagationTriggerDispatcher $costPropagation,
     ) {}
@@ -53,6 +56,7 @@ final class ProductionFinishedReceiptReversalService
             $journal = JournalEntry::query()->with('lines')->lockForUpdate()->findOrFail($journalIds->first());
             if ($journal->status !== 'POSTED' || $journal->source_type !== 'WMS_PRODUCTION_RECEIPT' || $journal->source_event !== 'production.finished_receipt' || (string) $journal->source_id !== (string) $locked->id || (int) $journal->warehouse_id !== (int) $locked->warehouse_id) throw ValidationException::withMessages(['journal' => 'Journal ต้นทางไม่ตรงกับ Production Receipt']);
 
+            $this->releaseFinishedGoodsReservation($locked);
             $revision = (int) $locked->reversal_revision + 1;
             $key = "reversal:production-finished-receipt:{$locked->id}:revision:{$revision}";
             $reversalJournal = $this->journals->reverseWithinTransaction($journal, ['source_type' => 'WMS_PRODUCTION_RECEIPT', 'source_id' => $key, 'reversal_date' => $date, 'reason' => $reason], $actor);
@@ -99,9 +103,64 @@ final class ProductionFinishedReceiptReversalService
 
             $before = $locked->toArray();
             $locked->forceFill(['status' => 'REVERSED', 'reversal_status' => 'REVERSED', 'reversed_by' => $actor->id, 'reversed_at' => CarbonImmutable::parse($date)->startOfDay(), 'reversal_reason' => $reason, 'reversal_revision' => $revision])->save();
+            $this->syncProductionOrderAfterReversal($locked, $actor);
             $this->audit->record('wms.production_finished_receipt.reversed', $locked, $before, $locked->fresh('lines')->toArray(), $actor, $request);
             $this->costPropagation->dispatchIfEnabled('PRODUCTION_FINISHED_RECEIPT', $locked->id, $revision, [], $actor->id);
             return $locked->fresh('lines');
         }, 3);
+    }
+
+    private function releaseFinishedGoodsReservation(InventoryAdjustmentDocument $receipt): void
+    {
+        $event = DB::table('production_order_events')->where('event_type', 'material_issue_created')->where('source_id', (string) $receipt->source_issue_id)->latest('id')->first();
+        $order = $event ? DB::table('production_orders')->where('id', $event->production_order_id)->first() : null;
+        if (! $order || $order->order_type !== 'MAKE_TO_ORDER' || ! (int) $order->sales_order_line_id) return;
+
+        $reservation = StockReservation::query()
+            ->where('source_type', StockReservation::SOURCE_SALES_ORDER_LINE)
+            ->where('source_id', (string) $order->sales_order_line_id)
+            ->where('idempotency_key', 'sales-order-line:'.$order->sales_order_line_id.':finished-goods')
+            ->where('status', 'OPEN')
+            ->lockForUpdate()
+            ->first();
+        if ($reservation) $this->reservations->release($reservation);
+    }
+
+    private function syncProductionOrderAfterReversal(InventoryAdjustmentDocument $receipt, User $actor): void
+    {
+        if ($receipt->document_context !== 'PRODUCTION_RECEIPT'
+            || ! Schema::hasColumn('wms_inventory_adjustment_documents', 'source_issue_id')
+            || ! Schema::hasTable('production_order_events')
+            || ! Schema::hasTable('production_orders')) {
+            return;
+        }
+        $event = DB::table('production_order_events')->where('event_type', 'material_issue_created')->where('source_id', (string) $receipt->source_issue_id)->latest('id')->first();
+        if (! $event) return;
+        $order = DB::table('production_orders')->where('id', $event->production_order_id)->lockForUpdate()->first();
+        if (! $order || ! in_array($order->status, ['COMPLETED', 'IN_PROGRESS'], true)) return;
+
+        $completed = DB::table('wms_inventory_adjustments')
+            ->join('wms_inventory_adjustment_documents', 'wms_inventory_adjustment_documents.id', '=', 'wms_inventory_adjustments.document_id')
+            ->where('wms_inventory_adjustment_documents.document_context', 'PRODUCTION_RECEIPT')
+            ->where('wms_inventory_adjustment_documents.status', 'POSTED')
+            ->where('wms_inventory_adjustment_documents.source_issue_id', $receipt->source_issue_id)
+            ->where('wms_inventory_adjustments.item_id', $order->finished_item_id)
+            ->where('wms_inventory_adjustments.status', 'POSTED')
+            ->sum('wms_inventory_adjustments.quantity');
+        $completed = \Brick\Math\BigDecimal::of((string) $completed)->toScale(8, \Brick\Math\RoundingMode::HALF_UP);
+        $planned = \Brick\Math\BigDecimal::of((string) $order->planned_quantity)->toScale(8, \Brick\Math\RoundingMode::HALF_UP);
+        $done = ! $completed->isLessThan($planned);
+
+        DB::table('production_orders')->where('id', $order->id)->update([
+            'status' => $done ? 'COMPLETED' : 'IN_PROGRESS',
+            'completed_quantity' => $completed->__toString(),
+            'completed_at' => $done ? now() : null,
+            'completed_by' => $done ? $actor->id : null,
+            'updated_by' => $actor->id,
+            'updated_at' => now(),
+        ]);
+        if (! DB::table('production_order_events')->where('event_type', 'finished_receipt_reversed')->where('source_id', (string) $receipt->id)->exists()) {
+            DB::table('production_order_events')->insert(['production_order_id' => $order->id, 'event_type' => 'finished_receipt_reversed', 'source_type' => InventoryAdjustmentDocument::class, 'source_id' => (string) $receipt->id, 'payload' => json_encode(['document_number' => $receipt->document_number, 'completed_quantity' => $completed->__toString(), 'completed' => $done]), 'occurred_at' => now(), 'created_by' => $actor->id, 'created_at' => now(), 'updated_at' => now()]);
+        }
     }
 }

@@ -35,7 +35,7 @@ final class PostingReadinessUiContractTest extends TestCase
             'app/Modules/Pos/Views/physical-sales/show.blade.php',
             'app/Modules/Pos/Views/receipts/show.blade.php',
             'app/Modules/Finance/Views/commission-payouts/payout-show.blade.php',
-            'app/Modules/Wms/Views/purchase-documents/show.blade.php',
+            'app/Modules/Purchasing/Views/purchase-documents/show.blade.php',
             'app/Modules/Wms/Views/inventory-adjustments/documents/show.blade.php',
         ] as $path) {
             $view = (string) file_get_contents($root.'/'.$path);

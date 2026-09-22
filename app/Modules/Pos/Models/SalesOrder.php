@@ -15,11 +15,11 @@ class SalesOrder extends Model
 {
     use HasDocumentBranch, SoftDeletes;
 
-    protected $fillable = ['warehouse_id', 'branch_id', 'sales_quotation_id', 'sales_rfq_id', 'source_sales_intake_id', 'party_id', 'document_number', 'party_code', 'party_name', 'party_tax_id', 'party_branch_code', 'party_address', 'document_date', 'valid_until', 'status', 'subtotal', 'discount_amount', 'promotion_snapshot', 'promotion_discount_amount', 'total_amount', 'description', 'created_by', 'updated_by', 'confirmed_by', 'confirmed_at', 'cancelled_by', 'cancelled_at', 'cancel_reason'];
+    protected $fillable = ['warehouse_id', 'branch_id', 'sales_quotation_id', 'sales_rfq_id', 'source_sales_intake_id', 'party_id', 'document_number', 'party_code', 'party_name', 'party_tax_id', 'party_branch_code', 'party_address', 'document_date', 'valid_until', 'required_delivery_date', 'status', 'subtotal', 'discount_amount', 'promotion_snapshot', 'promotion_discount_amount', 'total_amount', 'description', 'created_by', 'updated_by', 'confirmed_by', 'confirmed_at', 'cancelled_by', 'cancelled_at', 'cancel_reason'];
 
     protected function casts(): array
     {
-        return ['document_date' => 'date', 'valid_until' => 'date', 'subtotal' => 'decimal:2', 'discount_amount' => 'decimal:2', 'promotion_snapshot' => 'array', 'promotion_discount_amount' => 'decimal:2', 'total_amount' => 'decimal:2'];
+        return ['document_date' => 'date', 'valid_until' => 'date', 'required_delivery_date' => 'date', 'subtotal' => 'decimal:2', 'discount_amount' => 'decimal:2', 'promotion_snapshot' => 'array', 'promotion_discount_amount' => 'decimal:2', 'total_amount' => 'decimal:2'];
     }
 
     public function lines(): HasMany

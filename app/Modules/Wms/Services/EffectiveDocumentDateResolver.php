@@ -30,7 +30,7 @@ final class EffectiveDocumentDateResolver
         $this->primeIds($movements, 'OPENING_BALANCE', OpeningBalanceBatch::class, 'cutover_date', 'OPENING_BALANCE');
         $this->primeIds($movements, 'ISSUE_DOCUMENT', IssueDocument::class, 'document_date', 'ISSUE_DOCUMENT', true);
         $this->primeIds($movements, 'ISSUE_RETURN', IssueReturn::class, 'document_date', 'ISSUE_RETURN', true);
-        $this->primeIds($movements, 'WMS_PRODUCTION_RECEIPT', InventoryAdjustmentDocument::class, 'document_date', 'PRODUCTION_FINISHED_RECEIPT');
+        $this->primeIds($movements, 'WMS_PRODUCTION_RECEIPT', InventoryAdjustmentDocument::class, 'document_date', 'PRODUCTION_FINISHED_RECEIPT', true);
         $this->primeIds($movements, 'GOODS_RECEIPT', GoodsReceipt::class, 'business_date', 'GOODS_RECEIPT');
         $this->primeInventoryAdjustments($movements);
         $this->primeTransfers($movements);
@@ -113,7 +113,7 @@ final class EffectiveDocumentDateResolver
             'ISSUE_DOCUMENT' => $this->modelDate(IssueDocument::withTrashed()->find($this->numericId($movement->source_id)), 'document_date', 'ISSUE_DOCUMENT'),
             'ISSUE_RETURN' => $this->modelDate(IssueReturn::withTrashed()->find($this->numericId($movement->source_id)), 'document_date', 'ISSUE_RETURN'),
             'WMS_TRANSFER' => $this->modelDate(TransferEvent::query()->where('stock_movement_id', $movement->id)->first(), 'business_date', 'TRANSFER_EVENT'),
-            'WMS_PRODUCTION_RECEIPT' => $this->modelDate(InventoryAdjustmentDocument::query()->find($this->numericId($movement->source_id)), 'document_date', 'PRODUCTION_FINISHED_RECEIPT'),
+            'WMS_PRODUCTION_RECEIPT' => $this->modelDate(InventoryAdjustmentDocument::withTrashed()->find($this->numericId($movement->source_id)), 'document_date', 'PRODUCTION_FINISHED_RECEIPT'),
             'GOODS_RECEIPT' => $this->modelDate(GoodsReceipt::query()->find($this->numericId($movement->source_id)), 'business_date', 'GOODS_RECEIPT'),
             'PURCHASING' => $this->purchasing($movement),
             'POS' => $this->pos($movement),

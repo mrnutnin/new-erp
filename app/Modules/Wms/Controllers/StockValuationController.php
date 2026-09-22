@@ -393,7 +393,7 @@ class StockValuationController extends Controller
             'reconciliation' => $reconciliation->check($run),
             'deltaCount' => $run->deltas()->count(),
             'hasAppliedDelta' => $run->deltas()->where('status', 'APPLIED')->exists(),
-            'history' => AuditLog::query()->with('user:id,name')->where('subject_type', $run->getMorphClass())->where('subject_id', $run->id)->latest('created_at')->latest('id')->get(),
+            'history' => AuditLog::query()->with('user:id,name')->where('subject_type', $run->getMorphClass())->where('subject_id', $run->id)->latest('created_at')->latest('id')->cursor(),
         ]);
     }
 

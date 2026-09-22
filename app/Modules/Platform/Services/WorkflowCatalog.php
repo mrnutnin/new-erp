@@ -231,10 +231,10 @@ final class WorkflowCatalog
                 'code' => 'plan-to-produce', 'title' => 'Plan-to-Produce',
                 'description' => 'ลำดับการวางแผน ผลิต และรับสินค้าสำเร็จรูป', 'duration' => 'ตามรอบการผลิต',
                 'steps' => [
-                    ['label' => 'Item / BOM / BOQ', 'route' => null, 'permission' => 'production.bom.view', 'effect' => 'เตรียมโครงสร้างสินค้าและวัตถุดิบ', 'mode' => 'setup', 'block_reason' => 'Production workflow ยังไม่มีหน้าปลายทางใน MVP'],
-                    ['label' => 'Work Order', 'route' => null, 'permission' => 'production.work-orders.view', 'effect' => 'สร้างและควบคุมคำสั่งผลิต', 'mode' => 'daily', 'block_reason' => 'รอ Production domain และ route ของ Work Order ก่อนเปิดใช้งาน'],
-                    ['label' => 'Material Issue / WIP', 'route' => null, 'permission' => 'production.work-orders.view', 'effect' => 'ติดตามวัตถุดิบและต้นทุนระหว่างผลิต', 'mode' => 'daily', 'block_reason' => 'รอ Production domain และ route ของ Material Issue ก่อนเปิดใช้งาน'],
-                    ['label' => 'Finished Goods / Cost', 'route' => null, 'permission' => 'production.work-orders.view', 'effect' => 'รับสินค้าสำเร็จรูปและส่งต้นทุนเข้าระบบบัญชี', 'mode' => 'daily', 'block_reason' => 'รอ Production domain และ route ของ Finished Goods ก่อนเปิดใช้งาน'],
+                    ['label' => 'Item / BOM', 'route' => 'production.boms.index', 'permission' => 'production.boms.view', 'effect' => 'เตรียมโครงสร้างสินค้าและวัตถุดิบ', 'mode' => 'setup', 'block_reason' => 'รอ BOM domain และ route ก่อนเปิดใช้งาน'],
+                    ['label' => 'Sales Demand / Work Order', 'route' => null, 'permission' => 'production.orders.view', 'effect' => 'รับคำสั่งขายรอผลิตและควบคุมใบสั่งผลิต', 'mode' => 'daily', 'block_reason' => 'รอ Demand Queue และ Work Order route ก่อนเปิดใช้งาน'],
+                    ['label' => 'Material Issue / WIP', 'route' => null, 'permission' => 'production.orders.view', 'effect' => 'ติดตามวัตถุดิบและต้นทุนระหว่างผลิต', 'mode' => 'daily', 'block_reason' => 'รอ Production execution routes ก่อนเปิดใช้งาน'],
+                    ['label' => 'Finished Goods / Cost', 'route' => null, 'permission' => 'production.orders.view', 'effect' => 'รับสินค้าสำเร็จรูปและส่งต้นทุนเข้าระบบบัญชี', 'mode' => 'daily', 'block_reason' => 'รอ Production completion route ก่อนเปิดใช้งาน'],
                 ],
             ]], 'setup');
         }

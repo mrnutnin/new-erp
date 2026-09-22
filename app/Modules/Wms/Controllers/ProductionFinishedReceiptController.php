@@ -4,23 +4,20 @@ namespace App\Modules\Wms\Controllers;
 
 use App\Http\Controllers\Controller;
 use App\Models\AuditLog;
-use App\Modules\Finance\Models\DocumentSequence;
-use App\Modules\Finance\Services\DocumentSequenceService;
 use App\Modules\Platform\Services\AuditLogger;
 use App\Modules\Settings\Services\GlobalSettings;
-use App\Modules\Wms\Models\InventoryAdjustment;
 use App\Modules\Wms\Models\InventoryAdjustmentDocument;
 use App\Modules\Wms\Models\IssueDocument;
 use App\Modules\Wms\Models\Item;
 use App\Modules\Wms\Requests\SaveInventoryAdjustmentRequest;
 use App\Modules\Wms\Services\ManualProductionReceiptPostingService;
+use App\Modules\Wms\Services\ProductionFinishedReceiptDocumentService;
 use App\Modules\Wms\Services\ProductionFinishedReceiptReversalService;
 use App\Modules\Wms\Services\ProductionReceiptSourceAllocator;
 use App\Modules\Wms\Support\ManualProductionReceiptContract;
 use App\Modules\Wms\Support\WmsDecimal;
 use Brick\Math\BigDecimal;
 use Brick\Math\RoundingMode;
-use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -136,48 +133,23 @@ final class ProductionFinishedReceiptController extends Controller
         return view('Wms::production.finished-receipts.create', compact('document', 'sourceIssue', 'sourceIssueCostTotal', 'sourceIssueHasPendingCost', 'sourceSelections') + ['quantityDecimals' => WmsDecimal::places(), 'valueDecimals' => WmsDecimal::places()]);
     }
 
-    public function store(SaveInventoryAdjustmentRequest $request, DocumentSequenceService $sequences, AuditLogger $audit): JsonResponse
+    public function store(SaveInventoryAdjustmentRequest $request, ProductionFinishedReceiptDocumentService $documents): JsonResponse
     {
-        $values = $this->validated($request);
-        $warehouse = $request->attributes->get('selectedWarehouse');
-        $warehouse->loadMissing('branch');
-        abort_unless($warehouse->branch, 422, 'คลังที่เลือกไม่มีสาขา');
-        $sequence = DocumentSequence::query()->whereNull('warehouse_id')->where('document_type', 'PRODUCTION_FINISHED_RECEIPT')->where('is_active', true)->first();
-        abort_unless($sequence, 422, 'ยังไม่ได้ตั้งค่าเลขเอกสารใบรับสินค้าผลิตเสร็จ');
-        $document = DB::transaction(function () use ($values, $warehouse, $request, $sequences, $sequence, $audit): InventoryAdjustmentDocument {
-            $date = Carbon::parse($values['document_date']);
-            $document = InventoryAdjustmentDocument::query()->create(['warehouse_id' => $warehouse->id, 'document_number' => $sequences->issueForBranch($sequence, $warehouse->branch, $date), 'document_date' => $date, 'direction' => 'GAIN', 'reason' => $values['reason'], 'idempotency_key' => 'production-receipt:'.bin2hex(random_bytes(12)), 'created_by' => $request->user()->id, 'document_context' => ManualProductionReceiptContract::CONTEXT, 'source_issue_id' => $values['source_issue_ids'][0]]);
-            $sequences->recordIssued($sequence->fresh(), $document->document_number, 'inventory_adjustment_document', $document->id, $date, $request->user()->id);
-            foreach ($values['lines'] as $position => $line) {
-                $item = Item::query()->findOrFail($line['item_id']);
-                abort_unless((int) $line['uom_id'] === (int) $item->base_uom_id, 422, 'รับผลิตต้องใช้หน่วยฐานของสินค้า');
-                InventoryAdjustment::query()->create([...$line, 'direction' => 'GAIN', 'document_id' => $document->id, 'line_number' => $position + 1, 'warehouse_id' => $warehouse->id, 'business_date' => $date, 'reason' => $values['reason'], 'idempotency_key' => 'production-receipt:'.$document->id.':line:'.($position + 1), 'created_by' => $request->user()->id]);
-            }
-            $this->syncProductionSources($document, $values['source_consumptions']);
-            $audit->record('wms.production_finished_receipt.created', $document, [], $document->load('lines')->toArray(), $request->user(), $request);
-
-            return $document;
-        });
+        $document = $documents->create(
+            $this->validated($request),
+            $request->attributes->get('selectedWarehouse'),
+            $request->user(),
+            $request,
+        );
 
         return response()->json(['status' => true, 'msg' => 'บันทึกร่างใบรับผลิตแล้ว', 'redirect' => route('wms.production.finished-receipts.show', $document)]);
     }
 
-    public function update(SaveInventoryAdjustmentRequest $request, InventoryAdjustmentDocument $document, AuditLogger $audit): JsonResponse
+    public function update(SaveInventoryAdjustmentRequest $request, InventoryAdjustmentDocument $document, ProductionFinishedReceiptDocumentService $documents): JsonResponse
     {
         $this->scope($request, $document);
         $this->assertProduction($document);
-        abort_unless($document->status === 'DRAFT', 422, 'แก้ไขได้เฉพาะเอกสารร่าง');
-        $values = $this->validated($request, $document);
-        $before = $document->load('lines')->toArray();
-        DB::transaction(function () use ($values, $document, $request, $audit, $before): void {
-            $document->forceFill(['document_date' => Carbon::parse($values['document_date']), 'direction' => 'GAIN', 'reason' => $values['reason'], 'source_issue_id' => $values['source_issue_ids'][0]])->save();
-            $document->lines()->forceDelete();
-            foreach ($values['lines'] as $position => $line) {
-                InventoryAdjustment::query()->create([...$line, 'direction' => 'GAIN', 'document_id' => $document->id, 'line_number' => $position + 1, 'warehouse_id' => $document->warehouse_id, 'business_date' => $document->document_date, 'reason' => $values['reason'], 'idempotency_key' => 'production-receipt:'.$document->id.':line:'.$position.':'.bin2hex(random_bytes(4)), 'created_by' => $document->created_by]);
-            }
-            $this->syncProductionSources($document, $values['source_consumptions']);
-            $audit->record('wms.production_finished_receipt.updated', $document, $before, $document->fresh()->load('lines')->toArray(), $request->user(), $request);
-        });
+        $documents->update($document, $this->validated($request, $document), $request->user(), $request);
 
         return response()->json(['status' => true, 'msg' => 'แก้ไขร่างใบรับผลิตแล้ว', 'redirect' => route('wms.production.finished-receipts.show', $document)]);
     }
@@ -202,17 +174,11 @@ final class ProductionFinishedReceiptController extends Controller
         return view('Wms::production.finished-receipts.show', ['document' => $document, 'sourceIssue' => $sourceIssue, 'sourceIssueCostTotal' => $sourceIssueCostTotal, 'history' => AuditLog::query()->with('user:id,name')->where('subject_type', $document->getMorphClass())->where('subject_id', $document->id)->latest('created_at')->latest('id')->get(), 'dateFormat' => (string) ($settings->value('date_format') ?: 'd/m/Y'), 'postReadiness' => $postReadiness, 'receiptSummary' => ['quantity' => $totalQuantity->__toString(), 'value' => $totalValue->__toString(), 'average_unit_cost' => $totalQuantity->isZero() ? '0' : $totalValue->dividedBy($totalQuantity, 8, RoundingMode::HALF_UP)->__toString()], 'lineUnitCosts' => $lineUnitCosts, 'productionReadiness' => $productionReadiness]);
     }
 
-    public function approve(Request $request, InventoryAdjustmentDocument $document, AuditLogger $audit): JsonResponse
+    public function approve(Request $request, InventoryAdjustmentDocument $document, ProductionFinishedReceiptDocumentService $documents): JsonResponse
     {
         $this->scope($request, $document);
         $this->assertProduction($document);
-        abort_unless($document->status === 'DRAFT' && $document->lines()->exists(), 422, 'อนุมัติได้เฉพาะเอกสารร่างที่มีรายการ');
-        $before = $document->toArray();
-        DB::transaction(function () use ($document, $request, $audit, $before): void {
-            $document->load('lines')->lines->each(fn ($line) => $line->forceFill(['status' => 'APPROVED', 'approved_by' => $request->user()->id])->save());
-            $document->forceFill(['status' => 'APPROVED', 'approved_by' => $request->user()->id])->save();
-            $audit->record('wms.production_finished_receipt.approved', $document, $before, $document->fresh()->load('lines')->toArray(), $request->user(), $request);
-        });
+        $documents->approve($document, $request->user(), $request);
 
         return response()->json(['status' => true, 'msg' => 'อนุมัติใบรับผลิตแล้ว']);
     }
@@ -353,33 +319,6 @@ final class ProductionFinishedReceiptController extends Controller
         }, BigDecimal::zero())->toScale(8)->__toString() ?? '0';
 
         return [$source, $total, (bool) $source?->lines->contains(fn ($line): bool => ($line->source_cost_status ?? 'PENDING') !== 'FINAL')];
-    }
-
-    /** @param list<array<string,mixed>> $sources */
-    private function syncProductionSources(InventoryAdjustmentDocument $document, array $sources): void
-    {
-        if (! Schema::hasTable('wms_production_receipt_sources')) {
-            return;
-        }
-
-        $now = now();
-        $payload = collect($sources)->values()->map(fn (array $source, int $position): array => [
-            'receipt_document_id' => (int) $document->id,
-            'issue_document_id' => (int) $source['issue_document_id'],
-            'issue_line_id' => (int) $source['issue_line_id'],
-            'source_allocation_id' => (int) $source['source_allocation_id'],
-            'source_allocation_revision' => (int) $source['source_allocation_revision'],
-            'consumed_quantity' => (string) $source['consumed_quantity'],
-            'consumed_value' => (string) $source['consumed_value'],
-            'position' => $position + 1,
-            'created_at' => $now,
-            'updated_at' => $now,
-        ])->all();
-
-        DB::table('wms_production_receipt_sources')->where('receipt_document_id', $document->id)->delete();
-        if ($payload !== []) {
-            DB::table('wms_production_receipt_sources')->insert($payload);
-        }
     }
 
     private function assertProduction(InventoryAdjustmentDocument $document): void

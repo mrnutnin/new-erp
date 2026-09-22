@@ -134,7 +134,7 @@ class DatabasePreparationService
             'purchase_order_lines' => ['tax_code_id', 'tax_rate', 'tax_base', 'tax_amount', 'gross_amount'],
             'sales_intakes' => ['deleted_at'],
             'sales_quotations' => ['deleted_at'],
-            'sales_orders' => ['deleted_at'],
+            'sales_orders' => ['required_delivery_date', 'deleted_at'],
             'pos_physical_sales' => ['deleted_at'],
             'sales_documents' => ['deleted_at'],
             'pos_sales_returns' => ['deleted_at'],
@@ -173,13 +173,28 @@ class DatabasePreparationService
             'parties' => ['normalized_name', 'deleted_at'],
             'wms_inventory_adjustments' => ['deleted_at'],
             'wms_transfers' => ['note', 'deleted_at'],
-            'wms_inventory_adjustment_documents' => ['document_context', 'deleted_at'],
+            'wms_inventory_adjustment_documents' => ['document_context', 'source_issue_id', 'deleted_at'],
+            'wms_issue_documents' => ['reversed_by', 'reversed_at', 'reversal_reason', 'reversal_revision', 'deleted_at'],
+            'wms_issue_lines' => ['reversal_movement_id', 'reversal_allocation_id', 'deleted_at'],
             'wms_opening_balance_batches' => ['deleted_at'],
             'wms_stock_count_documents' => ['deleted_at'],
             'wms_items' => ['cover_image_disk', 'cover_image_path', 'additional_images', 'deleted_at'],
             'wms_transfer_photos' => ['transfer_id', 'stage', 'disk', 'path', 'original_name', 'mime_type', 'bytes', 'checksum', 'uploaded_by'],
             'wms_document_photos' => ['document_type', 'document_id', 'disk', 'path', 'original_name', 'mime_type', 'bytes', 'checksum', 'uploaded_by'],
             'wms_production_receipt_sources' => ['receipt_document_id', 'issue_document_id', 'issue_line_id', 'source_allocation_id', 'source_allocation_revision', 'consumed_quantity', 'consumed_value'],
+            'wms_stock_reservations' => ['quantity', 'consumed_quantity', 'status', 'idempotency_key'],
+            'wms_stock_reservation_consumptions' => ['stock_reservation_id', 'stock_movement_id', 'quantity'],
+            'production_boms' => ['branch_id', 'code', 'finished_item_id', 'base_uom_id', 'deleted_at'],
+            'production_bom_revisions' => ['bom_id', 'revision_number', 'status', 'effective_from', 'activated_at'],
+            'production_bom_lines' => ['bom_revision_id', 'line_number', 'component_item_id', 'uom_id', 'quantity'],
+            'production_orders' => ['branch_id', 'issue_warehouse_id', 'receipt_warehouse_id', 'document_number', 'order_type', 'status', 'sales_order_id', 'sales_order_line_id', 'required_delivery_date', 'required_delivery_at', 'finished_item_id', 'uom_id', 'planned_quantity', 'completed_quantity', 'reject_quantity', 'bom_revision_id', 'planned_start_at', 'planned_finish_at', 'released_at', 'released_by', 'started_at', 'started_by', 'held_at', 'held_by', 'hold_reason', 'resumed_at', 'resumed_by', 'completed_at', 'completed_by', 'cancelled_at', 'cancelled_by', 'deleted_at'],
+            'production_order_issues' => ['production_order_id', 'branch_id', 'warehouse_id', 'reported_by', 'resolved_by', 'severity', 'description', 'resolution_method', 'status', 'reported_at', 'resolved_at'],
+            'production_order_operations' => ['production_order_id', 'sequence', 'name', 'planned_minutes', 'status', 'started_at', 'completed_at', 'started_by', 'completed_by', 'notes'],
+            'production_bom_line_substitutes' => ['bom_line_id', 'substitute_item_id', 'uom_id', 'quantity_factor', 'priority', 'notes'],
+            'production_bom_operations' => ['bom_revision_id', 'sequence', 'name', 'planned_minutes', 'notes'],
+            'production_order_materials' => ['production_order_id', 'line_number', 'source_bom_line_id', 'item_id', 'uom_id', 'required_quantity'],
+            'production_order_scraps' => ['production_order_id', 'source_material_line_id', 'scrap_type', 'scrap_item_id', 'uom_id', 'quantity', 'recovery_unit_value', 'recovery_total_value', 'reason', 'status', 'reported_by', 'reported_at'],
+            'production_order_events' => ['production_order_id', 'event_type', 'payload', 'occurred_at', 'created_by'],
             'crm_opportunities' => ['branch_id', 'party_id', 'owner_id', 'sales_intake_id', 'stage', 'next_action_at', 'deleted_at'],
             'crm_activities' => ['opportunity_id', 'type', 'due_at', 'completed_at', 'assigned_to'],
             'crm_product_interests' => ['opportunity_id', 'item_id', 'uom_id', 'quantity', 'target_unit_price', 'budget_amount', 'requirements'],
@@ -193,7 +208,7 @@ class DatabasePreparationService
             'crm_customer_assignments' => ['party_id', 'branch_id', 'owner_id', 'team_id', 'territory', 'backup_owner_id'],
             'push_subscriptions' => ['subscribable_type', 'subscribable_id', 'endpoint', 'public_key', 'auth_token', 'content_encoding'],
         ];
-        $requiredTables = ['wms_cost_revaluation_batches', 'wms_cost_revaluation_runs', 'wms_cost_revaluation_deltas', 'wms_production_receipt_sources', 'wms_transfer_photos', 'wms_document_photos', 'document_signature_snapshots', 'crm_opportunities', 'crm_activities', 'crm_product_interests', 'party_contacts', 'crm_sales_teams', 'crm_sales_team_members', 'notifications', 'crm_notification_deliveries', 'crm_notification_preferences', 'crm_customer_duplicate_resolutions', 'crm_customer_assignments', 'push_subscriptions'];
+        $requiredTables = ['wms_cost_revaluation_batches', 'wms_cost_revaluation_runs', 'wms_cost_revaluation_deltas', 'wms_production_receipt_sources', 'wms_stock_reservation_consumptions', 'production_boms', 'production_bom_revisions', 'production_bom_lines', 'production_orders', 'production_order_materials', 'production_order_scraps', 'production_order_events', 'production_order_issues', 'production_order_operations', 'production_bom_line_substitutes', 'production_bom_operations', 'wms_transfer_photos', 'wms_document_photos', 'document_signature_snapshots', 'crm_opportunities', 'crm_activities', 'crm_product_interests', 'party_contacts', 'crm_sales_teams', 'crm_sales_team_members', 'notifications', 'crm_notification_deliveries', 'crm_notification_preferences', 'crm_customer_duplicate_resolutions', 'crm_customer_assignments', 'push_subscriptions'];
 
         foreach ($requiredTables as $table) {
             if (! Schema::hasTable($table)) {

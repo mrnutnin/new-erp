@@ -30,7 +30,7 @@
                         <a class="app-sidebar-profile text-decoration-none" href="{{ route('profile.edit') }}" title="โปรไฟล์ของฉัน">
                             <span class="app-sidebar-profile-icon app-user-avatar">
                                 @if (auth()->user()->profile_image_path)
-                                    <img src="{{ route('profile.image') }}" alt="" width="28" height="28" loading="lazy" decoding="async">
+                                    <img data-profile-image-src="{{ route('profile.image') }}" alt="" width="28" height="28" loading="lazy" decoding="async">
                                 @else
                                     <i class="bx bx-user" aria-hidden="true"></i>
                                 @endif
@@ -91,7 +91,7 @@
                         <a class="app-header-profile text-secondary small text-decoration-none" href="{{ route('profile.edit') }}">
                             <span class="app-user-avatar">
                                 @if (auth()->user()->profile_image_path)
-                                    <img src="{{ route('profile.image') }}" alt="" width="28" height="28" loading="lazy" decoding="async">
+                                    <img data-profile-image-src="{{ route('profile.image') }}" alt="" width="28" height="28" loading="lazy" decoding="async">
                                 @else
                                     <i class="bx bx-user" aria-hidden="true"></i>
                                 @endif
@@ -220,6 +220,13 @@
                 document.querySelectorAll('.app-sidebar .collapse.app-sidebar-flyout-open').forEach(positionFlyout);
             });
         }());
+    </script>
+    <script>
+        window.addEventListener('load', function () {
+            document.querySelectorAll('[data-profile-image-src]').forEach(function (image) {
+                image.src = image.dataset.profileImageSrc;
+            });
+        });
     </script>
     @stack('scripts')
 </body>

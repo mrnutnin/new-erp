@@ -12,6 +12,7 @@ use App\Modules\Finance\Services\AdvanceDepositApplicationService;
 use App\Modules\Finance\Services\OpenItemService;
 use App\Modules\Crm\Services\OpportunityPosLifecycleService;
 use App\Modules\Platform\Services\AuditLogger;
+use App\Modules\Platform\Services\ModuleCapability;
 use App\Modules\Pos\Models\PhysicalSale;
 use App\Modules\Pos\Support\PhysicalSaleCogsPostingContract;
 use App\Modules\Pos\Support\PhysicalSalePostingReadiness;
@@ -20,9 +21,11 @@ use App\Modules\Pos\Support\PhysicalSaleStockPostingIntent;
 use App\Modules\Pos\Support\PhysicalSaleWithholdingSnapshot;
 use App\Modules\Wms\Models\CostAllocation;
 use App\Modules\Wms\Models\Item;
+use App\Modules\Wms\Models\StockReservation;
 use App\Modules\Wms\Services\CostPropagationTriggerDispatcher;
 use App\Modules\Wms\Services\InventoryCostAllocationService;
 use App\Modules\Wms\Services\StockMovementService;
+use App\Modules\Wms\Services\StockReservationService;
 use App\Modules\Wms\Support\InventoryRoundingAllocator;
 use Brick\Math\BigDecimal;
 use Illuminate\Http\Request;
@@ -44,6 +47,8 @@ final class PhysicalSalePostingService
         private readonly AccountMappingService $mappings,
         private readonly CostPropagationTriggerDispatcher $costPropagation,
         private readonly OpportunityPosLifecycleService $crmLifecycle,
+        private readonly ModuleCapability $capabilities,
+        private readonly StockReservationService $reservations,
     ) {}
 
     /**
@@ -100,10 +105,23 @@ final class PhysicalSalePostingService
             // sale is due on its document date; IV must never be guessed.
             $sale->forceFill(['posting_date' => $postingDate, 'due_date' => $sale->due_date ?? $sale->document_date])->save();
 
+            // Customers who never use Production keep the normal POS stock path.
+            // Existing reservations remain enforceable after the module is disabled;
+            // capability controls UI, not persisted stock integrity.
+            $consumeProductionReservations = $this->usesProductionReservations($sale, $lines);
+            $saleLines = $lines->keyBy('id');
             $allocationRows = [];
             foreach (PhysicalSaleStockPostingIntent::build($payload) as $intent) {
                 $movement = $this->stock->recordIntent([...$intent, 'created_by' => $actor->id]);
-                $movement = $this->stock->postWithinTransaction($movement);
+                $reservation = $consumeProductionReservations
+                    ? $this->productionReservation($saleLines->get((int) $intent['line_id']), $intent)
+                    : null;
+                if ($reservation) {
+                    $this->reservations->consume($reservation, (string) $intent['base_quantity'], $movement, fn ($draft) => $this->stock->postWithinTransaction($draft));
+                    $movement = $movement->fresh();
+                } else {
+                    $movement = $this->stock->postWithinTransaction($movement);
+                }
                 $allocations = CostAllocation::query()
                     ->where('stock_movement_id', $movement->id)
                     ->where('status', 'PENDING')->where('cost_status', 'FINAL')->whereNull('journal_entry_id')
@@ -162,6 +180,46 @@ final class PhysicalSalePostingService
 
             return $sale->fresh();
         }, 3);
+    }
+
+    private function usesProductionReservations(PhysicalSale $sale, $lines): bool
+    {
+        if ($sale->source_type !== 'SALES_ORDER') {
+            return false;
+        }
+        if ($this->capabilities->isEnabled(ModuleCapability::PRODUCTION)) {
+            return true;
+        }
+        $sourceLineIds = $lines->pluck('source_line_id')->filter()->map(fn ($id): string => (string) $id)->all();
+
+        return $sourceLineIds !== [] && StockReservation::query()
+            ->where('source_type', StockReservation::SOURCE_SALES_ORDER_LINE)
+            ->whereIn('source_id', $sourceLineIds)
+            ->where('status', 'OPEN')
+            ->exists();
+    }
+
+    private function productionReservation($saleLine, array $intent): ?StockReservation
+    {
+        $sourceLineId = (int) ($saleLine?->source_line_id ?? 0);
+        if ($sourceLineId < 1) {
+            return null;
+        }
+        $rows = StockReservation::query()
+            ->where('source_type', StockReservation::SOURCE_SALES_ORDER_LINE)
+            ->where('source_id', (string) $sourceLineId)
+            ->where('warehouse_id', $intent['warehouse_id'])
+            ->where('item_id', $intent['item_id'])
+            ->where('uom_id', $intent['uom_id'])
+            ->where('status', 'OPEN')
+            ->lockForUpdate()
+            ->limit(2)
+            ->get();
+        if ($rows->count() > 1) {
+            throw ValidationException::withMessages(['stock' => "พบ Finished Goods Reservation ซ้ำสำหรับ Sales Order line {$sourceLineId}"]);
+        }
+
+        return $rows->first();
     }
 
     private function salePayload(PhysicalSale $sale, $lines, string $postingDate): array

@@ -47,6 +47,7 @@ final class PostingEvent
         'DISPOSAL_LOSS' => ['label' => 'บัญชีขาดทุนจากการจำหน่าย', 'types' => ['EXPENSE']],
         'WIP' => ['label' => 'บัญชีงานระหว่างทำ', 'control' => 'WIP'],
         'FINISHED_GOODS' => ['label' => 'บัญชีสินค้าสำเร็จรูป', 'control' => 'INVENTORY'],
+        'SCRAP_INVENTORY' => ['label' => 'บัญชีสินค้าคงเหลือเศษผลิต', 'control' => 'INVENTORY'],
         'PRODUCTION_VARIANCE' => ['label' => 'บัญชีผลต่างการผลิต', 'types' => ['EXPENSE', 'REVENUE']],
     ];
 
@@ -90,6 +91,7 @@ final class PostingEvent
         // Production module.  The receipt still uses its own accounting
         // contract so it cannot fall through to inventory_adjustment.
         'production.finished_receipt' => ['module' => 'WMS', 'document' => 'รับสินค้าผลิตเสร็จ', 'book' => 'GENERAL', 'status' => 'LIVE', 'roles' => ['FINISHED_GOODS', 'WIP', 'PRODUCTION_VARIANCE'], 'reversal' => 'ORIGINAL_JOURNAL'],
+        'production.scrap_receipt' => ['module' => 'WMS', 'document' => 'รับเศษจากการผลิต', 'book' => 'GENERAL', 'status' => 'LIVE', 'roles' => ['SCRAP_INVENTORY', 'WIP'], 'reversal' => 'ORIGINAL_JOURNAL'],
         'asset.depreciation' => ['module' => 'Asset', 'document' => 'ค่าเสื่อมราคา', 'book' => 'GENERAL', 'status' => 'LIVE', 'roles' => ['DEPRECIATION_EXPENSE', 'ACCUMULATED_DEPRECIATION'], 'reversal' => 'ORIGINAL_JOURNAL'],
         'asset.capitalization' => ['module' => 'Asset', 'document' => 'รับรู้สินทรัพย์', 'book' => 'GENERAL', 'status' => 'LIVE', 'roles' => ['ASSET_COST', 'CAPITALIZATION_CLEARING'], 'reversal' => 'ORIGINAL_JOURNAL'],
         'asset.addition' => ['module' => 'Asset', 'document' => 'เพิ่มมูลค่าสินทรัพย์', 'book' => 'GENERAL', 'status' => 'LIVE', 'roles' => ['ASSET_COST', 'CAPITALIZATION_CLEARING'], 'reversal' => 'ORIGINAL_JOURNAL'],

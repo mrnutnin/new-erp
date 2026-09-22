@@ -160,7 +160,8 @@
                             };
                             return button(row.show_url, 'btn-app-soft', 'bx-file-find',
                                 'ดูรายละเอียด') + button(row.pdf_url, 'btn-app-soft',
-                                'bx-printer', 'พิมพ์ PDF', true) + (row.delete_url ? '<button class="btn btn-sm btn-app-danger js-delete-physical-sale" type="button" data-url="' + esc.display(row.delete_url) + '" title="ลบร่าง" aria-label="ลบร่าง"><i class="bx bx-trash" aria-hidden="true"></i></button>' : '');
+                                'bx-printer', 'พิมพ์ PDF', true) + button(row.receive_receipt_url, 'btn-success',
+                                'bx-receipt', 'รับชำระเงิน') + (row.delete_url ? '<button class="btn btn-sm btn-app-danger js-delete-physical-sale" type="button" data-url="' + esc.display(row.delete_url) + '" title="ลบร่าง" aria-label="ลบร่าง"><i class="bx bx-trash" aria-hidden="true"></i></button>' : '');
                         }
                     }
                 ]

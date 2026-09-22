@@ -18,8 +18,8 @@ final class CrmFoundationContractTest extends TestCase
 
         self::assertStringContainsString('CrmServiceProvider::class', $providers);
         self::assertStringContainsString("['auth', 'program:crm', 'branch']", $routes);
-        self::assertStringContainsString("'core.rbac' => '2.9'", $defaults);
-        self::assertStringContainsString("'core.programs' => '1.1'", $defaults);
+        self::assertStringContainsString("'core.rbac' => '3.0'", $defaults);
+        self::assertStringContainsString("'core.programs' => '1.2'", $defaults);
         self::assertStringContainsString("['code' => 'crm'", $defaults);
         self::assertStringContainsString("'crm_opportunities' =>", $schema);
         self::assertStringContainsString("'crm_activities' =>", $schema);

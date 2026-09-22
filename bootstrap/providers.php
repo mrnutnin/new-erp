@@ -8,6 +8,7 @@ use App\Modules\Finance\Providers\FinanceServiceProvider;
 use App\Modules\Installer\Providers\InstallerServiceProvider;
 use App\Modules\Platform\Providers\PlatformServiceProvider;
 use App\Modules\Pos\Providers\PosServiceProvider;
+use App\Modules\Production\Providers\ProductionServiceProvider;
 use App\Modules\Purchasing\Providers\PurchasingServiceProvider;
 use App\Modules\Settings\Providers\SettingsServiceProvider;
 use App\Modules\Wms\Providers\WmsServiceProvider;
@@ -26,4 +27,5 @@ return [
     PurchasingServiceProvider::class,
     PosServiceProvider::class,
     CrmServiceProvider::class,
+    ProductionServiceProvider::class,
 ];

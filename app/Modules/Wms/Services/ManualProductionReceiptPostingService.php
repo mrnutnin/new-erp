@@ -14,8 +14,10 @@ use App\Modules\Wms\Models\InventoryAdjustmentDocument;
 use App\Modules\Wms\Models\IssueDocument;
 use App\Modules\Wms\Models\StockBalance;
 use App\Modules\Wms\Models\StockMovement;
+use App\Modules\Wms\Models\StockReservation;
 use App\Modules\Wms\Support\InventoryReconciliationCalculator;
 use App\Modules\Wms\Support\InventoryReconciliationGate;
+use App\Modules\Wms\Support\ManualProductionReceiptContract;
 use App\Modules\Wms\Support\ManualProductionReceiptPostingContract;
 use Brick\Math\BigDecimal;
 use Brick\Math\RoundingMode;
@@ -39,6 +41,7 @@ final class ManualProductionReceiptPostingService
         private readonly StockMovementService $movements,
         private readonly InventoryCostAllocationService $allocations,
         private readonly StockBalanceProjectionService $balances,
+        private readonly StockReservationService $reservations,
         private readonly AuditLogger $audit,
         private readonly CostPropagationTriggerDispatcher $costPropagation,
     ) {}
@@ -64,7 +67,7 @@ final class ManualProductionReceiptPostingService
             ];
         }
         $reconciliation = $this->reconciliation($document);
-        $blockers = [...$blockers, ...$reconciliation['blockers']];
+        $blockers = [...$blockers, ...$reconciliation['blockers'], ...$this->productionOrderReceiptLimitBlockers($document)];
 
         return [
             'ready' => $blockers === [],
@@ -94,6 +97,10 @@ final class ManualProductionReceiptPostingService
             }
             if ($locked->document_context !== 'PRODUCTION_RECEIPT' || $locked->status !== 'APPROVED') {
                 throw ValidationException::withMessages(['status' => 'ลงบัญชีใบรับผลิตได้เฉพาะเอกสารที่อนุมัติแล้ว']);
+            }
+            $limitBlockers = $this->productionOrderReceiptLimitBlockers($locked->toArray());
+            if ($limitBlockers !== []) {
+                throw ValidationException::withMessages(['posting' => collect($limitBlockers)->pluck('message')->implode(' ')]);
             }
 
             $beforeBalances = $this->snapshotBalances($locked->lines);
@@ -194,11 +201,116 @@ final class ManualProductionReceiptPostingService
             }
             $before = $locked->toArray();
             $locked->forceFill(['status' => 'POSTED', 'posted_by' => $actor->id])->save();
+            $this->syncProductionOrderCompletion($locked, $actor);
             $this->audit->record('wms.inventory_adjustment.posted', $locked, $before, $locked->fresh()->load('lines')->toArray(), $actor, $request);
             $this->costPropagation->dispatchIfEnabled('PRODUCTION_FINISHED_RECEIPT', $locked->id, 0, [], $actor->id);
 
             return $locked->fresh();
         }, 3);
+    }
+
+    private function productionOrderReceiptLimitBlockers(array $document): array
+    {
+        if (($document['document_context'] ?? null) !== ManualProductionReceiptContract::CONTEXT
+            || ! Schema::hasTable('production_order_events')
+            || ! Schema::hasTable('production_orders')
+            || ! Schema::hasColumn('wms_inventory_adjustment_documents', 'source_issue_id')) {
+            return [];
+        }
+        $sourceIssueId = (int) ($document['source_issue_id'] ?? 0);
+        if ($sourceIssueId <= 0) return [];
+        $event = DB::table('production_order_events')->where('event_type', 'material_issue_created')->where('source_id', (string) $sourceIssueId)->latest('id')->first();
+        if (! $event) return [];
+        $order = DB::table('production_orders')->where('id', $event->production_order_id)->first();
+        if (! $order) return [];
+
+        $receiptId = (int) ($document['id'] ?? 0);
+        $plannedQuantity = BigDecimal::of((string) $order->planned_quantity)->toScale(8, RoundingMode::HALF_UP);
+        $currentQuantity = collect($document['lines'] ?? [])
+            ->where('item_id', (int) $order->finished_item_id)
+            ->reduce(fn (BigDecimal $sum, array $line): BigDecimal => $sum->plus((string) ($line['quantity'] ?? 0)), BigDecimal::zero())
+            ->toScale(8, RoundingMode::HALF_UP);
+        $blockers = [];
+        if (! $currentQuantity->isEqualTo($plannedQuantity)) {
+            $blockers[] = ['code' => 'PRODUCTION_ORDER_RECEIPT_NOT_PLANNED_QUANTITY', 'message' => '1 WO ต้องรับผลิตครั้งเดียวเท่ากับ Planned quantity'];
+        }
+        if (DB::table('wms_inventory_adjustment_documents')
+            ->where('document_context', ManualProductionReceiptContract::CONTEXT)
+            ->where('source_issue_id', $sourceIssueId)
+            ->where('id', '!=', $receiptId)
+            ->whereIn('status', ['DRAFT', 'APPROVED', 'POSTED'])
+            ->where(fn ($q) => $q->whereNull('reversal_status')->orWhere('reversal_status', '!=', 'REVERSED'))
+            ->whereNull('deleted_at')
+            ->exists()) {
+            $blockers[] = ['code' => 'PRODUCTION_ORDER_FINISHED_RECEIPT_EXISTS', 'message' => 'WO นี้มีใบรับผลิตแล้ว ต้องยกเลิก/กลับรายการก่อนสร้างใหม่'];
+        }
+        if ($blockers !== []) {
+            return $blockers;
+        }
+
+        if (DB::table('wms_issue_returns')->where('issue_document_id', $sourceIssueId)->whereIn('status', ['DRAFT', 'APPROVED'])->whereNull('deleted_at')->exists()) {
+            $blockers[] = ['code' => 'PRODUCTION_ORDER_PENDING_MATERIAL_RETURN', 'message' => 'มีใบรับคืนวัตถุดิบที่ยังไม่ลง Stock/ยกเลิก ต้องเคลียร์ก่อนปิด WO'];
+        }
+        if (DB::table('wms_inventory_adjustment_documents')->where('document_context', 'PRODUCTION_SCRAP_RECEIPT')->where('source_issue_id', $sourceIssueId)->whereIn('status', ['DRAFT', 'APPROVED'])->whereNull('deleted_at')->exists()) {
+            $blockers[] = ['code' => 'PRODUCTION_ORDER_PENDING_SCRAP_RECEIPT', 'message' => 'มีใบรับเศษผลิตที่ยังไม่ลง Stock/ยกเลิก ต้องเคลียร์ก่อนปิด WO'];
+        }
+
+        return $blockers;
+    }
+
+    private function syncProductionOrderCompletion(InventoryAdjustmentDocument $receipt, User $actor): void
+    {
+        if ($receipt->document_context !== 'PRODUCTION_RECEIPT'
+            || ! Schema::hasColumn('wms_inventory_adjustment_documents', 'source_issue_id')
+            || ! Schema::hasTable('production_order_events')
+            || ! Schema::hasTable('production_orders')) {
+            return;
+        }
+        $event = DB::table('production_order_events')->where('event_type', 'material_issue_created')->where('source_id', (string) $receipt->source_issue_id)->latest('id')->first();
+        if (! $event) {
+            return;
+        }
+        $order = DB::table('production_orders')->where('id', $event->production_order_id)->lockForUpdate()->first();
+        if (! $order || ! in_array($order->status, ['IN_PROGRESS', 'RELEASED'], true)) {
+            return;
+        }
+        $completed = DB::table('wms_inventory_adjustments')
+            ->join('wms_inventory_adjustment_documents', 'wms_inventory_adjustment_documents.id', '=', 'wms_inventory_adjustments.document_id')
+            ->where('wms_inventory_adjustment_documents.document_context', 'PRODUCTION_RECEIPT')
+            ->where('wms_inventory_adjustment_documents.status', 'POSTED')
+            ->where('wms_inventory_adjustment_documents.source_issue_id', $receipt->source_issue_id)
+            ->where('wms_inventory_adjustments.item_id', $order->finished_item_id)
+            ->where('wms_inventory_adjustments.status', 'POSTED')
+            ->sum('wms_inventory_adjustments.quantity');
+        $completed = BigDecimal::of((string) $completed)->toScale(8, RoundingMode::HALF_UP);
+        $planned = BigDecimal::of((string) $order->planned_quantity)->toScale(8, RoundingMode::HALF_UP);
+        $done = ! $completed->isLessThan($planned);
+        DB::table('production_orders')->where('id', $order->id)->update([
+            'status' => $done ? 'COMPLETED' : 'IN_PROGRESS',
+            'completed_quantity' => $completed->__toString(),
+            'completed_at' => $done ? now() : null,
+            'completed_by' => $done ? $actor->id : null,
+            'updated_by' => $actor->id,
+            'updated_at' => now(),
+        ]);
+        if ($done && $order->order_type === 'MAKE_TO_ORDER' && (int) $order->sales_order_line_id > 0) {
+            $reservation = $this->reservations->reserve([
+                'warehouse_id' => (int) $order->receipt_warehouse_id,
+                'item_id' => (int) $order->finished_item_id,
+                'uom_id' => (int) $order->uom_id,
+                'quantity' => $planned->__toString(),
+                'source_type' => StockReservation::SOURCE_SALES_ORDER_LINE,
+                'source_id' => (string) $order->sales_order_line_id,
+                'idempotency_key' => 'sales-order-line:'.$order->sales_order_line_id.':finished-goods',
+                'created_by' => $actor->id,
+            ]);
+            if (! DB::table('production_order_events')->where('event_type', 'finished_goods_reserved')->where('source_id', (string) $reservation->id)->exists()) {
+                DB::table('production_order_events')->insert(['production_order_id' => $order->id, 'event_type' => 'finished_goods_reserved', 'source_type' => StockReservation::class, 'source_id' => (string) $reservation->id, 'payload' => json_encode(['sales_order_line_id' => $order->sales_order_line_id, 'quantity' => $planned->__toString()]), 'occurred_at' => now(), 'created_by' => $actor->id, 'created_at' => now(), 'updated_at' => now()]);
+            }
+        }
+        if (! DB::table('production_order_events')->where('event_type', 'finished_receipt_posted')->where('source_id', (string) $receipt->id)->exists()) {
+            DB::table('production_order_events')->insert(['production_order_id' => $order->id, 'event_type' => 'finished_receipt_posted', 'source_type' => InventoryAdjustmentDocument::class, 'source_id' => (string) $receipt->id, 'payload' => json_encode(['document_number' => $receipt->document_number, 'completed_quantity' => $completed->__toString(), 'completed' => $done]), 'occurred_at' => now(), 'created_by' => $actor->id, 'created_at' => now(), 'updated_at' => now()]);
+        }
     }
 
     /** Read-only Gate C proof: source issue, receipt value and source cost must reconcile before Post. */
