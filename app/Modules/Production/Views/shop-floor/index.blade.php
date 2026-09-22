@@ -10,7 +10,7 @@
 <div class="container-fluid px-3 px-lg-4 py-4 module-dashboard">
     <div class="d-flex flex-wrap justify-content-between align-items-start gap-3 mb-4 p-4 rounded-4 bg-info-subtle">
         <div><p class="eyebrow mb-2">PRODUCTION / SHOP FLOOR</p><h1 class="h2 mb-2">หน้างานผลิต</h1><p class="text-secondary mb-0">เลือกใบสั่งผลิตที่กำลังทำงาน แล้วเปิดรายการถัดไปโดยไม่ต้องเข้า WMS หรือ Accounting</p></div>
-        <span class="badge app-status-info align-self-start">แสดงสูงสุด 50 WO</span>
+        <div class="d-flex flex-wrap align-items-center gap-2 align-self-start"><button class="btn btn-app-soft d-none" type="button" data-production-install><i class="bx bx-download me-1" aria-hidden="true"></i>ติดตั้งบนหน้าจอหลัก</button><span class="badge app-status-info">แสดงสูงสุด 50 WO</span></div>
     </div>
 
     <div id="shop-floor-network-status" class="alert alert-warning d-none" role="status" aria-live="polite"><i class="bx bx-wifi-off me-1" aria-hidden="true"></i>เครือข่ายขัดข้อง กรุณาตรวจสอบการเชื่อมต่อก่อนทำรายการ</div>

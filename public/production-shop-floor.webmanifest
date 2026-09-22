@@ -1,0 +1,13 @@
+{
+  "name": "MintERP Shop Floor",
+  "short_name": "Shop Floor",
+  "start_url": "/production/shop-floor",
+  "scope": "/production/",
+  "display": "standalone",
+  "background_color": "#f6f8fa",
+  "theme_color": "#c45b22",
+  "icons": [
+    { "src": "/images/alexiasoft-logo.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/images/alexiasoft-logo.png", "sizes": "512x512", "type": "image/png" }
+  ]
+}
