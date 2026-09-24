@@ -15,6 +15,7 @@ use App\Modules\Production\Models\ProductionOrderIssue;
 use App\Modules\Production\Models\ProductionOrderOperation;
 use App\Modules\Production\Notifications\ProductionIssueReportedNotification;
 use App\Modules\Production\Services\ProductionOrderService;
+use App\Modules\Production\Support\ProductionDayTimeline;
 use App\Modules\Wms\Models\CostAllocation;
 use App\Modules\Wms\Models\InventoryAdjustmentDocument;
 use App\Modules\Wms\Models\IssueDocument;
@@ -92,7 +93,6 @@ final class OrderController extends Controller
             ->addColumn('severity_label', fn (ProductionOrderIssue $issue) => ['LOW' => 'ต่ำ', 'MEDIUM' => 'กลาง', 'HIGH' => 'สูง'][$issue->severity] ?? $issue->severity)
             ->addColumn('reported_at_label', fn (ProductionOrderIssue $issue) => $issue->reported_at?->format('d/m/Y H:i') ?: '-')
             ->addColumn('status_label', fn (ProductionOrderIssue $issue) => $issue->status === 'OPEN' ? 'รอตรวจสอบ' : 'แก้ไขแล้ว')
-            ->addColumn('resolve_url', fn (ProductionOrderIssue $issue) => $issue->status === 'OPEN' ? route('production.shop-floor.issues.resolve', $issue) : null)
             ->addColumn('show_url', fn (ProductionOrderIssue $issue) => route('production.shop-floor.show', $issue->production_order_id))
             ->filterColumn('wo_label', fn ($query, $keyword) => $query->whereHas('order', fn ($order) => $order->where('document_number', 'like', "%{$keyword}%")))
             ->filterColumn('reporter_label', fn ($query, $keyword) => $query->whereHas('reporter', fn ($user) => $user->where('name', 'like', "%{$keyword}%")))
@@ -104,7 +104,7 @@ final class OrderController extends Controller
     public function reportShopFloorIssue(Request $request, ProductionOrder $order): JsonResponse
     {
         abort_unless((int) $order->branch_id === $this->branchId($request) && (int) $order->issue_warehouse_id === (int) $request->attributes->get('selectedWarehouse')->id, 404);
-        abort_unless($order->status === 'IN_PROGRESS', 422);
+        abort_unless(in_array($order->status, ProductionOrderIssue::REPORTABLE_ORDER_STATUSES, true), 422, 'แจ้งปัญหาได้เฉพาะงานพร้อมผลิตหรือกำลังผลิต');
         $values = $request->validate(['severity' => ['required', 'in:LOW,MEDIUM,HIGH'], 'description' => ['required', 'string', 'min:10', 'max:2000']]);
         $issue = ProductionOrderIssue::create(['production_order_id' => $order->id, 'branch_id' => $order->branch_id, 'warehouse_id' => $order->issue_warehouse_id, 'reported_by' => $request->user()->id, 'severity' => $values['severity'], 'description' => $values['description'], 'status' => 'OPEN', 'reported_at' => now()]);
         $order->events()->create(['event_type' => 'production_issue_reported', 'source_type' => ProductionOrderIssue::class, 'source_id' => (string) $issue->id, 'payload' => ['severity' => $issue->severity, 'description' => $issue->description], 'occurred_at' => now(), 'created_by' => $request->user()->id]);
@@ -129,41 +129,49 @@ final class OrderController extends Controller
 
     public function shopFloor(Request $request): View
     {
-        $filters = $request->validate(['q' => ['nullable', 'string', 'max:100']]);
+        $filters = $request->validate(['q' => ['nullable', 'string', 'max:100'], 'status' => ['nullable', 'in:RELEASED,IN_PROGRESS']]);
         $warehouseId = (int) $request->attributes->get('selectedWarehouse')->id;
         $search = trim((string) ($filters['q'] ?? ''));
+        $status = $filters['status'] ?? null;
         $orders = ProductionOrder::query()
             ->with(['finishedItem:id,code,name', 'uom:id,code', 'salesOrder:id,document_number,party_name', 'events:id,production_order_id,event_type,source_id'])
             ->where('branch_id', $this->branchId($request))
             ->where('issue_warehouse_id', $warehouseId)
             ->whereIn('status', ['RELEASED', 'IN_PROGRESS'])
+            ->when($status, fn ($query) => $query->where('status', $status))
             ->when($search !== '', fn ($query) => $query->where(fn ($nested) => $nested
                 ->where('document_number', 'like', "%{$search}%")
                 ->orWhereHas('finishedItem', fn ($item) => $item->where('code', 'like', "%{$search}%")->orWhere('name', 'like', "%{$search}%"))
-                ->orWhereHas('salesOrder', fn ($salesOrder) => $salesOrder->where('document_number', 'like', "%{$search}%"))))
+                ->orWhereHas('salesOrder', fn ($salesOrder) => $salesOrder->where('document_number', 'like', "%{$search}%")->orWhere('party_name', 'like', "%{$search}%"))))
             ->orderByRaw("FIELD(status, 'IN_PROGRESS', 'RELEASED')")
-            ->orderBy('planned_finish_date')->orderBy('id')->limit(50)->get();
+            ->orderBy('planned_finish_date')->orderBy('id')->paginate(4)->withQueryString();
         $issueIds = $orders->flatMap(fn (ProductionOrder $order) => $order->events->where('event_type', 'material_issue_created')->pluck('source_id'))->filter()->unique()->values();
         $issueStatuses = $issueIds->isEmpty() ? collect() : IssueDocument::query()->whereIn('id', $issueIds)->pluck('status', 'id');
-        $returnDocuments = $issueIds->isEmpty() ? collect() : IssueReturn::query()->whereIn('issue_document_id', $issueIds)->latest('id')->get(['id', 'issue_document_id', 'status'])->groupBy('issue_document_id');
-        $scrapDocuments = $issueIds->isEmpty() ? collect() : InventoryAdjustmentDocument::query()->whereIn('source_issue_id', $issueIds)->where('document_context', 'PRODUCTION_SCRAP_RECEIPT')->latest('id')->get(['id', 'source_issue_id', 'status'])->groupBy('source_issue_id');
         $receiptDocuments = $issueIds->isEmpty() ? collect() : InventoryAdjustmentDocument::query()->whereIn('source_issue_id', $issueIds)->where('document_context', ManualProductionReceiptContract::CONTEXT)->latest('id')->get(['id', 'source_issue_id', 'status'])->groupBy('source_issue_id');
 
-        return view('Production::shop-floor.index', compact('orders', 'search', 'issueStatuses', 'returnDocuments', 'scrapDocuments', 'receiptDocuments'));
+        return view('Production::shop-floor.index', compact('orders', 'search', 'status', 'issueStatuses', 'receiptDocuments'));
     }
 
     public function shopFloorShow(Request $request, ProductionOrder $order, ProductionOrderService $service): View
     {
         abort_unless((int) $order->branch_id === $this->branchId($request) && (int) $order->issue_warehouse_id === (int) $request->attributes->get('selectedWarehouse')->id, 404);
-        $order->load(['finishedItem:id,code,name,cover_image_disk,cover_image_path', 'uom:id,code', 'materials.item:id,code,name,cover_image_disk,cover_image_path', 'materials.uom:id,code', 'operations', 'events:id,production_order_id,event_type,source_id,occurred_at']);
+        $order->load(['finishedItem:id,code,name,cover_image_disk,cover_image_path', 'uom:id,code', 'bomRevision:id,bom_id,revision_number', 'bomRevision.bom:id,code', 'events:id,production_order_id,event_type,source_id,occurred_at']);
+        $order->loadCount(['materials', 'operations', 'operations as completed_operations_count' => fn ($query) => $query->where('status', 'COMPLETED')]);
+        $materials = $order->materials()->with(['item:id,code,name,cover_image_disk,cover_image_path', 'uom:id,code'])->orderBy('id')->paginate(6, ['*'], 'materials_page')->withQueryString()->fragment('materials');
+        $operations = $order->operations()->orderBy('id')->paginate(5, ['*'], 'routing_page')->withQueryString()->fragment('routing');
         $issueId = $order->events->firstWhere('event_type', 'material_issue_created')?->source_id;
         $issue = $issueId ? IssueDocument::query()->where('issue_type', 'PRODUCTION')->find($issueId) : null;
         $returnDocument = $issue ? IssueReturn::query()->where('issue_document_id', $issue->id)->latest('id')->first(['id', 'status']) : null;
         $scrapDocument = $issue ? InventoryAdjustmentDocument::query()->where('source_issue_id', $issue->id)->where('document_context', 'PRODUCTION_SCRAP_RECEIPT')->latest('id')->first(['id', 'status']) : null;
         $receiptDocument = $issue ? InventoryAdjustmentDocument::query()->where('source_issue_id', $issue->id)->where('document_context', ManualProductionReceiptContract::CONTEXT)->latest('id')->first(['id', 'status']) : null;
-        $productionIssues = ProductionOrderIssue::query()->with(['reporter:id,name', 'resolver:id,name'])->where('production_order_id', $order->id)->latest('reported_at')->get();
+        $focusedIssueId = $request->validate(['issue_id' => ['nullable', 'integer', 'min:1']])['issue_id'] ?? null;
+        $productionIssues = ProductionOrderIssue::query()->with(['reporter:id,name', 'resolver:id,name'])->where('production_order_id', $order->id)
+            ->when($focusedIssueId, fn ($query) => $query->orderByRaw('CASE WHEN id = ? THEN 0 ELSE 1 END', [$focusedIssueId]))
+            ->latest('reported_at')->latest('id')->paginate(5, ['*'], 'issues_page')->withQueryString()->fragment('issues');
+        $openIssuesCount = ProductionOrderIssue::query()->where('production_order_id', $order->id)->where('status', 'OPEN')->count();
+        $materialReadiness = ! $issue && in_array($order->status, ['RELEASED', 'IN_PROGRESS'], true) ? $service->materialReadiness($order) : null;
 
-        return view('Production::shop-floor.show', compact('order', 'issue', 'returnDocument', 'scrapDocument', 'receiptDocument', 'productionIssues'));
+        return view('Production::shop-floor.show', compact('order', 'issue', 'returnDocument', 'scrapDocument', 'receiptDocument', 'productionIssues', 'materialReadiness', 'materials', 'operations', 'openIssuesCount'));
     }
 
     public function shopFloorItemImage(Request $request, ProductionOrder $order, Item $item, FileStorageService $storage): StreamedResponse
@@ -269,14 +277,13 @@ final class OrderController extends Controller
         $filters = $request->validate([
             'status' => ['nullable', 'in:DRAFT,RELEASED,IN_PROGRESS,COMPLETED,CANCELLED'],
             'date_from' => ['nullable', 'date_format:Y-m-d'],
-            'date_to' => ['nullable', 'date_format:Y-m-d', 'after_or_equal:date_from'],
             'responsible_user_id' => ['nullable', 'integer', 'exists:users,id'],
             'finished_item_id' => ['nullable', 'integer', 'exists:wms_items,id'],
             'overdue' => ['nullable', 'boolean'],
             'shortage' => ['nullable', 'boolean'],
         ]);
-        $from = $filters['date_from'] ?? today()->startOfMonth()->toDateString();
-        $to = $filters['date_to'] ?? today()->endOfMonth()->toDateString();
+        $from = $filters['date_from'] ?? today()->toDateString();
+        $to = $from;
         $warehouseId = (int) $request->attributes->get('selectedWarehouse')->id;
         $orders = ProductionOrder::query()
             ->with(['finishedItem:id,code,name', 'uom:id,code', 'salesOrder:id,document_number,party_name', 'responsibleUser:id,name'])
@@ -287,14 +294,15 @@ final class OrderController extends Controller
             ->when($filters['finished_item_id'] ?? null, fn ($query, $itemId) => $query->where('finished_item_id', $itemId))
             ->when($filters['overdue'] ?? false, fn ($query) => $query->whereNotNull('planned_finish_date')->whereDate('planned_finish_date', '<', today())->whereNotIn('status', ['COMPLETED', 'CANCELLED']))
             ->where(function ($query) use ($from, $to): void {
-                $query->where(function ($range) use ($from, $to): void {
-                    $range->whereNotNull('planned_start_date')->whereDate('planned_start_date', '<=', $to)
-                        ->where(function ($finish) use ($from): void {
-                            $finish->whereNull('planned_finish_date')->orWhereDate('planned_finish_date', '>=', $from);
-                        });
-                })->orWhere(function ($undated) use ($from, $to): void {
-                    $undated->whereNull('planned_start_date')->whereDate('created_at', '<=', $to)->whereDate('created_at', '>=', $from);
-                });
+                $query->where(fn ($timed) => $timed->whereNotNull('planned_start_at')->whereNotNull('planned_finish_at')
+                    ->where('planned_start_at', '<', Carbon::parse($to)->addDay())->where('planned_finish_at', '>', $from))
+                    ->orWhere(function ($range) use ($from, $to): void {
+                        $range->where(fn ($missing) => $missing->whereNull('planned_start_at')->orWhereNull('planned_finish_at'))
+                            ->whereNotNull('planned_start_date')->whereDate('planned_start_date', '<=', $to)
+                            ->where(fn ($finish) => $finish->whereNull('planned_finish_date')->orWhereDate('planned_finish_date', '>=', $from));
+                    })->orWhere(function ($undated) use ($from, $to): void {
+                        $undated->whereNull('planned_start_date')->whereDate('created_at', '<=', $to)->whereDate('created_at', '>=', $from);
+                    });
             })
             ->orderByRaw('planned_start_date IS NULL')->orderBy('planned_start_date')->orderBy('id')
             ->limit(200)->get();
@@ -306,7 +314,7 @@ final class OrderController extends Controller
         }
 
         return view('Production::orders.planning', [
-            'orders' => $orders, 'filters' => [...$filters, 'date_from' => $from, 'date_to' => $to],
+            'orders' => $orders, 'timeline' => ProductionDayTimeline::forDay($orders, $from), 'filters' => [...$filters, 'date_from' => $from, 'date_to' => $to],
             'selectedResponsible' => ($filters['responsible_user_id'] ?? null) ? User::query()->find($filters['responsible_user_id']) : null,
             'products' => Item::query()->whereIn('id', $orders->pluck('finished_item_id'))->orderBy('code')->get(['id', 'code', 'name']),
         ]);
@@ -401,7 +409,7 @@ final class OrderController extends Controller
             ->addColumn('source_label', fn (ProductionOrder $row) => $row->salesOrder ? $row->salesOrder->document_number.' · '.$row->salesOrder->party_name : 'Make to Stock')
             ->addColumn('finished_item_label', fn (ProductionOrder $row) => trim(($row->finishedItem?->code ?? '').' · '.($row->finishedItem?->name ?? ''), ' ·'))
             ->addColumn('quantity_label', fn (ProductionOrder $row) => WmsDecimal::format($row->planned_quantity).' '.($row->uom?->code ?? ''))
-            ->addColumn('status_label', fn (ProductionOrder $row) => ['DRAFT' => 'ร่าง', 'RELEASED' => 'Release แล้ว', 'IN_PROGRESS' => 'กำลังผลิต', 'COMPLETED' => 'เสร็จสิ้น', 'CANCELLED' => 'ยกเลิก'][$row->status] ?? $row->status)
+            ->addColumn('status_label', fn (ProductionOrder $row) => ['DRAFT' => 'ร่าง', 'RELEASED' => 'พร้อมผลิต', 'IN_PROGRESS' => 'กำลังผลิต', 'COMPLETED' => 'เสร็จแล้ว', 'CANCELLED' => 'ยกเลิกเอกสาร'][$row->status] ?? $row->status)
             ->addColumn('show_url', fn (ProductionOrder $row) => route('production.orders.show', $row))
             ->addColumn('edit_url', fn (ProductionOrder $row) => $row->status === 'DRAFT' && $row->order_type === 'MAKE_TO_STOCK' && $request->user()->hasPermission('production.orders.update') ? route('production.orders.edit', $row) : null)
             ->toJson();

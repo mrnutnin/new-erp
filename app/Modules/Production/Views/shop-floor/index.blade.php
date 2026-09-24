@@ -1,81 +1,56 @@
 @extends('Production::layout')
 @section('title', 'หน้างานผลิต | MintERP')
+@section('body-class', 'app-page sf-tablet-page')
 @section('content')
-@php
-    $labels = ['RELEASED' => 'พร้อมผลิต', 'IN_PROGRESS' => 'กำลังผลิต', 'COMPLETED' => 'เสร็จแล้ว'];
-    $classes = ['RELEASED' => 'app-status-info', 'IN_PROGRESS' => 'app-status-warning'];
-    $issueLabels = ['DRAFT' => 'รอ Supervisor อนุมัติ', 'APPROVED' => 'รอ Supervisor ลง Stock', 'POSTED' => 'ลง Stock แล้ว'];
-    $issueClasses = ['DRAFT' => 'app-status-neutral', 'APPROVED' => 'app-status-warning', 'POSTED' => 'app-status-success'];
-@endphp
-<div class="container-fluid px-3 px-lg-4 py-4 module-dashboard">
-    <div class="d-flex flex-wrap justify-content-between align-items-start gap-3 mb-4 p-4 rounded-4 bg-info-subtle">
-        <div><p class="eyebrow mb-2">PRODUCTION / SHOP FLOOR</p><h1 class="h2 mb-2">หน้างานผลิต</h1><p class="text-secondary mb-0">เลือกใบสั่งผลิตที่กำลังทำงาน แล้วเปิดรายการถัดไปโดยไม่ต้องเข้า WMS หรือ Accounting</p></div>
-        <div class="d-flex flex-wrap align-items-center gap-2 align-self-start"><button class="btn btn-app-soft d-none" type="button" data-production-install><i class="bx bx-download me-1" aria-hidden="true"></i>ติดตั้งบนหน้าจอหลัก</button><span class="badge app-status-info">แสดงสูงสุด 50 WO</span></div>
-    </div>
+<div class="container-fluid shop-floor-board sf-workboard">
+    <header class="sf-board-header">
+        <div><p class="sf-kicker">SHOP FLOOR</p><h1>หน้างานผลิต</h1><p class="sf-subtitle">เลือกงานเพื่อเบิกวัตถุดิบ เริ่มผลิต และรับผลิต</p></div>
+        <div class="sf-header-tools"><span class="badge app-status-info"><i class="bx bx-buildings me-1" aria-hidden="true"></i>{{ request()->attributes->get('selectedWarehouse')?->name ?: 'คลังปัจจุบัน' }}</span><button class="btn btn-app-soft d-none" type="button" data-production-install><i class="bx bx-download me-1" aria-hidden="true"></i>ติดตั้งบนหน้าจอหลัก</button></div>
+    </header>
+    <div id="shop-floor-network-status" class="alert alert-warning d-none" role="status" aria-live="polite">เครือข่ายขัดข้อง กรุณาตรวจสอบการเชื่อมต่อก่อนทำรายการ</div>
 
-    <div id="shop-floor-network-status" class="alert alert-warning d-none" role="status" aria-live="polite"><i class="bx bx-wifi-off me-1" aria-hidden="true"></i>เครือข่ายขัดข้อง กรุณาตรวจสอบการเชื่อมต่อก่อนทำรายการ</div>
-    <div class="card border-0 shadow-sm mb-4">
-        <div class="card-body">
-            <form method="GET" class="row g-3 align-items-end">
-                <div class="col-12 col-md-10"><label class="form-label" for="shop-floor-search">ค้นหา หรือสแกน QR/Barcode WO</label><input id="shop-floor-search" class="form-control form-control-lg" name="q" value="{{ $search }}" placeholder="สแกน QR หรือกรอก WO/รหัสสินค้า..." inputmode="search" autocomplete="off" autofocus><div class="form-text">เครื่องสแกนที่ทำงานเหมือนแป้นพิมพ์ใช้ช่องนี้ได้ทันที</div></div>
-                <div class="col-12 col-md-2"><button class="btn btn-app-primary btn-lg w-100" type="submit"><i class="bx bx-search me-1" aria-hidden="true"></i>ค้นหา</button></div>
-            </form>
-        </div>
-    </div>
+    <section class="sf-board-controls" aria-label="ค้นหางานผลิต">
+        <div class="sf-controls-heading"><label for="shop-floor-search" class="form-label mb-0"><i class="bx bx-scan me-1" aria-hidden="true"></i>ค้นหา หรือสแกน QR/Barcode WO</label><a class="btn btn-sm btn-app-soft" href="{{ route('production.shop-floor.index') }}"><i class="bx bx-reset me-1" aria-hidden="true"></i>ล้างตัวกรอง</a></div>
+        <form method="GET" class="sf-search-form">
+            @if($status)<input type="hidden" name="status" value="{{ $status }}">@endif
+            <input id="shop-floor-search" class="form-control" name="q" value="{{ $search }}" placeholder="เลข WO / สินค้า / ลูกค้า" inputmode="search" autocomplete="off" maxlength="100">
+            <button class="btn btn-app-primary" type="submit"><i class="bx bx-search me-1" aria-hidden="true"></i>ค้นหา</button>
+        </form>
+        <nav class="sf-filters" aria-label="กรองสถานะงาน">
+            @foreach(['' => 'ทั้งหมด', 'IN_PROGRESS' => 'กำลังผลิต', 'RELEASED' => 'พร้อมผลิต'] as $value => $label)
+                <a class="sf-filter {{ ($status ?: '') === $value ? 'is-active' : '' }}" @if(($status ?: '') === $value) aria-current="page" @endif href="{{ route('production.shop-floor.index', ['q' => $search, 'status' => $value]) }}">{{ $label }}</a>
+            @endforeach
+            <span class="sf-result-count">{{ $orders->total() }} งาน · กำลังผลิตก่อน / กำหนดเสร็จก่อน</span>
+        </nav>
+    </section>
 
-    <div class="row g-3">
+    <div class="sf-queue" aria-label="คิวงานผลิต">
         @forelse($orders as $order)
             @php
                 $issueId = $order->events->firstWhere('event_type', 'material_issue_created')?->source_id;
                 $issueStatus = $issueId ? $issueStatuses->get((int) $issueId) : null;
-                $returnDocument = $issueId ? $returnDocuments->get((int) $issueId)?->first() : null;
-                $scrapDocument = $issueId ? $scrapDocuments->get((int) $issueId)?->first() : null;
-                $receiptDocument = $issueId ? $receiptDocuments->get((int) $issueId)?->first() : null;
-                $progress = $order->status === 'COMPLETED' ? 100 : ($receiptDocument?->status === 'POSTED' ? 100 : ($receiptDocument?->status === 'APPROVED' ? 85 : ($receiptDocument ? 75 : ($order->started_at ? 60 : ($issueStatus === 'POSTED' ? 45 : ($issueStatus === 'APPROVED' ? 30 : ($issueStatus ? 15 : 0)))))));
-                $progressLabel = $progress >= 100 ? 'เสร็จสิ้น' : ($progress >= 60 ? 'กำลังผลิต' : ($progress > 0 ? 'เตรียมงาน' : 'ยังไม่เริ่ม'));
+                $receipt = $issueId ? $receiptDocuments->get((int) $issueId)?->first() : null;
+                $next = $order->held_at ? 'พักงาน · ตรวจสอบก่อนทำต่อ' : ($issueStatus !== 'POSTED' ? match ($issueStatus) { 'DRAFT' => 'รออนุมัติใบเบิก', 'APPROVED' => 'รอลง Stock ใบเบิก', default => $order->started_at ? 'ตรวจสอบใบเบิกวัตถุดิบ' : 'เตรียมใบเบิกวัตถุดิบ' } : (! $order->started_at ? 'ยืนยันเริ่มงานผลิต' : match ($receipt?->status) { 'DRAFT' => 'รออนุมัติใบรับผลิต', 'APPROVED' => 'รอลง Stock ใบรับผลิต', default => 'รับผลิตเมื่อผลิตเสร็จ' }));
+                $progress = match (true) {
+                    $receipt?->status === 'POSTED' => 100, $receipt?->status === 'APPROVED' => 85,
+                    $receipt !== null => 75, $order->started_at !== null => 60,
+                    $issueStatus === 'POSTED' => 45, $issueStatus === 'APPROVED' => 30, $issueStatus !== null => 15, default => 0,
+                };
             @endphp
-            <div class="col-12 col-md-6 col-xl-4">
-                <article class="card border-0 shadow-sm h-100">
-                    <div class="card-body d-flex flex-column gap-3">
-                        <div class="d-flex justify-content-between align-items-start gap-2"><div><a class="h5 mb-1 text-decoration-none d-block" href="{{ route('production.shop-floor.show', $order) }}">{{ $order->document_number }}</a><div class="text-secondary small">{{ $order->finishedItem?->code }} · {{ $order->finishedItem?->name }}</div></div><div class="d-flex flex-wrap gap-1 justify-content-end"><span class="badge {{ $classes[$order->status] }}">{{ $labels[$order->status] }}</span>@if($order->held_at)<span class="badge app-status-danger">พักงาน</span>@endif</div></div>
-                        <div><div class="d-flex justify-content-between align-items-center small mb-1"><span class="text-secondary">ความคืบหน้า</span><strong>{{ $progressLabel }} · {{ $progress }}%</strong></div><div class="progress" role="progressbar" aria-label="ความคืบหน้า {{ $order->document_number }}" aria-valuenow="{{ $progress }}" aria-valuemin="0" aria-valuemax="100" style="height:10px"><div class="progress-bar bg-{{ $progress >= 100 ? 'success' : ($progress >= 60 ? 'warning' : 'info') }}" style="width:{{ $progress }}%"></div></div></div>
-                        <div class="small text-secondary js-production-elapsed" data-started-at="{{ $order->started_at?->toIso8601String() }}" data-ended-at="{{ $order->completed_at?->toIso8601String() }}">เวลาผลิต: <span class="fw-semibold">{{ $order->started_at ? 'กำลังคำนวณ...' : 'ยังไม่เริ่ม' }}</span></div>
-                        <div class="row g-2 small"><div class="col-6"><span class="text-secondary d-block">จำนวนผลิต</span><strong>{{ number_format((float)$order->planned_quantity, 2) }} {{ $order->uom?->code }}</strong></div><div class="col-6"><span class="text-secondary d-block">กำหนดเสร็จ</span><strong>{{ $order->planned_finish_date?->format('d/m/Y') ?: 'ไม่ระบุ' }}</strong></div></div>
-                        <div class="small text-secondary">{{ $order->salesOrder ? $order->salesOrder->document_number.' · '.$order->salesOrder->party_name : 'Make to Stock' }}</div>
-                        <a class="btn btn-app-info btn-lg w-100" href="{{ route('production.shop-floor.show', $order) }}"><i class="bx bx-right-arrow-alt me-1" aria-hidden="true"></i>เปิดรายละเอียดงาน</a>
-                        @if($issueStatus)<div class="d-flex flex-wrap gap-1"><span class="badge {{ $issueClasses[$issueStatus] ?? 'app-status-neutral' }}">ใบเบิก: {{ $issueLabels[$issueStatus] ?? $issueStatus }}</span>@if($returnDocument)<span class="badge app-status-{{ $returnDocument->status === 'POSTED' ? 'success' : 'warning' }}">รับคืน: {{ $returnDocument->status }}</span>@endif @if($scrapDocument)<span class="badge app-status-{{ $scrapDocument->status === 'POSTED' ? 'success' : 'warning' }}">Scrap: {{ $scrapDocument->status }}</span>@endif @if($receiptDocument)<span class="badge app-status-{{ $receiptDocument->status === 'POSTED' ? 'success' : 'warning' }}">รับผลิต: {{ $receiptDocument->status }}</span>@endif</div>@endif
-                        @if($order->status === 'RELEASED' && ! $issueStatus)
-                            <form method="POST" action="{{ route('production.orders.material-issue', $order) }}" class="mt-auto d-none js-shop-create">@csrf<button class="btn btn-app-primary btn-lg w-100" type="submit"><i class="bx bx-package me-1" aria-hidden="true"></i>สร้างร่างใบเบิกวัตถุดิบ</button></form>
-                        @elseif($order->status === 'RELEASED')
-                            <div class="mt-auto d-none">
-                                @if($issueStatus === 'DRAFT')<button class="btn btn-app-soft btn-lg js-shop-action" type="button" data-url="{{ route('production.orders.material-issues.approve', [$order, $issueId]) }}"><i class="bx bx-check me-1" aria-hidden="true"></i>อนุมัติใบเบิก</button>@elseif($issueStatus === 'APPROVED')<button class="btn btn-app-primary btn-lg js-shop-action" type="button" data-url="{{ route('production.orders.material-issues.post', [$order, $issueId]) }}"><i class="bx bx-send me-1" aria-hidden="true"></i>ลง Stock และเริ่มผลิต</button>@else<div class="alert alert-info mb-0 py-2 small">รอ Supervisor ดำเนินการใบเบิกวัตถุดิบ แล้วจึงเริ่มงานต่อ</div>@endif
-                            </div>
-                        @else
-                            <div class="mt-auto d-none">
-                                <div class="alert alert-warning mb-0 py-2 text-center"><i class="bx bx-bulb me-1" aria-hidden="true"></i>เลือกขั้นตอนถัดไปด้านล่าง</div>
-                                @if($receiptDocument?->status === 'DRAFT')<button class="btn btn-app-soft btn-lg w-100 js-shop-action" type="button" data-url="{{ route('production.orders.finished-receipts.approve', [$order, $receiptDocument]) }}"><i class="bx bx-check me-1" aria-hidden="true"></i>อนุมัติใบรับผลิต</button>@elseif($receiptDocument?->status === 'APPROVED')<button class="btn btn-app-primary btn-lg w-100 js-shop-action" type="button" data-url="{{ route('production.orders.finished-receipts.post', [$order, $receiptDocument]) }}"><i class="bx bx-send me-1" aria-hidden="true"></i>ลง Stock และจบงาน</button>@else
-                                <button class="btn btn-app-success btn-lg w-100 js-shop-receipt" type="button" data-url="{{ route('production.orders.finished-receipt', $order) }}"><i class="bx bx-package me-1" aria-hidden="true"></i>สร้างร่างรับผลิตเสร็จ</button>
-                                @if($returnDocument?->status === 'DRAFT')<button class="btn btn-app-soft btn-lg w-100 js-shop-action" type="button" data-url="{{ route('production.orders.material-returns.approve', [$order, $returnDocument]) }}"><i class="bx bx-check me-1" aria-hidden="true"></i>อนุมัติใบรับคืน</button>@elseif($returnDocument?->status === 'APPROVED')<button class="btn btn-app-primary btn-lg w-100 js-shop-action" type="button" data-url="{{ route('production.orders.material-returns.post', [$order, $returnDocument]) }}"><i class="bx bx-send me-1" aria-hidden="true"></i>ลง Stock ใบรับคืน</button>@else<button class="btn btn-app-info btn-lg w-100 js-shop-return" type="button" data-url="{{ route('production.orders.material-return', $order) }}"><i class="bx bx-undo me-1" aria-hidden="true"></i>สร้างร่างรับคืนวัตถุดิบ</button>
-                                @endif
-                                @if($scrapDocument?->status === 'DRAFT')<button class="btn btn-app-soft btn-lg w-100 js-shop-action" type="button" data-url="{{ route('production.orders.recoverable-scrap-receipts.approve', [$order, $scrapDocument]) }}"><i class="bx bx-check me-1" aria-hidden="true"></i>อนุมัติ Scrap</button>@elseif($scrapDocument?->status === 'APPROVED')<button class="btn btn-app-primary btn-lg w-100 js-shop-action" type="button" data-url="{{ route('production.orders.recoverable-scrap-receipts.post', [$order, $scrapDocument]) }}"><i class="bx bx-send me-1" aria-hidden="true"></i>ลง Stock Scrap</button>@else
-                                <button class="btn btn-app-warning btn-lg w-100 js-shop-scrap" type="button" data-recoverable-url="{{ route('production.orders.recoverable-scrap-receipt', $order) }}" data-waste-url="{{ route('production.orders.non-recoverable-scrap', $order) }}" data-uom-id="{{ $order->uom_id }}"><i class="bx bx-recycle me-1" aria-hidden="true"></i>สร้างร่าง Scrap</button>
-                            </div>
-                        @endif
-                        @endif
-                        @endif
-                    </div>
-                </article>
-            </div>
+            <article class="sf-job {{ $order->held_at ? 'is-held' : ($order->status === 'IN_PROGRESS' ? 'is-running' : 'is-ready') }}">
+                <div class="sf-job-heading"><h2>{{ $order->document_number }}</h2><span class="badge {{ $order->held_at ? 'app-status-danger' : ($order->status === 'IN_PROGRESS' ? 'app-status-warning' : 'app-status-info') }}">{{ $order->held_at ? 'พักงาน' : ($order->status === 'IN_PROGRESS' ? 'กำลังผลิต' : 'พร้อมผลิต') }}</span></div>
+                <div class="sf-job-product"><strong>{{ $order->finishedItem?->name ?: 'ไม่ระบุสินค้า' }}</strong><span>{{ $order->finishedItem?->code }} · {{ $order->salesOrder ? $order->salesOrder->document_number.' · '.$order->salesOrder->party_name : 'Make to Stock' }}</span></div>
+                <div class="sf-job-figures"><span><small>เป้าหมาย</small><strong>{{ number_format((float)$order->planned_quantity, 2) }} {{ $order->uom?->code }}</strong></span><span><small>กำหนดเสร็จ</small><strong>{{ $order->planned_finish_date?->format('d/m/Y') ?: 'ไม่ระบุ' }}</strong></span></div>
+                <div class="sf-job-next"><i class="bx bx-right-arrow-alt" aria-hidden="true"></i>{{ $next }}</div>
+                <div class="sf-job-footer"><div class="sf-job-progress"><small>ตามเอกสาร {{ $progress }}%</small><div class="progress" role="progressbar" aria-label="ความคืบหน้า {{ $order->document_number }}" aria-valuenow="{{ $progress }}" aria-valuemin="0" aria-valuemax="100"><div class="progress-bar" style="width:{{ $progress }}%"></div></div></div><a class="btn btn-app-soft btn-lg" href="{{ route('production.shop-floor.show', $order) }}" aria-label="เปิดงาน {{ $order->document_number }}">เปิดงาน<i class="bx bx-right-arrow-alt ms-1" aria-hidden="true"></i></a></div>
+            </article>
         @empty
-            <div class="col-12"><div class="card border-0 shadow-sm"><div class="card-body p-5 text-center text-secondary">ไม่พบ WO ที่กำลังทำงานในคลังนี้</div></div></div>
+            <div class="sf-empty"><i class="bx bx-search-alt" aria-hidden="true"></i><h2>ไม่พบงานในคิวนี้</h2><p>ลองเปลี่ยนคำค้นหาหรือล้างตัวกรอง</p><a class="btn btn-app-soft" href="{{ route('production.shop-floor.index') }}">ล้างตัวกรอง</a></div>
         @endforelse
     </div>
+    @include('Production::shop-floor._pager', ['paginator' => $orders, 'label' => 'คิวงาน'])
 </div>
-
-<div class="modal fade" id="shop-floor-action-modal" tabindex="-1" aria-labelledby="shop-floor-action-title" aria-hidden="true"><div class="modal-dialog"><form class="modal-content" id="shop-floor-action-form"><div class="modal-header"><h2 class="modal-title fs-5" id="shop-floor-action-title">สร้างร่างเอกสาร</h2><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="ปิด"></button></div><div class="modal-body"><input type="hidden" name="action_url"><input type="hidden" name="recoverable_url"><input type="hidden" name="uom_id"><div class="mb-3 d-none" data-scrap-type><label class="form-label" for="shop-floor-scrap-type">ประเภท Scrap</label><select class="form-select" id="shop-floor-scrap-type"><option value="waste">ของเสียไม่มีมูลค่า</option><option value="recoverable">รับเศษผลิต</option></select></div><div class="mb-3 d-none" data-scrap-item><label class="form-label" for="shop-floor-scrap-item">รหัสสินค้าเศษ</label><input class="form-control" id="shop-floor-scrap-item"></div><div class="mb-3" data-scrap-quantity><label class="form-label" for="shop-floor-quantity">จำนวน</label><input class="form-control" id="shop-floor-quantity" type="number" min="0.000001" step="any"></div><div class="mb-3 d-none" data-recovery-value><label class="form-label" for="shop-floor-recovery-value">มูลค่ารับเศษรวม</label><input class="form-control" id="shop-floor-recovery-value" type="number" min="0" step="any"></div><div><label class="form-label" for="shop-floor-reason">เหตุผล</label><textarea class="form-control" id="shop-floor-reason" minlength="10" maxlength="500" required></textarea></div></div><div class="modal-footer"><button class="btn btn-outline-secondary" type="button" data-bs-dismiss="modal">ปิด</button><button class="btn btn-app-primary" type="submit">สร้างร่าง</button></div></form></div></div>
-@push('scripts')
-<script>
-$(function(){const networkStatus=$('#shop-floor-network-status'),setNetworkStatus=()=>networkStatus.toggleClass('d-none',navigator.onLine);setNetworkStatus();$(window).on('online offline',setNetworkStatus);$('.js-production-elapsed').each(function(){const el=$(this),started=Date.parse(el.data('started-at')),ended=Date.parse(el.data('ended-at'))||Date.now(),target=el.find('span');if(!started)return;const render=()=>{let seconds=Math.max(0,Math.floor((ended-(started))/1000));if(!el.data('ended-at'))seconds=Math.max(0,Math.floor((Date.now()-started)/1000));const h=Math.floor(seconds/3600),m=Math.floor(seconds%3600/60),s=seconds%60;target.text((h?h+' ชม. ':'')+m+' นาที '+String(s).padStart(2,'0')+' วินาที');};render();if(!el.data('ended-at'))setInterval(render,1000);});const modal=new bootstrap.Modal('#shop-floor-action-modal'),form=$('#shop-floor-action-form');$(document).on('submit','.js-shop-create',function(e){e.preventDefault();const form=$(this),button=form.find('[type=submit]').prop('disabled',true);if(!navigator.onLine){networkStatus.removeClass('d-none');button.prop('disabled',false);return}$.post(form.attr('action'),form.serialize()).done(()=>window.location.reload()).fail(xhr=>{Swal.fire({icon:'error',text:xhr.status===0?'เครือข่ายขัดข้อง กรุณาลองใหม่':(xhr.responseJSON?.message||'สร้างร่างไม่สำเร็จ')});button.prop('disabled',false)})});$(document).on('click','.js-shop-action',function(){const button=$(this).prop('disabled',true);if(!navigator.onLine){networkStatus.removeClass('d-none');button.prop('disabled',false);return}$.post(button.data('url'),{_token:$('meta[name="csrf-token"]').attr('content')}).done(()=>window.location.reload()).fail(xhr=>{Swal.fire({icon:'error',text:xhr.status===0?'เครือข่ายขัดข้อง กรุณาลองใหม่':(xhr.responseJSON?.message||'ทำรายการไม่สำเร็จ')});button.prop('disabled',false)})});function open(action,url,uom,recoverable){form[0].reset();form.find('[name=action_url]').val(url).data('action',action);form.find('[name=uom_id]').val(uom);form.find('[name=recoverable_url]').val(recoverable||'');form.find('[data-scrap-type],[data-scrap-item],[data-recovery-value],[data-scrap-quantity]').toggleClass('d-none',action!=='scrap');$('#shop-floor-quantity').prop('required',action==='scrap');$('#shop-floor-action-title').text(action==='return'?'สร้างร่างรับคืนวัตถุดิบ':action==='receipt'?'สร้างร่างรับผลิตเสร็จ':'สร้างร่าง Scrap');modal.show()}$(document).on('click','.js-shop-receipt',function(){open('receipt',$(this).data('url'),0)});$(document).on('click','.js-shop-return',function(){open('return',$(this).data('url'),0)});$(document).on('click','.js-shop-scrap',function(){open('scrap',$(this).data('waste-url'),$(this).data('uom-id'),$(this).data('recoverable-url'));});$('#shop-floor-scrap-type').on('change',function(){$('[data-scrap-item],[data-recovery-value]').toggleClass('d-none',this.value!=='recoverable')});form.on('submit',function(e){e.preventDefault();const action=form.find('[name=action_url]').data('action'),data={_token:$('meta[name="csrf-token"]').attr('content'),quantity:$('#shop-floor-quantity').val(),uom_id:form.find('[name=uom_id]').val(),reason:$('#shop-floor-reason').val()};let url=form.find('[name=action_url]').val();if(action==='return'||action==='receipt')data.reason=$('#shop-floor-reason').val();else if($('#shop-floor-scrap-type').val()==='recoverable'){url=form.find('[name=recoverable_url]').val();data.scrap_item_id=$('#shop-floor-scrap-item').val();data.recovery_total_value=$('#shop-floor-recovery-value').val()}const button=form.find('[type=submit]').prop('disabled',true);$.post(url,data).done(()=>window.location.reload()).fail(xhr=>Swal.fire({icon:'error',text:xhr.responseJSON?.message||'สร้างร่างไม่สำเร็จ'})).always(()=>button.prop('disabled',false))})});
-</script>
-@endpush
 @endsection
+@push('scripts')
+<script src="{{ asset('js/production-shop-floor.js') }}?v={{ filemtime(public_path('js/production-shop-floor.js')) }}"></script>
+@endpush

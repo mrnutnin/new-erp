@@ -539,8 +539,8 @@ final class IssueReturnService
         $event = DB::table('production_order_events')->where('event_type', 'material_issue_created')->where('source_id', (string) $issue->id)->latest('id')->first();
         if (! $event) return;
         $order = DB::table('production_orders')->where('id', $event->production_order_id)->lockForUpdate()->first();
-        if (! $order || $order->status !== 'RELEASED') {
-            throw ValidationException::withMessages(['production_order' => 'ลง Stock ใบเบิกได้เฉพาะ WO ที่ Release และยังไม่ปิด/ยกเลิก']);
+        if (! $order || ! in_array($order->status, ['RELEASED', 'IN_PROGRESS'], true) || ($order->status === 'IN_PROGRESS' && ($order->started_at || $order->held_at))) {
+            throw ValidationException::withMessages(['production_order' => 'ลง Stock ใบเบิกได้เฉพาะ WO พร้อมผลิต หรือกำลังผลิตที่ยังไม่เริ่มงานและไม่ถูกพัก']);
         }
         $activeOther = DB::table('production_order_events')
             ->join('wms_issue_documents', 'wms_issue_documents.id', '=', 'production_order_events.source_id')
@@ -565,7 +565,7 @@ final class IssueReturnService
         if (! $event) {
             return;
         }
-        $updated = DB::table('production_orders')->where('id', $event->production_order_id)->where('status', 'RELEASED')->update(['status' => 'IN_PROGRESS', 'updated_by' => $user->id, 'updated_at' => now()]);
+        $updated = DB::table('production_orders')->where('id', $event->production_order_id)->whereIn('status', ['RELEASED', 'IN_PROGRESS'])->whereNull('started_at')->whereNull('held_at')->update(['status' => 'IN_PROGRESS', 'updated_by' => $user->id, 'updated_at' => now()]);
         if ($updated) {
             DB::table('production_order_events')->insert(['production_order_id' => $event->production_order_id, 'event_type' => 'material_issue_posted', 'source_type' => IssueDocument::class, 'source_id' => (string) $issue->id, 'payload' => json_encode(['document_number' => $issue->document_number]), 'occurred_at' => now(), 'created_by' => $user->id, 'created_at' => now(), 'updated_at' => now()]);
         }

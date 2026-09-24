@@ -4,84 +4,68 @@
 @php
     $labels = ['DRAFT' => 'ร่าง', 'RELEASED' => 'พร้อมผลิต', 'IN_PROGRESS' => 'กำลังผลิต', 'COMPLETED' => 'เสร็จแล้ว', 'CANCELLED' => 'ยกเลิกเอกสาร'];
     $classes = ['DRAFT' => 'app-status-neutral', 'RELEASED' => 'app-status-info', 'IN_PROGRESS' => 'app-status-warning', 'COMPLETED' => 'app-status-success', 'CANCELLED' => 'app-status-danger'];
-    $formatDuration = function ($minutes): string {
-        $minutes = max(0, (int) $minutes);
-        $days = intdiv($minutes, 1440);
-        $hours = intdiv($minutes % 1440, 60);
-        $mins = $minutes % 60;
-        return collect([$days ? $days.' วัน' : null, $hours ? $hours.' ชม.' : null, $mins ? $mins.' นาที' : null])->filter()->join(' ') ?: 'ไม่ถึง 1 นาที';
-    };
-    $rangeStart = \Carbon\Carbon::parse($filters['date_from'])->startOfDay();
-    $rangeEnd = \Carbon\Carbon::parse($filters['date_to'])->endOfDay();
-    $rangeMinutes = max(1, $rangeStart->diffInMinutes($rangeEnd));
-    $displayDateTime = function ($date, $time = null): string {
-        if (!$date) return 'ยังไม่กำหนด';
-        return $time ? $date->format('d/m/Y').' '.$time->format('H:i') : $date->format('d/m/Y');
-    };
-    $metrics = [
-        ['label' => 'WO ในช่วงเวลา', 'value' => $orders->count(), 'icon' => 'bx-calendar-event', 'class' => 'app-status-info'],
-        ['label' => 'กำลังผลิต', 'value' => $orders->where('status', 'IN_PROGRESS')->count(), 'icon' => 'bx-cog', 'class' => 'app-status-warning'],
-        ['label' => 'พร้อมผลิต', 'value' => $orders->where('status', 'RELEASED')->count(), 'icon' => 'bx-play-circle', 'class' => 'app-status-info'],
-        ['label' => 'เสร็จแล้ว', 'value' => $orders->where('status', 'COMPLETED')->count(), 'icon' => 'bx-check-circle', 'class' => 'app-status-success'],
-    ];
+    $day = \Carbon\CarbonImmutable::parse($filters['date_from']);
+    $otherFilters = request()->except('date_from', 'date_to');
+    $hasAdvancedFilters = collect($filters)->except(['date_from', 'date_to'])->filter()->isNotEmpty();
 @endphp
-<div class="container-fluid px-3 px-lg-4 py-4 module-dashboard module-dashboard--production planning-board">
-    <div class="module-dashboard-hero d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4">
-        <div><p class="module-dashboard-kicker mb-2"><span></span>PRODUCTION / PLANNING BOARD</p><h1>กระดานวางแผนผลิต</h1><p class="mb-0">มองภาพรวมใบสั่งผลิตตามวันและเวลา แล้วกดดูรายละเอียดเฉพาะงานที่ต้องติดตาม</p></div>
-        <div class="module-dashboard-actions d-flex flex-wrap gap-2"><a class="btn btn-app-soft" href="{{ route('production.orders.index') }}"><i class="bx bx-clipboard me-1" aria-hidden="true"></i>ใบสั่งผลิต</a><a class="btn btn-app-primary" href="{{ route('production.orders.create') }}"><i class="bx bx-plus me-1" aria-hidden="true"></i>สร้างใบสั่งผลิต</a></div>
+<div class="container-fluid planning-day-page">
+    <header class="planning-day-header">
+        <div><p class="eyebrow mb-1">PRODUCTION / PLANNING BOARD</p><h1>กระดานวางแผนผลิต</h1><p class="text-secondary mb-0">ดูแผนรายวันเป็นช่วงชั่วโมง · เวลาทับกันคือข้อมูลเพื่อวางแผน ไม่ใช่การจองกำลังผลิต</p></div>
+        <div class="d-flex flex-wrap gap-2"><a class="btn btn-app-soft" href="{{ route('production.orders.index') }}"><i class="bx bx-clipboard me-1" aria-hidden="true"></i>ใบสั่งผลิต</a>@if(auth()->user()->hasPermission('production.orders.create'))<a class="btn btn-app-primary" href="{{ route('production.orders.create') }}"><i class="bx bx-plus me-1" aria-hidden="true"></i>สร้างใบสั่งผลิต</a>@endif</div>
+    </header>
+
+    <div class="planning-day-toolbar">
+        <div class="planning-day-picker" aria-label="เลือกวันแผนผลิต">
+            <a class="btn btn-app-soft" href="{{ route('production.planning.index', [...$otherFilters, 'date_from' => $day->subDay()->toDateString()]) }}" title="วันก่อนหน้า" aria-label="วันก่อนหน้า"><i class="bx bx-chevron-left" aria-hidden="true"></i></a>
+            <form method="GET" id="planning-day-form">@foreach($otherFilters as $key => $value)@if(is_scalar($value))<input type="hidden" name="{{ $key }}" value="{{ $value }}">@endif @endforeach<label for="planning-date-from" class="visually-hidden">วันที่วางแผน</label><input id="planning-date-from" class="form-control" type="date" name="date_from" value="{{ $day->toDateString() }}" aria-label="วันที่วางแผน"><button type="submit" class="btn btn-app-primary"><i class="bx bx-search me-1" aria-hidden="true"></i>ดูแผน</button></form>
+            <a class="btn btn-app-soft" href="{{ route('production.planning.index', [...$otherFilters, 'date_from' => $day->addDay()->toDateString()]) }}" title="วันถัดไป" aria-label="วันถัดไป"><i class="bx bx-chevron-right" aria-hidden="true"></i></a>
+            <a class="btn btn-app-soft" href="{{ route('production.planning.index', [...$otherFilters, 'date_from' => today()->toDateString()]) }}">วันนี้</a>
+        </div>
+        <div class="planning-day-stats" aria-label="สรุปงานในวัน {{ $day->format('d/m/Y') }}">
+            <span><strong>{{ count($timeline['timed']) }}</strong> มีเวลา</span><span><strong>{{ count($timeline['unscheduled']) }}</strong> ยังไม่ระบุเวลา</span><span class="{{ $timeline['overlapCount'] ? 'text-danger' : '' }}"><strong>{{ $timeline['overlapCount'] }}</strong> งานเวลาทับกัน</span>
+        </div>
     </div>
 
-    <section class="row g-3 mb-4 module-dashboard-summary" aria-label="สรุปแผนผลิต">
-        @foreach($metrics as $metric)
-            <div class="col-6 col-xl-3"><div class="card h-100"><div class="card-body"><div class="d-flex align-items-center gap-2 mb-2"><span class="production-dashboard-icon production-dashboard-icon--{{ str_replace('app-status-', '', $metric['class']) }}"><i class="bx {{ $metric['icon'] }}" aria-hidden="true"></i></span><div class="small text-secondary">{{ $metric['label'] }}</div></div><div class="h3 mb-0">{{ number_format($metric['value']) }}</div></div></div></div>
-        @endforeach
-    </section>
-
-    <div class="card border-0 shadow-sm mb-4">
-        <div class="card-header bg-transparent d-flex flex-wrap justify-content-between align-items-center gap-2">
-            <strong>ตัวกรองแผนผลิต</strong>
-            <a class="btn btn-sm btn-app-soft" href="{{ route('production.planning.index') }}"><i class="bx bx-reset me-1" aria-hidden="true"></i>ล้างตัวกรอง</a>
-        </div>
-        <div class="card-body">
-            <form method="GET" class="row g-3 align-items-end">
-                <div class="col-12 col-md-3"><label class="form-label" for="planning-date-from">วันที่เริ่ม</label><input id="planning-date-from" class="form-control" type="date" name="date_from" value="{{ $filters['date_from'] }}"></div>
-                <div class="col-12 col-md-3"><label class="form-label" for="planning-date-to">วันที่สิ้นสุด</label><input id="planning-date-to" class="form-control" type="date" name="date_to" value="{{ $filters['date_to'] }}"></div>
-                <div class="col-12 col-md-2"><label class="form-label" for="planning-status">สถานะ</label><select id="planning-status" class="form-select" name="status"><option value="">ทั้งหมด</option>@foreach($labels as $value => $label)<option value="{{ $value }}" @selected(($filters['status'] ?? '') === $value)>{{ $label }}</option>@endforeach</select></div>
-                <div class="col-12 col-md-3"><label class="form-label" for="planning-responsible">ผู้รับผิดชอบ</label><select id="planning-responsible" class="form-select" name="responsible_user_id" data-url="{{ route('production.planning.options', 'users') }}"><option value="">ทั้งหมด</option>@if($selectedResponsible)<option value="{{ $selectedResponsible->id }}" selected>{{ $selectedResponsible->name }}</option>@endif</select></div>
-                <div class="col-12 col-md-3"><label class="form-label" for="planning-product">สินค้า</label><select id="planning-product" class="form-select" name="finished_item_id" data-url="{{ route('production.planning.options', 'products') }}"><option value="">ทั้งหมด</option>@foreach($products as $product)<option value="{{ $product->id }}" @selected((string)($filters['finished_item_id'] ?? '') === (string)$product->id)>{{ $product->code }} · {{ $product->name }}</option>@endforeach</select></div>
-                <div class="col-12 col-md-2 d-flex align-items-center"><div class="form-check mt-3"><input class="form-check-input" id="planning-overdue" type="checkbox" name="overdue" value="1" @checked($filters['overdue'] ?? false)><label class="form-check-label" for="planning-overdue">เฉพาะเกินกำหนด</label></div></div><div class="col-12 col-md-2 d-flex align-items-center"><div class="form-check mt-3"><input class="form-check-input" id="planning-shortage" type="checkbox" name="shortage" value="1" @checked($filters['shortage'] ?? false)><label class="form-check-label" for="planning-shortage">เฉพาะวัตถุดิบขาด</label></div></div>
-                <div class="col-12 col-md-1"><button class="btn btn-app-primary w-100" type="submit" title="ค้นหา" aria-label="ค้นหา"><i class="bx bx-search" aria-hidden="true"></i></button></div>
+    <details class="planning-day-filters" @if($hasAdvancedFilters) open @endif>
+        <summary><i class="bx bx-filter-alt me-1" aria-hidden="true"></i>ตัวกรองเพิ่มเติม @if($hasAdvancedFilters)<span class="badge app-status-info">กำลังกรอง</span>@endif</summary>
+        <div class="planning-day-filter-body">
+            <div class="d-flex justify-content-end"><a class="btn btn-sm btn-app-soft" href="{{ route('production.planning.index', ['date_from' => $day->toDateString()]) }}"><i class="bx bx-reset me-1" aria-hidden="true"></i>ล้างตัวกรอง</a></div>
+            <form method="GET" class="row g-2 align-items-end"><input type="hidden" name="date_from" value="{{ $day->toDateString() }}">
+                <div class="col-6 col-md-2"><label for="planning-status" class="form-label">สถานะ</label><select id="planning-status" name="status" class="form-select"><option value="">ทั้งหมด</option>@foreach($labels as $value => $label)<option value="{{ $value }}" @selected(($filters['status'] ?? '') === $value)>{{ $label }}</option>@endforeach</select></div>
+                <div class="col-6 col-md-3"><label for="planning-responsible" class="form-label">ผู้รับผิดชอบ</label><select id="planning-responsible" name="responsible_user_id" class="form-select" data-url="{{ route('production.planning.options', 'users') }}"><option value="">ทั้งหมด</option>@if($selectedResponsible)<option value="{{ $selectedResponsible->id }}" selected>{{ $selectedResponsible->name }}</option>@endif</select></div>
+                <div class="col-6 col-md-3"><label for="planning-product" class="form-label">สินค้า</label><select id="planning-product" name="finished_item_id" class="form-select" data-url="{{ route('production.planning.options', 'products') }}"><option value="">ทั้งหมด</option>@foreach($products as $product)<option value="{{ $product->id }}" @selected((string)($filters['finished_item_id'] ?? '') === (string)$product->id)>{{ $product->code }} · {{ $product->name }}</option>@endforeach</select></div>
+                <div class="col-6 col-md-auto"><div class="form-check"><input class="form-check-input" type="checkbox" id="planning-overdue" name="overdue" value="1" @checked($filters['overdue'] ?? false)><label class="form-check-label" for="planning-overdue">เกินกำหนด</label></div><div class="form-check"><input class="form-check-input" type="checkbox" id="planning-shortage" name="shortage" value="1" @checked($filters['shortage'] ?? false)><label class="form-check-label" for="planning-shortage">วัตถุดิบขาด</label></div></div>
+                <div class="col-12 col-md-auto"><button class="btn btn-app-primary" type="submit"><i class="bx bx-search me-1" aria-hidden="true"></i>ค้นหา</button></div>
             </form>
         </div>
-    </div>
+    </details>
 
-    <div class="d-flex flex-wrap justify-content-between align-items-end gap-2 mb-2"><div><h2 class="h5 mb-1">Timeline แผนผลิตตามวันและเวลา</h2><span class="text-secondary small">{{ $filters['date_from'] }} – {{ $filters['date_to'] }} · {{ $orders->count() }} WO</span></div><div class="d-flex flex-wrap gap-2 small"><span><i class="bx bxs-circle text-info" aria-hidden="true"></i> พร้อมผลิต</span><span><i class="bx bxs-circle text-warning" aria-hidden="true"></i> กำลังผลิต</span><span><i class="bx bxs-circle text-success" aria-hidden="true"></i> เสร็จแล้ว</span></div></div>
-    <div class="card border-0 shadow-sm planning-board-card">
-        <div class="planning-board-head"><div class="planning-board-label">ใบสั่งผลิต</div><div class="planning-board-scale"><span>{{ $filters['date_from'] }}</span><span>วันนี้</span><span>{{ $filters['date_to'] }}</span></div></div>
-        <div class="card-body p-0">
-            @forelse($orders as $order)
-                @php
-                    $start = $displayDateTime($order->planned_start_date, $order->planned_start_at);
-                    $finish = $order->planned_finish_date ? $displayDateTime($order->planned_finish_date, $order->planned_finish_at) : 'ไม่มีกำหนดจบ';
-                    $overdue = $order->planned_finish_date && $order->planned_finish_date->isPast() && !in_array($order->status, ['COMPLETED', 'CANCELLED'], true);
-                    $plannedMinutes = $order->planned_start_at && $order->planned_finish_at ? $order->planned_start_at->diffInMinutes($order->planned_finish_at) : ($order->planned_start_date && $order->planned_finish_date ? $order->planned_start_date->startOfDay()->diffInMinutes($order->planned_finish_date->endOfDay()) : null);
-                    $actualStart = $order->started_at ?: $order->released_at;
-                    $actualEnd = $order->completed_at ?: ($order->status === 'IN_PROGRESS' ? now() : null);
-                    $actualMinutes = $actualStart && $actualEnd ? $actualStart->diffInMinutes($actualEnd) : null;
-                    $barStart = $order->planned_start_at ?: ($order->planned_start_date?->startOfDay());
-                    $barEnd = $order->planned_finish_at ?: ($order->planned_finish_date?->endOfDay());
-                    $left = $barStart ? max(0, min(100, $rangeStart->diffInMinutes($barStart, false) / $rangeMinutes * 100)) : 0;
-                    $width = $barStart && $barEnd ? max(1, min(100 - $left, $barStart->diffInMinutes($barEnd) / $rangeMinutes * 100)) : 0;
-                @endphp
-                <div class="planning-board-row border-bottom">
-                    <div class="planning-board-label"><div class="d-flex align-items-center gap-2"><a class="fw-semibold text-decoration-none" href="{{ route('production.orders.show', $order) }}">{{ $order->document_number }}</a><span class="badge {{ $classes[$order->status] ?? 'app-status-neutral' }}">{{ $labels[$order->status] ?? $order->status }}</span></div><div class="small text-secondary text-truncate" title="{{ $order->finishedItem?->code }} · {{ $order->finishedItem?->name }}">{{ $order->finishedItem?->code }} · {{ $order->finishedItem?->name }}</div><div class="small text-secondary">{{ number_format((float)$order->planned_quantity, 2) }} {{ $order->uom?->code }} · จบ {{ $finish }}</div><details class="mt-1"><summary class="small text-primary">ดูเพิ่มเติม</summary><div class="small text-secondary mt-2">เริ่ม {{ $start }} · จบ {{ $finish }} · {{ $order->salesOrder ? $order->salesOrder->document_number.' · '.$order->salesOrder->party_name : 'Make to Stock' }}<br>ผู้รับผิดชอบ {{ $order->responsibleUser?->name ?: 'ยังไม่ระบุ' }}<br>แผนใช้เวลา {{ $plannedMinutes !== null ? $formatDuration($plannedMinutes) : 'ไม่ระบุ' }} @if($actualMinutes !== null) · ใช้จริง {{ $formatDuration($actualMinutes) }}@endif</div></details>@if($overdue)<span class="badge app-status-danger mt-1">เกินกำหนด</span>@endif @if(isset($order->planning_readiness) && ! $order->planning_readiness['ready'])<span class="badge app-status-danger mt-1">วัตถุดิบไม่พอ</span>@endif</div>
-                    <div class="planning-board-track"><div class="planning-timeline" role="img" aria-label="ช่วงเวลาแผนผลิต {{ $order->document_number }}"><div class="planning-timeline-track">@if($width)<a class="planning-timeline-bar {{ $classes[$order->status] ?? 'app-status-neutral' }}" href="{{ route('production.orders.show', $order) }}" style="left:{{ $left }}%;width:{{ $width }}%" title="{{ $order->document_number }} {{ $start }} - {{ $finish }}"></a>@else<span class="small text-secondary">ยังไม่กำหนดช่วงเวลา</span>@endif</div></div></div>
-                </div>
-            @empty
-                <div class="p-5 text-center text-secondary">ไม่พบ WO ในช่วงเวลาหรือเงื่อนไขที่เลือก</div>
-            @endforelse
+    <section class="planning-day-board" aria-label="แผนผลิตวันที่ {{ $day->format('d/m/Y') }}">
+        <div class="planning-day-caption"><div><h2>วัน{{ $day->locale('th')->translatedFormat('l j F Y') }}</h2><p>เส้นแนวตั้งทุก 1 ชั่วโมง · ปัดซ้าย/ขวาเพื่อดูทั้งวัน · แตะงานเพื่อดูรายละเอียด</p></div><div class="d-flex flex-wrap gap-2 small" aria-label="คำอธิบายสถานะ"><span class="badge app-status-info">พร้อมผลิต</span><span class="badge app-status-warning">กำลังผลิต</span><span class="badge app-status-success">เสร็จแล้ว</span><span class="badge app-status-danger">เวลาทับกัน</span></div></div>
+        <div class="planning-day-scroll" tabindex="0" role="region" aria-label="ตารางแผนผลิต เลื่อนแนวนอนเพื่อดูชั่วโมงอื่น และเลื่อนแนวตั้งเพื่อดูงานเพิ่มเติม">
+            <div class="planning-day-inner">
+                <div class="planning-day-grid-head"><div class="planning-day-label">ใบสั่งผลิต / เวลา</div><div class="planning-day-hours" aria-hidden="true">@foreach(range(0, 23) as $hour)<span>{{ $hour % 2 === 0 ? sprintf('%02d:00', $hour) : '' }}</span>@endforeach</div></div>
+                @forelse($timeline['timed'] as $row)
+                    @php
+                        $order = $row['order'];
+                        $start = $order->planned_start_at->format('d/m H:i');
+                        $finish = $order->planned_finish_at->format('d/m H:i');
+                        $duration = $order->planned_start_at->diffInMinutes($order->planned_finish_at);
+                        $actualStart = $order->started_at ?: $order->released_at;
+                        $actualEnd = $order->completed_at ?: ($order->status === 'IN_PROGRESS' ? now() : null);
+                    @endphp
+                    <div class="planning-day-row {{ $row['overlaps'] ? 'has-overlap' : '' }}">
+                        <div class="planning-day-label"><a class="fw-semibold" href="{{ route('production.orders.show', $order) }}">{{ $order->document_number }}</a><span class="badge {{ $classes[$order->status] ?? 'app-status-neutral' }}">{{ $labels[$order->status] ?? $order->status }}</span><span class="planning-day-item" title="{{ $order->finishedItem?->code }} · {{ $order->finishedItem?->name }}">{{ $order->finishedItem?->code }} · {{ $order->finishedItem?->name }}</span><span class="planning-day-time">{{ $start }} – {{ $finish }} @if($row['overlaps'])<strong class="text-danger">· เวลาทับกัน</strong>@endif</span><details class="planning-day-more"><summary>ข้อมูลเพิ่ม</summary><div>แผนใช้เวลา {{ round($duration / 60, 1) }} ชม. @if($actualStart && $actualEnd) · ใช้จริง {{ round($actualStart->diffInMinutes($actualEnd) / 60, 1) }} ชม.@endif<br>{{ number_format((float)$order->planned_quantity, 2) }} {{ $order->uom?->code }} · {{ $order->responsibleUser?->name ?: 'ยังไม่ระบุผู้รับผิดชอบ' }} · {{ $order->salesOrder ? $order->salesOrder->document_number.' · '.$order->salesOrder->party_name : 'Make to Stock' }}</div></details></div>
+                        <div class="planning-timeline-track"><a class="planning-timeline-bar {{ $classes[$order->status] ?? 'app-status-neutral' }}" href="{{ route('production.orders.show', $order) }}" style="left:{{ $row['left'] }}%;width:{{ $row['width'] }}%" title="{{ $order->document_number }} · {{ $start }} – {{ $finish }}" aria-label="{{ $order->document_number }} เริ่ม {{ $start }} จบ {{ $finish }}{{ $row['overlaps'] ? ' เวลาทับกับงานอื่น' : '' }}"></a></div>
+                    </div>
+                @empty<div class="planning-day-empty">ไม่มีงานที่กำหนดช่วงเวลาในวันนี้</div>@endforelse
+            </div>
         </div>
-    </div>
+        @if(count($timeline['unscheduled']))
+            <details class="planning-day-unscheduled"><summary>ยังไม่ระบุเวลาเริ่ม–จบ {{ count($timeline['unscheduled']) }} งาน (ไม่แสดงเป็นแท่งเวลา)</summary><div class="planning-day-unscheduled-list">@foreach($timeline['unscheduled'] as $order)<a href="{{ route('production.orders.show', $order) }}">{{ $order->document_number }} · {{ $order->finishedItem?->name ?: '-' }} <small>{{ $order->planned_start_date?->format('d/m/Y') ?: 'ยังไม่กำหนดวัน' }} – {{ $order->planned_finish_date?->format('d/m/Y') ?: 'ไม่มีกำหนดจบ' }}</small></a>@endforeach</div></details>
+        @endif
+        @if($orders->count() === 200)<p class="small text-secondary p-2 mb-0">แสดงสูงสุด 200 งาน โปรดใช้ตัวกรองเพื่อลดจำนวนรายการ</p>@endif
+    </section>
 </div>
 @endsection
 @push('scripts')

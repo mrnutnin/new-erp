@@ -7,6 +7,8 @@ use Illuminate\Database\Eloquent\Model;
 
 final class ProductionOrderIssue extends Model
 {
+    public const REPORTABLE_ORDER_STATUSES = ['RELEASED', 'IN_PROGRESS'];
+
     protected $table = 'production_order_issues';
 
     protected $fillable = ['production_order_id', 'branch_id', 'warehouse_id', 'reported_by', 'resolved_by', 'severity', 'description', 'resolution_method', 'status', 'reported_at', 'resolved_at'];

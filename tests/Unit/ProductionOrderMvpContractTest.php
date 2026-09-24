@@ -34,7 +34,9 @@ final class ProductionOrderMvpContractTest extends TestCase
         $routes = file_get_contents(base_path('app/Modules/Production/Routes/web.php'));
         $controller = file_get_contents(base_path('app/Modules/Production/Controllers/OrderController.php'));
         $view = file_get_contents(base_path('app/Modules/Production/Views/shop-floor/index.blade.php'));
-        $detail = file_get_contents(base_path('app/Modules/Production/Views/shop-floor/show.blade.php'));
+        $detail = file_get_contents(base_path('app/Modules/Production/Views/shop-floor/show.blade.php'))
+            .file_get_contents(base_path('app/Modules/Production/Views/shop-floor/_next-action.blade.php'))
+            .file_get_contents(base_path('public/js/production-shop-floor.js'));
         $plan = file_get_contents(base_path('PRODUCTION_MODULE_PLANING.md'));
 
         self::assertStringContainsString("Route::get('/shop-floor'", $routes);
@@ -43,19 +45,14 @@ final class ProductionOrderMvpContractTest extends TestCase
         self::assertStringContainsString("where('issue_warehouse_id', \$warehouseId)", $controller);
         self::assertStringContainsString("whereIn('status', ['RELEASED', 'IN_PROGRESS'])", $controller);
         self::assertStringContainsString('issueStatuses', $controller);
-        self::assertStringContainsString('รอ Supervisor', $view);
+        self::assertStringContainsString('sf-job-next', $view);
         self::assertStringContainsString('shop-floor-search', $view);
         self::assertStringContainsString('production.shop-floor.show', $view);
-        self::assertStringContainsString('js-shop-create', $view);
         self::assertStringContainsString('inputmode="search"', $view);
         self::assertStringContainsString('สแกน QR/Barcode WO', $view);
-        self::assertStringContainsString('shop-floor-action-modal', $view);
-        self::assertStringContainsString('js-shop-return', $view);
-        self::assertStringContainsString('js-shop-scrap', $view);
-        self::assertStringContainsString('js-shop-receipt', $view);
-        self::assertStringContainsString('production.orders.finished-receipt', $view);
-        self::assertStringContainsString('js-shop-create', $view);
-        self::assertStringContainsString('window.location.reload()', $view);
+        self::assertStringContainsString('sf-filters', $view);
+        self::assertStringContainsString('production.orders.finished-receipt', $detail);
+        self::assertStringContainsString('js-shop-create', $detail);
         self::assertStringNotContainsString('route(\'production.orders.show\', $order)', $view);
         self::assertStringContainsString('วัตถุดิบที่ต้องใช้', $detail);
         self::assertStringContainsString('js-shop-action', $detail);
@@ -64,6 +61,7 @@ final class ProductionOrderMvpContractTest extends TestCase
         self::assertStringContainsString('aria-live="polite"', $detail);
         self::assertStringContainsString('Swal.fire', $detail);
         self::assertStringContainsString('confirmAction', $detail);
+        self::assertStringContainsString('sf-detail-grid', $detail);
         self::assertStringContainsString('btn-lg', $detail);
         self::assertStringContainsString('role="status"', $detail);
         self::assertStringContainsString('ยังไม่พบใบเบิกวัตถุดิบที่ลง Stock แล้ว', $detail);
@@ -311,7 +309,7 @@ final class ProductionOrderMvpContractTest extends TestCase
         self::assertStringContainsString("issue_type !== 'PRODUCTION'", $service);
         self::assertStringContainsString("Schema::hasTable('production_order_events')", $service);
         self::assertStringContainsString("where('event_type', 'material_issue_created')", $service);
-        self::assertStringContainsString("where('status', 'RELEASED')", $service);
+        self::assertStringContainsString("whereIn('status', ['RELEASED', 'IN_PROGRESS'])", $service);
         self::assertStringContainsString("'status' => 'IN_PROGRESS'", $service);
         self::assertStringContainsString("'event_type' => 'material_issue_posted'", $service);
         self::assertStringContainsString('private function productionMaterialReservation(', $service);
@@ -362,6 +360,20 @@ final class ProductionOrderMvpContractTest extends TestCase
         self::assertStringContainsString('ยกเลิกเอกสาร', $show);
     }
 
+    public function test_wo_detail_inline_script_has_valid_javascript(): void
+    {
+        $view = file_get_contents(base_path('app/Modules/Production/Views/orders/show.blade.php'));
+        self::assertSame(1, preg_match('/<script>(.*?)<\/script>/s', $view, $matches));
+        $file = tempnam(sys_get_temp_dir(), 'wo-script-');
+        try {
+            file_put_contents($file, $matches[1]);
+            exec('node --check '.escapeshellarg($file).' 2>&1', $output, $status);
+            self::assertSame(0, $status, implode("\n", $output));
+        } finally {
+            unlink($file);
+        }
+    }
+
     public function test_wo_can_report_non_recoverable_scrap_without_stock_movement(): void
     {
         $migration = file_get_contents(base_path('database/migrations/2026_09_18_050000_create_production_order_tables.php'));
@@ -383,7 +395,7 @@ final class ProductionOrderMvpContractTest extends TestCase
         self::assertStringContainsString('บันทึกของเสีย', $show);
         self::assertStringContainsString('ของเสียไม่มีมูลค่า', $show);
         self::assertStringContainsString('data-material-lines=', $show);
-        self::assertStringContainsString('source_material_line_id:sourceMaterialLineId', $show);
+        self::assertStringContainsString('source_material_line_id:source', $show);
     }
 
     public function test_wo_detail_shows_scoped_wip_material_cost_summary(): void

@@ -305,7 +305,12 @@ final class ProductionOrderService
                 throw ValidationException::withMessages(['warehouse_id' => 'WO ไม่อยู่ในคลัง/สาขาปัจจุบัน']);
             }
             if ($locked->status !== 'IN_PROGRESS') throw ValidationException::withMessages(['status' => 'ยืนยันเริ่มงานได้เมื่อ WO กำลังผลิต']);
+            if ($locked->held_at) throw ValidationException::withMessages(['status' => 'ต้องเปิดงานผลิตต่อก่อนยืนยันเริ่มงาน']);
             if ($locked->started_at) return $locked;
+            $issueIds = $locked->events()->where('event_type', 'material_issue_created')->pluck('source_id');
+            if (! IssueDocument::query()->whereIn('id', $issueIds)->where('issue_type', 'PRODUCTION')->where('warehouse_id', $warehouse->id)->where('status', 'POSTED')->exists()) {
+                throw ValidationException::withMessages(['material_issue' => 'ต้องลง Stock ใบเบิกวัตถุดิบก่อนยืนยันเริ่มงานผลิต']);
+            }
             $locked->forceFill(['started_at' => now(), 'started_by' => $actor->id, 'updated_by' => $actor->id])->save();
             $locked->events()->create(['event_type' => 'started', 'payload' => ['source' => 'SHOP_FLOOR'], 'occurred_at' => now(), 'created_by' => $actor->id]);
             $this->audit->record('production.order.started', $locked, [], $locked->fresh()->toArray(), $actor, $request);
@@ -365,7 +370,6 @@ final class ProductionOrderService
             foreach ($revision->operations as $operation) $order->operations()->create(['sequence' => $operation->sequence, 'name' => $operation->name, 'planned_minutes' => $operation->planned_minutes, 'status' => 'PENDING', 'notes' => $operation->notes]);
             return;
         }
-        $order->operations()->firstOrCreate(['sequence' => 1], ['name' => 'ผลิต', 'status' => 'PENDING']);
     }
 
     public function addOperation(ProductionOrder $order, Warehouse $warehouse, User $actor, Request $request, string $name, ?int $plannedMinutes): ProductionOrderOperation
@@ -658,8 +662,8 @@ final class ProductionOrderService
             if ((int) $locked->branch_id !== (int) $warehouse->branch_id || (int) $locked->issue_warehouse_id !== (int) $warehouse->id) {
                 throw ValidationException::withMessages(['warehouse_id' => 'WO ไม่อยู่ในคลัง/สาขาปัจจุบัน']);
             }
-            if ($locked->status !== 'RELEASED') {
-                throw ValidationException::withMessages(['status' => 'สร้างใบเบิกได้เฉพาะ WO ที่ Release แล้ว']);
+            if (! in_array($locked->status, ['RELEASED', 'IN_PROGRESS'], true) || ($locked->status === 'IN_PROGRESS' && ($locked->started_at || $locked->held_at))) {
+                throw ValidationException::withMessages(['status' => 'สร้างใบเบิกได้เฉพาะ WO ที่พร้อมผลิต หรือกำลังผลิตแต่ยังไม่เริ่มงานและไม่ถูกพัก']);
             }
             $existingIds = $locked->events()->where('event_type', 'material_issue_created')->pluck('source_id')->filter()->all();
             if ($existingIds !== []) {
