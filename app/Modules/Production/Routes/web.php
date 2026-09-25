@@ -1,8 +1,10 @@
 <?php
 
 use App\Modules\Production\Controllers\BomController;
+use App\Modules\Production\Controllers\DocumentQueueController;
 use App\Modules\Production\Controllers\EntryController;
 use App\Modules\Production\Controllers\OrderController;
+use App\Modules\Production\Controllers\ProductionDocumentPdfController;
 use App\Modules\Production\Controllers\WorkflowController;
 use Illuminate\Support\Facades\Route;
 
@@ -14,6 +16,18 @@ Route::middleware(['auth', 'program:production', 'capability:production', 'wareh
             ->middleware('permission:production.dashboard.view')
             ->name('index');
         Route::get('/workflow', [WorkflowController::class, 'index'])->name('workflow.index');
+
+        Route::get('/document-queues/material-issues/data', [DocumentQueueController::class, 'materialIssuesData'])->middleware('permission:wms.issues.view')->name('document-queues.material-issues.data');
+        Route::get('/document-queues/material-issues', [DocumentQueueController::class, 'materialIssues'])->middleware('permission:wms.issues.view')->name('document-queues.material-issues.index');
+        Route::get('/document-queues/material-issues/{document}', [DocumentQueueController::class, 'showIssue'])->whereNumber('document')->middleware('permission:wms.issues.view')->name('document-queues.material-issues.show');
+        Route::post('/document-queues/material-issues/{document}/approve', [DocumentQueueController::class, 'approveIssue'])->whereNumber('document')->middleware('permission:wms.issues.approve')->name('document-queues.material-issues.approve');
+        Route::post('/document-queues/material-issues/{document}/post', [DocumentQueueController::class, 'postIssue'])->whereNumber('document')->middleware('permission:wms.issues.post')->name('document-queues.material-issues.post');
+
+        Route::get('/document-queues/finished-receipts/data', [DocumentQueueController::class, 'finishedReceiptsData'])->middleware('permission:wms.inventory-adjustments.view')->name('document-queues.finished-receipts.data');
+        Route::get('/document-queues/finished-receipts', [DocumentQueueController::class, 'finishedReceipts'])->middleware('permission:wms.inventory-adjustments.view')->name('document-queues.finished-receipts.index');
+        Route::get('/document-queues/finished-receipts/{document}', [DocumentQueueController::class, 'showReceipt'])->whereNumber('document')->middleware('permission:wms.inventory-adjustments.view')->name('document-queues.finished-receipts.show');
+        Route::post('/document-queues/finished-receipts/{document}/approve', [DocumentQueueController::class, 'approveReceipt'])->whereNumber('document')->middleware('permission:wms.inventory-adjustments.approve')->name('document-queues.finished-receipts.approve');
+        Route::post('/document-queues/finished-receipts/{document}/post', [DocumentQueueController::class, 'postReceipt'])->whereNumber('document')->middleware('permission:wms.inventory-adjustments.post')->name('document-queues.finished-receipts.post');
 
         Route::get('/demand', [OrderController::class, 'demand'])->middleware('permission:production.orders.view')->name('demand.index');
         Route::get('/demand/data', [OrderController::class, 'demandData'])->middleware('permission:production.orders.view')->name('demand.data');
@@ -39,6 +53,9 @@ Route::middleware(['auth', 'program:production', 'capability:production', 'wareh
         Route::get('/orders/create', [OrderController::class, 'create'])->middleware('permission:production.orders.create')->name('orders.create');
         Route::post('/orders', [OrderController::class, 'store'])->middleware('permission:production.orders.create')->name('orders.store');
         Route::get('/orders/{order}', [OrderController::class, 'show'])->middleware('permission:production.orders.view')->name('orders.show');
+        Route::get('/orders/{order}/pdf', [ProductionDocumentPdfController::class, 'order'])->whereNumber('order')->middleware('permission:production.orders.view')->name('orders.pdf');
+        Route::get('/orders/{order}/material-issues/{document}/pdf', [ProductionDocumentPdfController::class, 'materialIssue'])->whereNumber('order')->whereNumber('document')->middleware('permission:wms.issues.view')->name('orders.material-issues.pdf');
+        Route::get('/orders/{order}/finished-receipts/{document}/pdf', [ProductionDocumentPdfController::class, 'finishedReceipt'])->whereNumber('order')->whereNumber('document')->middleware('permission:wms.inventory-adjustments.view')->name('orders.finished-receipts.pdf');
         Route::get('/orders/{order}/items/{item}/cover-image', [OrderController::class, 'shopFloorItemImage'])->middleware('permission:production.orders.view')->name('orders.item-image');
         Route::get('/orders/{order}/edit', [OrderController::class, 'edit'])->middleware('permission:production.orders.update')->name('orders.edit');
         Route::put('/orders/{order}', [OrderController::class, 'update'])->middleware('permission:production.orders.update')->name('orders.update');

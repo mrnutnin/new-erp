@@ -488,7 +488,7 @@ final class ProductionOrderService
             if ($locked->status !== 'PENDING') throw ValidationException::withMessages(['operation' => 'เริ่มได้เฉพาะ Operation ที่รอดำเนินการ']);
             $this->assertCustomerStartDate($order);
             $locked->update(['status' => 'IN_PROGRESS', 'started_at' => now(), 'started_by' => $actor->id]);
-            $order->events()->create(['event_type' => 'operation_started', 'source_type' => ProductionOrderOperation::class, 'source_id' => (string) $locked->id, 'occurred_at' => now(), 'created_by' => $actor->id]);
+            $order->events()->create(['event_type' => 'operation_started', 'source_type' => ProductionOrderOperation::class, 'source_id' => (string) $locked->id, 'payload' => ['name' => $locked->name, 'sequence' => $locked->sequence], 'occurred_at' => now(), 'created_by' => $actor->id]);
             $this->audit->record('production.operation.started', $locked, [], $locked->fresh()->toArray(), $actor, $request);
             return $locked->fresh();
         }, 3);
@@ -500,7 +500,7 @@ final class ProductionOrderService
             $locked = ProductionOrderOperation::query()->lockForUpdate()->findOrFail($operation->id);
             if ((int) $locked->production_order_id !== (int) $order->id || (int) $order->branch_id !== (int) $warehouse->branch_id || (int) $order->issue_warehouse_id !== (int) $warehouse->id || $order->held_at || $locked->status !== 'IN_PROGRESS') throw ValidationException::withMessages(['operation' => 'จบ Operation นี้ไม่ได้']);
             $locked->update(['status' => 'COMPLETED', 'completed_at' => now(), 'completed_by' => $actor->id]);
-            $order->events()->create(['event_type' => 'operation_completed', 'source_type' => ProductionOrderOperation::class, 'source_id' => (string) $locked->id, 'occurred_at' => now(), 'created_by' => $actor->id]);
+            $order->events()->create(['event_type' => 'operation_completed', 'source_type' => ProductionOrderOperation::class, 'source_id' => (string) $locked->id, 'payload' => ['name' => $locked->name, 'sequence' => $locked->sequence], 'occurred_at' => now(), 'created_by' => $actor->id]);
             $this->audit->record('production.operation.completed', $locked, [], $locked->fresh()->toArray(), $actor, $request);
             return $locked->fresh();
         }, 3);

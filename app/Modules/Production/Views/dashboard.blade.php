@@ -22,6 +22,33 @@
         </div>
     </div>
 
+    @if($workQueues->isNotEmpty())
+        <section class="mb-4" aria-labelledby="production-document-queues-heading">
+            <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-3">
+                <div>
+                    <h2 id="production-document-queues-heading" class="h5 mb-1">คิวอนุมัติและลงบัญชีเอกสารผลิต</h2>
+                    <p class="small text-secondary mb-0">แสดงเฉพาะเอกสารของคลัง {{ $warehouse?->name }} ตามสิทธิ์ WMS ของคุณ</p>
+                </div>
+                <span class="small text-secondary">กดคิวเพื่อเปิดรายการและทำงานต่อใน Production</span>
+            </div>
+            <div class="row g-3">
+                @foreach($workQueues as $queue)
+                    <div class="col-6 col-xl-3">
+                        <a class="card h-100 text-decoration-none text-reset" href="{{ $queue['kind'] === 'issue' ? route('production.document-queues.material-issues.index', ['status' => $queue['status']]) : route('production.document-queues.finished-receipts.index', ['status' => $queue['status']]) }}">
+                            <div class="card-body">
+                                <p class="small text-secondary mb-1">{{ $queue['document'] }}</p>
+                                <h3 class="h6 mb-2">{{ $queue['stage'] }}</h3>
+                                <span class="badge {{ $queue['count'] > 0 ? 'app-status-warning' : 'app-status-success' }}">{{ number_format($queue['count']) }} รายการ</span>
+                                <p class="small text-secondary mt-2 mb-0">{{ $queue['description'] }}</p>
+                                <span class="small fw-semibold d-block mt-2">เปิดคิว <i class="bx bx-right-arrow-alt" aria-hidden="true"></i></span>
+                            </div>
+                        </a>
+                    </div>
+                @endforeach
+            </div>
+        </section>
+    @endif
+
     <section class="row g-3 mb-4 module-dashboard-summary" aria-label="สรุปสถานะการผลิต">
         @foreach([
             ['label' => 'WO ร่าง', 'value' => $metrics['draft'], 'icon' => 'bx-edit', 'class' => 'neutral'],

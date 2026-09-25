@@ -44,6 +44,7 @@ final class DocumentPdfRenderer
 .document-render h3 { font-size:11pt; margin:16px 0 6px; }
 .document-render .text-end { text-align:right; }
 .document-render .right { text-align:right; }
+.document-render .center { text-align:center; }
 .document-render .small { font-size:9pt; }
 .document-render .fw-bold,.document-render .fw-semibold { font-weight:bold; }
 .document-render .text-secondary { color:#687386; }
@@ -90,6 +91,32 @@ final class DocumentPdfRenderer
 .document-render .pdf-signatures { border:0; margin-top:24mm; page-break-inside:avoid; }
 .document-render .pdf-signatures td { border:0; width:50%; text-align:center; padding:0 10mm; }
 .document-render .pdf-sign-line { height:14mm; margin-bottom:3mm; }
+.document-render .pdf-internal-document { font-size:9.5pt; line-height:1.5; }
+.document-render .pdf-internal-document table { font-size:9.5pt; width:100%; }
+.document-render .pdf-internal-document td { font-size:9.5pt; color:#24292e; }
+.document-render .pdf-internal-document .pdf-header { margin-bottom:8mm; }
+.document-render .pdf-internal-document .invoice-logo { width:16%; padding-right:5mm; }
+.document-render .pdf-internal-document .pdf-header-company { width:60%; padding-right:6mm; }
+.document-render .pdf-internal-document.with-logo .pdf-header-company { width:44%; }
+.document-render .pdf-internal-document .pdf-header-title { width:40%; text-align:right; }
+.document-render .pdf-internal-document h1 { font-size:12pt; margin-bottom:3mm; }
+.document-render .pdf-internal-document .pdf-copy { font-size:8.5pt; color:#737b83; margin-bottom:2mm; }
+.document-render .pdf-internal-document .pdf-header-title h2 { font-size:16pt; line-height:1.4; color:#20252b; }
+.document-render .pdf-internal-document .invoice-number { font-size:12pt; font-weight:bold; margin-top:3mm; }
+.document-render .pdf-internal-document .pdf-party { margin:6mm 0; }
+.document-render .pdf-internal-document .pdf-party td { background:#fff; border-top:.2mm solid #d8dcdf; border-bottom:.2mm solid #d8dcdf; padding:4mm 3mm; }
+.document-render .pdf-internal-document .pdf-label { font-size:8.5pt; color:#737b83; margin-bottom:2mm; }
+.document-render .pdf-internal-document .pdf-value { font-size:10pt; font-weight:bold; }
+.document-render .pdf-internal-document .pdf-meta { margin-bottom:5mm; }
+.document-render .pdf-internal-document .pdf-meta td { background:#fff; border:.2mm solid #e8eaec; padding:3mm; }
+.document-render .pdf-internal-document h3 { font-size:11pt; margin:5mm 0 2mm; color:#363d44; }
+.document-render .pdf-internal-document .pdf-product th { font-size:8.5pt; background:#edf0f2; color:#363d44; border:0; padding:3mm 1.5mm; text-align:center; }
+.document-render .pdf-internal-document .pdf-product td { padding:3mm 1.5mm; border:0; border-bottom:.2mm solid #e8eaec; font-size:9pt; }
+.document-render .pdf-internal-document .pdf-total-summary { margin:4mm 0 0 auto; width:48%; }
+.document-render .pdf-internal-document .pdf-total-summary td { background:#fff; border:0; border-top:.2mm solid #d8dcdf; padding:2mm; font-size:9pt; }
+.document-render .pdf-internal-document .pdf-total-summary .total td { background:#edf0f2; font-size:11pt; font-weight:bold; padding:3mm 2mm; }
+.document-render .pdf-internal-document .pdf-note { font-size:9pt; border-top:.2mm solid #e2e5e8; border-bottom:.2mm solid #e2e5e8; padding:3mm 0; margin:4mm 0 0; }
+.document-render .pdf-internal-document .pdf-control { font-size:8.5pt; color:#737b83; margin:4mm 0 0; }
 .document-render .pdf-tax-invoice table { font-size:9.5pt; width:100%; }
 .document-render .pdf-tax-invoice td { font-size:9.5pt; color:#24292e; border:0; background:#fff; padding:0; vertical-align:top; }
 .document-render .pdf-tax-invoice { font-size:9.5pt; line-height:1.5; }

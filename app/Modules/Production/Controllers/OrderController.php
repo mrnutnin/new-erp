@@ -16,6 +16,8 @@ use App\Modules\Production\Notifications\ProductionIssueReportedNotification;
 use App\Modules\Production\Services\ProductionOrderService;
 use App\Modules\Production\Support\ProductionDayTimeline;
 use App\Modules\Production\Support\ProductionDemandQuery;
+use App\Modules\Production\Support\ProductionOrderEventPresenter;
+use App\Modules\Settings\Services\GlobalSettings;
 use App\Modules\Wms\Models\CostAllocation;
 use App\Modules\Wms\Models\InventoryAdjustmentDocument;
 use App\Modules\Wms\Models\IssueDocument;
@@ -123,7 +125,7 @@ final class OrderController extends Controller
         abort_unless($issue->status === 'OPEN', 422);
         $values = $request->validate(['resolution_method' => ['required', 'string', 'max:2000']]);
         $issue->update(['status' => 'RESOLVED', 'resolved_by' => $request->user()->id, 'resolved_at' => now(), 'resolution_method' => trim($values['resolution_method'])]);
-        $issue->order->events()->create(['event_type' => 'production_issue_resolved', 'source_type' => ProductionOrderIssue::class, 'source_id' => (string) $issue->id, 'occurred_at' => now(), 'created_by' => $request->user()->id]);
+        $issue->order->events()->create(['event_type' => 'production_issue_resolved', 'source_type' => ProductionOrderIssue::class, 'source_id' => (string) $issue->id, 'payload' => ['description' => $issue->description, 'resolution_method' => $issue->resolution_method], 'occurred_at' => now(), 'created_by' => $request->user()->id]);
 
         return response()->json(['status' => true, 'msg' => 'ปิดปัญหาการผลิตแล้ว', 'redirect' => route('production.shop-floor.issues')]);
     }
@@ -544,15 +546,16 @@ final class OrderController extends Controller
         return response()->json(['status' => true, 'msg' => 'สร้างใบสั่งผลิตแล้ว', 'redirect' => route('production.orders.show', $order)]);
     }
 
-    public function show(Request $request, ProductionOrder $order, ProductionOrderService $service, ManualProductionReceiptPostingService $finishedReceiptPosting): View
+    public function show(Request $request, ProductionOrder $order, ProductionOrderService $service, ManualProductionReceiptPostingService $finishedReceiptPosting, GlobalSettings $settings): View
     {
         abort_unless((int) $order->branch_id === $this->branchId($request), 404);
         $order->load(['salesOrder', 'salesOrderLine', 'finishedItem:id,code,name,cover_image_disk,cover_image_path', 'uom', 'bomRevision.bom', 'issueWarehouse:id,code,name', 'receiptWarehouse:id,code,name', 'materials.item:id,code,name,cover_image_disk,cover_image_path', 'materials.uom', 'scraps.uom', 'events.creator']);
+        $eventTimeline = ProductionOrderEventPresenter::present($order->events, $order, (int) ($settings->value('tax_decimal_places') ?? 2));
         $materialReadiness = $service->materialReadiness($order);
         $materialIssueId = $order->events->firstWhere('event_type', 'material_issue_created')?->source_id;
         $materialIssue = $materialIssueId ? IssueDocument::query()->where('issue_type', 'PRODUCTION')->find($materialIssueId) : null;
-        $materialReturns = $materialIssue ? IssueReturn::query()->where('issue_document_id', $materialIssue->id)->latest('id')->get(['id', 'document_number', 'status']) : collect();
-        $scrapReceipts = $materialIssue ? InventoryAdjustmentDocument::query()->where('source_issue_id', $materialIssue->id)->where('document_context', 'PRODUCTION_SCRAP_RECEIPT')->latest('id')->get(['id', 'document_number', 'status']) : collect();
+        $materialReturns = $materialIssue ? IssueReturn::query()->where('issue_document_id', $materialIssue->id)->latest('id')->get(['id', 'warehouse_id', 'document_number', 'document_date', 'status']) : collect();
+        $scrapReceipts = $materialIssue ? InventoryAdjustmentDocument::query()->where('source_issue_id', $materialIssue->id)->where('document_context', 'PRODUCTION_SCRAP_RECEIPT')->latest('id')->get(['id', 'warehouse_id', 'document_number', 'document_date', 'status']) : collect();
         $finishedReceipts = $materialIssue ? InventoryAdjustmentDocument::query()->with('lines')->where('source_issue_id', $materialIssue->id)->where('document_context', ManualProductionReceiptContract::CONTEXT)->latest('id')->get(['id', 'warehouse_id', 'document_number', 'document_date', 'status', 'document_context', 'source_issue_id', 'reason', 'reversal_status']) : collect();
         $finishedReceiptReadiness = $finishedReceipts->where('status', 'APPROVED')->mapWithKeys(function (InventoryAdjustmentDocument $receipt) use ($finishedReceiptPosting): array {
             try { return [$receipt->id => $finishedReceiptPosting->preflight($receipt->toArray())]; }
@@ -563,8 +566,13 @@ final class OrderController extends Controller
         $journalProofRows = $journalIds->isEmpty() ? collect() : JournalEntry::query()->whereIn('id', $journalIds)->orderBy('entry_date')->orderBy('id')->get(['id', 'entry_number', 'entry_date', 'source_type', 'source_id', 'status']);
         $wipSummary = $service->wipSummary($materialIssue);
         $canViewFinishedReceipt = $request->user()->hasPermission('wms.inventory-adjustments.view');
+        $canViewMaterialIssue = $request->user()->hasPermission('wms.issues.view');
+        $activeWarehouseId = (int) $request->attributes->get('selectedWarehouse')->id;
+        $canPrintWorkOrder = in_array($activeWarehouseId, [(int) $order->issue_warehouse_id, (int) $order->receipt_warehouse_id], true);
+        $canPrintMaterialIssue = $canViewMaterialIssue && $materialIssue && (int) $materialIssue->warehouse_id === $activeWarehouseId;
+        $dateFormat = (string) ($settings->value('date_format') ?: 'd/m/Y');
 
-        return view('Production::orders.show', compact('order', 'materialReadiness', 'materialIssue', 'materialReturns', 'scrapReceipts', 'finishedReceipts', 'finishedReceiptReadiness', 'journalPreviewUrls', 'journalProofRows', 'wipSummary', 'canViewFinishedReceipt'));
+        return view('Production::orders.show', compact('order', 'eventTimeline', 'materialReadiness', 'materialIssue', 'materialReturns', 'scrapReceipts', 'finishedReceipts', 'finishedReceiptReadiness', 'journalPreviewUrls', 'journalProofRows', 'wipSummary', 'canViewFinishedReceipt', 'canViewMaterialIssue', 'canPrintWorkOrder', 'canPrintMaterialIssue', 'dateFormat'));
     }
 
     public function journalPreview(Request $request, ProductionOrder $order, JournalEntry $journalEntry): JsonResponse

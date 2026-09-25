@@ -518,10 +518,9 @@ final class ProductionOrderMvpContractTest extends TestCase
         $checklist = file_get_contents(base_path('PRODUCTION_MVP_CHECKLIST.md'));
 
         self::assertStringContainsString("'events.creator'", $controller);
-        self::assertStringContainsString('Audit timeline', $show);
-        self::assertStringContainsString('$eventLabels', $show);
-        self::assertStringContainsString('$order->events->sortByDesc(\'occurred_at\')', $show);
-        self::assertStringContainsString('json_encode($event->payload', $show);
+        self::assertStringContainsString('ประวัติการดำเนินงาน', $show);
+        self::assertStringContainsString('ProductionOrderEventPresenter::present', $controller);
+        self::assertStringNotContainsString('json_encode($event->payload', $show);
         self::assertStringContainsString('- [x] Audit timeline เต็มใน WO detail', $checklist);
     }
 

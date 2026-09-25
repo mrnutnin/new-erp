@@ -30,11 +30,12 @@
 | Finance | 0 | เอกสารรับ/จ่ายสำคัญยังไม่มี PDF |
 | POS | 7 | มีบางเอกสารขาย แต่ยังขาดใบรับชำระ ใบแจ้งหนี้ และใบวางบิล |
 | Purchasing | 6 | มี PR, PO, GR, เอกสารซื้อ, Landed Cost และรายงานปฏิบัติการ |
-| WMS | 1 | มีป้ายสินค้า Barcode/QR; เอกสารคลังและใบตรวจนับยังไม่มี PDF |
+| WMS | 1 | มีป้ายสินค้า Barcode/QR; เอกสารคลังทั่วไปและใบตรวจนับยังไม่มี PDF |
+| Production | 3 | มี PDF ภายในสำหรับใบสั่งผลิต ใบเบิกวัตถุดิบผลิต และใบรับผลิตเสร็จ |
 | Asset | 0 | มีหน้าพิมพ์ป้ายสินทรัพย์แบบ HTML แต่ไม่มี A4 PDF |
 | Settings | 0 | ถูกต้องแล้ว; ไม่ควรมี business-document PDF |
 | Dashboard | 0 | ถูกต้องแล้ว; ใช้หน้าจอเป็นหลัก |
-| **รวม** | **15** | ทุก route ที่มีอยู่ยังต้อง audit layout, snapshot, permission และสถานะเอกสาร |
+| **รวม** | **18** | ทุก route ที่มีอยู่ยังต้อง audit layout, snapshot, permission และสถานะเอกสาร |
 
 ## Accounting
 
@@ -122,9 +123,9 @@
 | โอนออก / โอนเข้า | ใบโอนสินค้าและใบรับโอน | INTERNAL | P0 | ยังไม่มี | [ ] แสดงคลังต้นทาง/ปลายทาง ผู้ส่ง/ผู้รับ serial/lot เมื่อมี และสถานะ dispatch/complete |
 | เบิกสินค้า (Issue) | ใบเบิกสินค้า | INTERNAL | P0 | ยังไม่มี | [ ] แสดงประเภทเบิก ผู้เบิก คลัง cost center/reference และผู้อนุมัติ |
 | คืนจากการเบิก | ใบคืนสินค้า | INTERNAL | P0 | ยังไม่มี | [ ] อ้าง issue/movement เดิมและเหตุผล |
-| เบิกวัตถุดิบผลิต | ใบเบิกวัตถุดิบ | INTERNAL | P0 | ยังไม่มี | [ ] อ้าง production reference และ quantity/UOM |
+| เบิกวัตถุดิบผลิต | ใบเบิกวัตถุดิบ | INTERNAL | P0 | มี route ผ่าน Production | [ ] อ้าง production reference และ quantity/UOM; เปิดจาก WO และใช้สิทธิ์ดูเอกสาร WMS เดิม |
 | คืนวัตถุดิบผลิต | ใบคืนวัตถุดิบ | INTERNAL | P0 | ยังไม่มี | [ ] อ้างใบเบิกเดิมและผู้รับคืน |
-| รับสินค้าสำเร็จรูป | ใบรับสินค้าสำเร็จรูป | INTERNAL | P0 | ยังไม่มี | [ ] แสดง source production, warehouse และ cost reference |
+| รับสินค้าสำเร็จรูป | ใบรับสินค้าสำเร็จรูป | INTERNAL | P0 | มี route ผ่าน Production | [ ] แสดง source production, warehouse และ cost reference; เปิดจาก WO และใช้สิทธิ์ดูเอกสาร WMS เดิม |
 | Stock Count | ใบตรวจนับแบบ blind และใบสรุปผลต่าง | INTERNAL | P0 | ยังไม่มี | [ ] แยกแบบไม่มี system quantity สำหรับผู้ตรวจนับกับผลหลังอนุมัติ |
 | Inventory Adjustment | ใบปรับปรุงสินค้าคงคลัง | INTERNAL | P0 | ยังไม่มี | [ ] แสดงเหตุผล ผลต่าง quantity/value ผู้อนุมัติ และ Journal reference |
 | Opening Balance | ใบ/รายงานนำเข้ายอดยกมา | INTERNAL | P1 | ยังไม่มี | [ ] พิมพ์ snapshot หลัง import/ก่อน post เพื่อ audit |
@@ -133,6 +134,14 @@
 | Dashboard, Workflow | — | — | — | ไม่ทำ | [-] เป็นหน้าติดตาม |
 | Revaluation, Manual Trigger, Emergency Rebuild, Legacy Review, Lineage | — | — | — | ไม่ทำ | [-] เป็น costing control/queue; ใช้ DataTable, Excel และ audit log |
 | Categories, UOM, Conversion, Min/Max, Issue Types | — | — | — | ไม่ทำ | [-] เป็น master/configuration |
+
+## Production
+
+| เมนู/หน้า | PDF ที่ควรมี | Class | Priority | ปัจจุบัน | Checklist/หมายเหตุ |
+|---|---|---|---|---|---|
+| ใบสั่งผลิต (WO) | ใบสั่งผลิตพร้อม BOM/วัตถุดิบและแผนผลิต | INTERNAL | P0 | มี route | [ ] พิมพ์วันที่สร้างเอกสาร สถานะ แผน/คลัง และ watermark ร่าง/ยกเลิก; ตรวจหลายหน้า |
+| ใบเบิกวัตถุดิบที่ผูกกับ WO | ใบเบิกวัตถุดิบผลิต | INTERNAL | P0 | มี route | [ ] เปิดจากเอกสารที่เกี่ยวข้องใน WO; จำกัดด้วยสิทธิ์ `wms.issues.view` และคลังปัจจุบัน |
+| ใบรับผลิตเสร็จที่ผูกกับ WO | ใบรับสินค้าผลิตเสร็จ | INTERNAL | P0 | มี route | [ ] แสดงมูลค่าตามเอกสารต้นทาง; จำกัดด้วยสิทธิ์ `wms.inventory-adjustments.view` และคลังปัจจุบัน |
 
 ## Asset
 
@@ -185,7 +194,7 @@
 
 ### Phase 2 — เอกสารปฏิบัติงาน
 
-- [ ] WMS: Transfer, Issue/Return, Production, Count และ Adjustment
+- [ ] WMS: Transfer, Issue/Return ทั่วไป, Count และ Adjustment; เอกสาร Production ที่ผูกกับ WO มี PDF ผ่าน Production แล้ว
 - [ ] Asset: Capitalization, Addition, Transfer, Count, Impairment, Disposal และ Maintenance Work Order
 - [ ] Purchasing: PR, GR และ Landed Cost allocation sheet
 

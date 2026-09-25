@@ -5,6 +5,8 @@ namespace App\Modules\Production\Controllers;
 use App\Http\Controllers\Controller;
 use App\Modules\Production\Models\ProductionOrder;
 use App\Modules\Production\Services\ProductionOrderService;
+use App\Modules\Wms\Models\InventoryAdjustmentDocument;
+use App\Modules\Wms\Models\IssueDocument;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\View\View;
@@ -17,6 +19,30 @@ final class EntryController extends Controller
         $warehouse = $request->attributes->get('selectedWarehouse');
         $base = ProductionOrder::query()->where('branch_id', $branch->id);
         $released = (clone $base)->with(['materials.item', 'materials.uom'])->where('status', 'RELEASED')->latest('id')->limit(100)->get();
+        $user = $request->user();
+        $workQueues = collect();
+        if ($user->hasPermission('wms.issues.view')) {
+            $issues = IssueDocument::query()->where('branch_id', $branch->id)->where('warehouse_id', $warehouse->id)->where('issue_type', 'PRODUCTION');
+            foreach ([
+                ['kind' => 'issue', 'permission' => 'wms.issues.approve', 'status' => 'DRAFT', 'document' => 'ใบเบิกวัตถุดิบ', 'stage' => 'ร่าง · รออนุมัติ', 'description' => 'ตรวจสอบและอนุมัติใบเบิกวัตถุดิบผลิต'],
+                ['kind' => 'issue', 'permission' => 'wms.issues.post', 'status' => 'APPROVED', 'document' => 'ใบเบิกวัตถุดิบ', 'stage' => 'รอลง Stock และ GL', 'description' => 'ใบเบิกที่อนุมัติแล้ว รอลง Stock และบัญชี'],
+            ] as $queue) {
+                if ($user->hasPermission($queue['permission'])) {
+                    $workQueues->push([...$queue, 'count' => (clone $issues)->where('status', $queue['status'])->count()]);
+                }
+            }
+        }
+        if ($user->hasPermission('wms.inventory-adjustments.view')) {
+            $receipts = InventoryAdjustmentDocument::query()->where('branch_id', $branch->id)->where('warehouse_id', $warehouse->id)->where('document_context', 'PRODUCTION_RECEIPT');
+            foreach ([
+                ['kind' => 'receipt', 'permission' => 'wms.inventory-adjustments.approve', 'status' => 'DRAFT', 'document' => 'ใบรับผลิต', 'stage' => 'ร่าง · รออนุมัติ', 'description' => 'ตรวจสอบและอนุมัติใบรับสินค้าผลิตเสร็จ'],
+                ['kind' => 'receipt', 'permission' => 'wms.inventory-adjustments.post', 'status' => 'APPROVED', 'document' => 'ใบรับผลิต', 'stage' => 'รอลง Stock และ GL', 'description' => 'ใบรับผลิตที่อนุมัติแล้ว รอลง Stock และบัญชี'],
+            ] as $queue) {
+                if ($user->hasPermission($queue['permission'])) {
+                    $workQueues->push([...$queue, 'count' => (clone $receipts)->where('status', $queue['status'])->count()]);
+                }
+            }
+        }
         $readyToReceive = DB::table('production_orders')
             ->join('production_order_events', 'production_order_events.production_order_id', '=', 'production_orders.id')
             ->join('wms_issue_documents', 'wms_issue_documents.id', '=', 'production_order_events.source_id')
@@ -30,6 +56,7 @@ final class EntryController extends Controller
         return view('Production::dashboard', [
             'branch' => $branch,
             'warehouse' => $warehouse,
+            'workQueues' => $workQueues,
             'metrics' => [
                 'draft' => (clone $base)->where('status', 'DRAFT')->count(),
                 'in_progress' => (clone $base)->where('status', 'IN_PROGRESS')->count(),
