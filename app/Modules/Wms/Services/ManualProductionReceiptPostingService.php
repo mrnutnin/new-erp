@@ -98,6 +98,8 @@ final class ManualProductionReceiptPostingService
             if ($locked->document_context !== 'PRODUCTION_RECEIPT' || $locked->status !== 'APPROVED') {
                 throw ValidationException::withMessages(['status' => 'ลงบัญชีใบรับผลิตได้เฉพาะเอกสารที่อนุมัติแล้ว']);
             }
+            // Serialize with HS/IV posting before touching stock or deciding whether to reserve FG.
+            $this->lockLinkedSalesOrder($locked);
             $limitBlockers = $this->productionOrderReceiptLimitBlockers($locked->toArray());
             if ($limitBlockers !== []) {
                 throw ValidationException::withMessages(['posting' => collect($limitBlockers)->pluck('message')->implode(' ')]);
@@ -209,6 +211,14 @@ final class ManualProductionReceiptPostingService
         }, 3);
     }
 
+    private function lockLinkedSalesOrder(InventoryAdjustmentDocument $receipt): void
+    {
+        if (! $receipt->source_issue_id || ! Schema::hasTable('production_order_events') || ! Schema::hasTable('production_orders')) return;
+        $event = DB::table('production_order_events')->where('event_type', 'material_issue_created')->where('source_id', (string) $receipt->source_issue_id)->latest('id')->first();
+        $salesOrderId = $event ? DB::table('production_orders')->where('id', $event->production_order_id)->where('order_type', 'MAKE_TO_ORDER')->value('sales_order_id') : null;
+        if ($salesOrderId) DB::table('sales_orders')->where('id', $salesOrderId)->lockForUpdate()->first();
+    }
+
     private function productionOrderReceiptLimitBlockers(array $document): array
     {
         if (($document['document_context'] ?? null) !== ManualProductionReceiptContract::CONTEXT
@@ -293,7 +303,9 @@ final class ManualProductionReceiptPostingService
             'updated_by' => $actor->id,
             'updated_at' => now(),
         ]);
-        if ($done && $order->order_type === 'MAKE_TO_ORDER' && (int) $order->sales_order_line_id > 0) {
+        if ($done && $order->order_type === 'MAKE_TO_ORDER' && (int) $order->sales_order_line_id > 0
+            && ! DB::table('pos_physical_sales')->where('source_type', 'SALES_ORDER')->where('source_id', $order->sales_order_id)
+                ->where('status', 'POSTED')->whereNull('deleted_at')->lockForUpdate()->first(['id'])) {
             $reservation = $this->reservations->reserve([
                 'warehouse_id' => (int) $order->receipt_warehouse_id,
                 'item_id' => (int) $order->finished_item_id,

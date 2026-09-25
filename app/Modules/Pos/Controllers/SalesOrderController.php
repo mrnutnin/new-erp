@@ -7,10 +7,12 @@ use App\Models\AuditLog;
 use App\Modules\Finance\Models\DocumentSequence;
 use App\Modules\Finance\Services\DocumentSequenceService;
 use App\Modules\Platform\Services\AuditLogger;
+use App\Modules\Platform\Services\ModuleCapability;
 use App\Modules\Pos\Models\PhysicalSale;
 use App\Modules\Production\Models\ProductionOrder;
 use App\Modules\Pos\Models\SalesIntake;
 use App\Modules\Pos\Models\SalesOrder;
+use App\Modules\Pos\Models\SalesOrderLine;
 use App\Modules\Pos\Models\SalesQuotation;
 use App\Modules\Pos\Models\SalesRfq;
 use App\Modules\Pos\Requests\ChangeSalesOrderStatusRequest;
@@ -110,18 +112,66 @@ class SalesOrderController extends Controller
         return redirect()->route('pos.sales-orders.show', $order)->with('success', 'สร้างใบสั่งขายแล้ว');
     }
 
-    public function show(Request $request, SalesOrder $salesOrder): View
+    public function show(Request $request, SalesOrder $salesOrder, ModuleCapability $capabilities): View
     {
         $this->scope($request, $salesOrder);
-        $order = $salesOrder->load(['lines', 'quotation.sourceIntake.preparedBy', 'quotation.rfq.sourceIntake.preparedBy', 'rfq.sourceIntake.preparedBy', 'sourceIntake.preparedBy', 'party', 'physicalSales']);
-        $productionOrders = ProductionOrder::query()
+        $order = $salesOrder->load(['lines.item:id,item_type,is_active,is_stock_item,base_uom_id,can_manufacture', 'quotation.sourceIntake.preparedBy', 'quotation.rfq.sourceIntake.preparedBy', 'rfq.sourceIntake.preparedBy', 'sourceIntake.preparedBy', 'party', 'physicalSales.warehouse:id,code,name']);
+        $productionEnabled = $capabilities->isEnabled(ModuleCapability::PRODUCTION);
+        $productionOrders = $productionEnabled ? ProductionOrder::query()
             ->where('sales_order_id', $order->id)
             ->whereNot('status', 'CANCELLED')
-            ->get(['id', 'sales_order_line_id', 'document_number', 'status', 'completed_quantity', 'planned_quantity'])
-            ->keyBy('sales_order_line_id');
+            ->with('receiptWarehouse:id,code,name')
+            ->get(['id', 'sales_order_line_id', 'receipt_warehouse_id', 'document_number', 'status', 'completed_quantity', 'planned_quantity'])
+            ->keyBy('sales_order_line_id') : collect();
+        $activeBoms = $productionEnabled ? DB::table('production_boms as bom')
+            ->join('production_bom_revisions as revision', 'revision.bom_id', '=', 'bom.id')
+            ->where('bom.branch_id', $order->branch_id)->where('bom.is_active', true)->whereNull('bom.deleted_at')
+            ->where('revision.status', 'ACTIVE')
+            ->whereIn('bom.finished_item_id', $order->lines->pluck('item_id')->filter()->unique())
+            ->whereExists(fn ($q) => $q->selectRaw('1')->from('production_bom_lines')->whereColumn('bom_revision_id', 'revision.id'))
+            ->get(['bom.finished_item_id', 'bom.base_uom_id'])->mapWithKeys(fn ($bom) => [$bom->finished_item_id.':'.$bom->base_uom_id => true]) : collect();
         $history = AuditLog::query()->with('user:id,name')->where('subject_type', $order->getMorphClass())->where('subject_id', $order->id)->latest()->get();
 
-        return view('Pos::sales-orders.show', ['order' => $order, 'history' => $history, 'flowDocuments' => SalesDocumentTrail::for($order), 'productionOrders' => $productionOrders]);
+        return view('Pos::sales-orders.show', compact('order', 'history', 'productionOrders', 'productionEnabled', 'activeBoms') + ['flowDocuments' => SalesDocumentTrail::for($order)]);
+    }
+
+    public function requestProduction(Request $request, SalesOrder $salesOrder, int $line, ModuleCapability $capabilities, AuditLogger $audit): JsonResponse
+    {
+        $this->scope($request, $salesOrder);
+        abort_unless($capabilities->isEnabled(ModuleCapability::PRODUCTION), 404);
+        $values = $request->validate([
+            'requested_delivery_date' => ['required', 'date_format:Y-m-d'],
+            'requested_start_date' => ['nullable', 'date_format:Y-m-d', 'before_or_equal:requested_delivery_date'],
+            'production_specification' => ['nullable', 'string', 'max:2000'],
+        ]);
+        DB::transaction(function () use ($request, $salesOrder, $line, $values, $audit): void {
+            $order = SalesOrder::query()->lockForUpdate()->findOrFail($salesOrder->id);
+            $detail = SalesOrderLine::query()->with('item:id,item_type,is_active,is_stock_item,base_uom_id,can_manufacture')
+                ->where('sales_order_id', $order->id)->lockForUpdate()->findOrFail($line);
+            if ($order->status !== 'CONFIRMED' || $order->physicalSales()->where('status', '!=', 'VOID')->exists()
+                || ProductionOrder::query()->where('sales_order_line_id', $detail->id)->whereNot('status', 'CANCELLED')->exists()) {
+                throw ValidationException::withMessages(['production_request' => 'ใบสั่งขายนี้ไม่สามารถส่งคำขอสั่งผลิตได้แล้ว']);
+            }
+            $item = $detail->item;
+            if ((! $order->production_legacy_eligible && ! $item?->can_manufacture) || ! $item?->is_active
+                || $item->item_type !== 'GOODS' || ! $item->is_stock_item || (int) $item->base_uom_id !== (int) $detail->uom_id) {
+                throw ValidationException::withMessages(['production_request' => 'สินค้า/หน่วยไม่พร้อมสั่งผลิต']);
+            }
+            $before = $detail->only(['production_requested_at', 'production_requested_by', 'requested_delivery_date', 'requested_start_date', 'production_specification']);
+            $detail->update([
+                'production_requested_at' => $detail->production_requested_at ?? now(),
+                'production_requested_by' => $request->user()->id,
+                'requested_delivery_date' => $values['requested_delivery_date'],
+                'requested_start_date' => $values['requested_start_date'] ?? null,
+                'production_specification' => trim($values['production_specification'] ?? '') ?: null,
+            ]);
+            $audit->record('pos.sales-order.production-requested', $order,
+                ['sales_order_line_id' => $detail->id, 'line_number' => $detail->line_number, ...$before],
+                ['sales_order_line_id' => $detail->id, 'line_number' => $detail->line_number, ...$detail->fresh()->only(array_keys($before))],
+                $request->user(), $request);
+        });
+
+        return response()->json(['status' => true, 'msg' => 'ส่งคำขอสั่งผลิตให้ฝ่ายวางแผนแล้ว']);
     }
 
     public function fromIntake(Request $request, SalesIntake $salesIntake, DocumentSequenceService $sequences, AuditLogger $audit): JsonResponse|RedirectResponse

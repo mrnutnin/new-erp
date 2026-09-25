@@ -2,8 +2,8 @@
 @section('title', 'กระดานวางแผนผลิต | MintERP')
 @section('content')
 @php
-    $labels = ['DRAFT' => 'ร่าง', 'RELEASED' => 'พร้อมผลิต', 'IN_PROGRESS' => 'กำลังผลิต', 'COMPLETED' => 'เสร็จแล้ว', 'CANCELLED' => 'ยกเลิกเอกสาร'];
-    $classes = ['DRAFT' => 'app-status-neutral', 'RELEASED' => 'app-status-info', 'IN_PROGRESS' => 'app-status-warning', 'COMPLETED' => 'app-status-success', 'CANCELLED' => 'app-status-danger'];
+    $labels = ['DRAFT' => 'ร่าง', 'RELEASED' => 'พร้อมผลิต', 'IN_PROGRESS' => 'กำลังผลิต', 'COMPLETED' => 'เสร็จแล้ว'];
+    $classes = ['DRAFT' => 'app-status-neutral', 'RELEASED' => 'app-status-info', 'IN_PROGRESS' => 'app-status-warning', 'COMPLETED' => 'app-status-success'];
     $day = \Carbon\CarbonImmutable::parse($filters['date_from']);
     $otherFilters = request()->except('date_from', 'date_to');
     $hasAdvancedFilters = collect($filters)->except(['date_from', 'date_to'])->filter()->isNotEmpty();

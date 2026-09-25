@@ -2,6 +2,10 @@
 
 namespace Tests\Unit;
 
+use App\Modules\Production\Services\ProductionOrderService;
+use Illuminate\Validation\ValidationException;
+use ReflectionClass;
+use ReflectionMethod;
 use Tests\TestCase;
 
 final class ProductionOrderMvpContractTest extends TestCase
@@ -82,6 +86,8 @@ final class ProductionOrderMvpContractTest extends TestCase
         self::assertStringContainsString("Route::get('/planning'", $routes);
         self::assertStringContainsString("permission:production.orders.view", $routes);
         self::assertStringContainsString('where(\'issue_warehouse_id\', $warehouseId)', $controller);
+        self::assertStringContainsString("where('status', '!=', 'CANCELLED')", $controller);
+        self::assertStringNotContainsString("'CANCELLED' =>", $view);
         self::assertStringContainsString('limit(200)', $controller);
         self::assertStringContainsString('planning-date-from', $view);
         self::assertStringContainsString('แผนใช้เวลา', $view);
@@ -142,6 +148,56 @@ final class ProductionOrderMvpContractTest extends TestCase
         self::assertStringContainsString('production.orders.destroy', $show);
     }
 
+    public function test_both_draft_types_edit_their_own_fields_and_persist_planning_times(): void
+    {
+        $service = file_get_contents(base_path('app/Modules/Production/Services/ProductionOrderService.php'));
+        $controller = file_get_contents(base_path('app/Modules/Production/Controllers/OrderController.php'));
+        $form = file_get_contents(base_path('app/Modules/Production/Views/orders/form.blade.php'));
+        $show = file_get_contents(base_path('app/Modules/Production/Views/orders/show.blade.php'));
+        self::assertStringContainsString("if (\$locked->order_type === 'MAKE_TO_ORDER')", $service);
+        self::assertStringContainsString("'planned_start_at' => \$values['planned_start_at'] ?? null", $service);
+        self::assertStringContainsString("'planned_finish_at' => \$values['planned_finish_at'] ?? null", $service);
+        self::assertStringContainsString("'required_delivery_at' => \$values['required_delivery_at'] ?? null", $service);
+        self::assertStringContainsString('if ($materialsChanged)', $service);
+        self::assertStringContainsString("! \$actor->hasPermission('production.orders.substitute.use')", $service);
+        self::assertStringContainsString("'bom_revision_id' => \$makeToOrder ? ['prohibited']", $controller);
+        self::assertStringContainsString("'planned_quantity' => \$makeToOrder ? ['prohibited']", $controller);
+        self::assertStringContainsString("'substitutes' => \$makeToOrder ? ['prohibited']", $controller);
+        self::assertStringContainsString('@unless($madeToOrder)', $form);
+        self::assertStringContainsString('คำขอจากฝ่ายขาย (อ่านอย่างเดียว)', $form);
+        self::assertStringContainsString('source_bom_line_id', $form);
+        self::assertStringContainsString('substitutes.find(s=>Number(s.item_id)', $form);
+        self::assertStringContainsString('กลับหน้ารายละเอียด', $form);
+        self::assertStringContainsString('production.orders.edit', $show);
+        self::assertStringContainsString('wo-more-actions', $show);
+        self::assertStringContainsString('dropdown-menu-end', $show);
+        self::assertStringContainsString('.wo-more-actions[open] > .dropdown-menu { display: block; }', file_get_contents(base_path('public/css/app.css')));
+        self::assertStringContainsString('dropdown-item js-recoverable-scrap', $show);
+        self::assertStringContainsString("\$order->status === 'DRAFT' && (int) \$order->issue_warehouse_id", $show);
+        self::assertStringContainsString('ผลิตเพื่อสต็อก', $show);
+        self::assertStringContainsString('planned_start_at?->format', $show);
+    }
+
+    public function test_draft_plan_checks_customer_start_and_consistent_timeline_interval(): void
+    {
+        $service = (new ReflectionClass(ProductionOrderService::class))->newInstanceWithoutConstructor();
+        $method = new ReflectionMethod(ProductionOrderService::class, 'assertPlanDates');
+        $plan = ['planned_finish_date' => '2026-09-25', 'planned_start_at' => '2026-09-24T09:00', 'planned_finish_at' => '2026-09-25T12:00'];
+        self::assertNull($method->invoke($service, $plan, '2026-09-24', '2026-09-24'));
+        foreach ([
+            [$plan, '2026-09-23', '2026-09-24', 'planned_start_date'],
+            [[...$plan, 'planned_finish_at' => '2026-09-24T08:00', 'planned_finish_date' => '2026-09-24'], '2026-09-24', null, 'planned_finish_at'],
+            [[...$plan, 'planned_finish_at' => null], '2026-09-24', null, 'planned_start_at'],
+        ] as [$values, $start, $earliest, $field]) {
+            try {
+                $method->invoke($service, $values, $start, $earliest);
+                self::fail('Expected schedule validation for '.$field);
+            } catch (ValidationException $e) {
+                self::assertArrayHasKey($field, $e->errors());
+            }
+        }
+    }
+
     public function test_made_to_order_creation_reuses_one_command_and_guards_mvp_rules(): void
     {
         $service = file_get_contents(base_path('app/Modules/Production/Services/ProductionOrderService.php'));
@@ -153,10 +209,10 @@ final class ProductionOrderMvpContractTest extends TestCase
             self::assertStringContainsString($contract, $service);
         }
         self::assertStringContainsString('createFromSalesOrderLine($line', $controller);
-        self::assertStringContainsString('whereExists', $controller);
-        self::assertStringContainsString('whereNotExists', $controller);
+        self::assertStringContainsString('ProductionDemandQuery::eligible($branchId)', $controller);
+        self::assertStringContainsString('ProductionDemandQuery::bomReadySql()', $controller);
         self::assertStringContainsString('js-create-wo', $demand);
-        self::assertStringContainsString('คำสั่งขายรอผลิต', $sidebar);
+        self::assertStringContainsString('คำขอสั่งผลิต', $sidebar);
     }
 
     public function test_release_uses_material_readiness_and_stays_inside_production_permission(): void
@@ -339,10 +395,17 @@ final class ProductionOrderMvpContractTest extends TestCase
         self::assertStringContainsString("'document_context' => 'PRODUCTION_SCRAP_RECEIPT'", $service);
         self::assertStringContainsString("'scrap_type' => 'RECOVERABLE_SCRAP'", $service);
         self::assertStringContainsString('recovery_total_value', $service);
-        self::assertStringContainsString('Available WIP', file_get_contents(base_path('app/Modules/Production/Views/orders/show.blade.php')));
+        self::assertStringContainsString('มูลค่า WIP คงเหลือ', file_get_contents(base_path('app/Modules/Production/Views/orders/show.blade.php')));
         self::assertStringContainsString('recoverable_scrap_receipt_created', $service);
         self::assertStringContainsString('PRODUCTION_SCRAP_RECEIPT', $sequence);
         self::assertStringContainsString('public function createRecoverableScrapReceipt(', $controller);
+        self::assertStringContainsString("Route::get('/orders/{order}/scrap-items'", $routes);
+        self::assertStringContainsString('public function scrapItemOptions(', $controller);
+        self::assertStringContainsString("\$scrapItem->item_type !== 'GOODS'", $service);
+        self::assertStringContainsString('can_receive_production_scrap', $service);
+        self::assertStringContainsString("where('can_receive_production_scrap', true)", $controller);
+        self::assertStringContainsString('whereNotNull(\'base_uom_id\')', $controller);
+        self::assertStringContainsString('erpInitSelect2', $show);
         self::assertStringContainsString("Route::post('/orders/{order}/recoverable-scrap-receipt'", $routes);
         self::assertStringContainsString('รับเศษผลิต', $show);
         self::assertStringContainsString('final class ProductionScrapReceiptService', $postingService);
@@ -412,8 +475,9 @@ final class ProductionOrderMvpContractTest extends TestCase
         self::assertStringContainsString("'available' =>", $service);
         self::assertStringContainsString('$wipSummary = $service->wipSummary($materialIssue);', $controller);
         self::assertStringContainsString('production.orders.cost.view', $show);
-        self::assertStringContainsString('WIP material cost', $show);
-        self::assertStringContainsString('Available WIP', $show);
+        self::assertStringContainsString('สรุปมูลค่าต้นทุนการผลิต', $show);
+        self::assertStringContainsString('มูลค่า WIP คงเหลือ', $show);
+        self::assertStringContainsString('row-cols-xl-5', $show);
         self::assertStringContainsString('$scrapReceipts', $controller);
         self::assertStringContainsString('ใบรับเศษผลิต', $show);
     }
@@ -562,13 +626,27 @@ final class ProductionOrderMvpContractTest extends TestCase
         $show = file_get_contents(base_path('app/Modules/Pos/Views/sales-orders/show.blade.php'));
 
         self::assertStringContainsString('ProductionOrder::query()', $controller);
-        self::assertStringContainsString("'productionOrders' => $", $controller);
+        self::assertStringContainsString("compact('order', 'history', 'productionOrders'", $controller);
         self::assertStringContainsString('$productionOrders->get($line->id)', $show);
         self::assertStringContainsString('Production', $show);
         self::assertStringContainsString('production.orders.show', $show);
-        self::assertStringContainsString('production.orders.store-from-demand', $show);
-        self::assertStringContainsString('สร้างใบสั่งผลิต', $show);
-        self::assertStringContainsString('js-create-wo', $show);
+        self::assertStringContainsString('pos.sales-orders.production-request', $show);
+        self::assertStringContainsString('ขอสั่งผลิต', $show);
+        self::assertStringContainsString('js-request-production', $show);
+    }
+
+    public function test_work_order_detail_shows_finished_product_and_material_images(): void
+    {
+        $controller = file_get_contents(base_path('app/Modules/Production/Controllers/OrderController.php'));
+        $routes = file_get_contents(base_path('app/Modules/Production/Routes/web.php'));
+        $show = file_get_contents(base_path('app/Modules/Production/Views/orders/show.blade.php'));
+
+        self::assertStringContainsString("'finishedItem:id,code,name,cover_image_disk,cover_image_path'", $controller);
+        self::assertStringContainsString("'materials.item:id,code,name,cover_image_disk,cover_image_path'", $controller);
+        self::assertStringContainsString("Route::get('/orders/{order}/items/{item}/cover-image'", $routes);
+        self::assertStringContainsString("'production.orders.item-image'", $show);
+        self::assertStringContainsString('ภาพวัตถุดิบ', $show);
+        self::assertStringContainsString('ภาพสินค้า', $show);
     }
 
     public function test_reversing_finished_receipt_reopens_or_recomputes_production_order_completion(): void

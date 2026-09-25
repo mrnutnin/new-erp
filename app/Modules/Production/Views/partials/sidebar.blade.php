@@ -4,6 +4,7 @@
     @if (auth()->user()->hasPermission('production.dashboard.view'))
         <a class="list-group-item list-group-item-action {{ request()->routeIs('production.index') ? 'active' : '' }}" href="{{ route('production.index') }}"><i class="bx bx-home-alt-2 me-2" aria-hidden="true"></i>Dashboard การผลิต</a>
     @endif
+    <a class="list-group-item list-group-item-action {{ request()->routeIs('production.workflow.*') ? 'active' : '' }}" href="{{ route('production.workflow.index') }}"><i class="bx bx-map-alt me-2" aria-hidden="true"></i>คู่มือการทำงาน</a>
 </div>
 
 @php($shopFloorActive = request()->routeIs('production.shop-floor.*'))
@@ -18,7 +19,7 @@
 @if (auth()->user()->hasPermission('production.orders.view'))
     <p class="eyebrow px-3 mb-2">วางแผนและดำเนินการผลิต</p>
     <div class="list-group mb-4">
-        <a class="list-group-item list-group-item-action d-flex align-items-center justify-content-between {{ request()->routeIs('production.demand.*') ? 'active' : '' }}" href="{{ route('production.demand.index') }}"><span><i class="bx bx-cart me-2" aria-hidden="true"></i>คำสั่งขายรอผลิต</span>@if($productionDemandCount > 0)<span class="badge app-status-danger ms-auto" title="คำสั่งขายรอผลิต {{ $productionDemandCount }} รายการ">{{ $productionDemandCount > 99 ? '99+' : $productionDemandCount }}</span>@endif</a>
+        <a class="list-group-item list-group-item-action d-flex align-items-center justify-content-between {{ request()->routeIs('production.demand.*') ? 'active' : '' }}" href="{{ route('production.demand.index') }}"><span><i class="bx bx-cart me-2" aria-hidden="true"></i>คำขอสั่งผลิต</span>@if($productionDemandCount > 0)<span class="badge app-status-info ms-auto" title="คำขอสั่งผลิต {{ $productionDemandCount }} รายการ">{{ $productionDemandCount > 99 ? '99+' : $productionDemandCount }}</span>@endif</a>
         <a class="list-group-item list-group-item-action {{ request()->routeIs('production.planning.*') ? 'active' : '' }}" href="{{ route('production.planning.index') }}"><i class="bx bx-calendar-event me-2" aria-hidden="true"></i>กระดานวางแผนผลิต</a>
         <a class="list-group-item list-group-item-action d-flex align-items-center justify-content-between {{ request()->routeIs('production.orders.*') ? 'active' : '' }}" href="{{ route('production.orders.index', ['status' => 'DRAFT']) }}"><span><i class="bx bx-clipboard me-2" aria-hidden="true"></i>ใบสั่งผลิต</span>@if($productionDraftCount > 0)<span class="badge app-status-danger ms-auto" title="ใบสั่งผลิต {{ $productionDraftCount }} รายการ">{{ $productionDraftCount > 99 ? '99+' : $productionDraftCount }}</span>@endif</a>
     </div>

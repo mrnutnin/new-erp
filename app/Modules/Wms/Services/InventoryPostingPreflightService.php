@@ -24,12 +24,15 @@ final class InventoryPostingPreflightService implements InventoryPostingPrefligh
         $movementIds = (clone $postedMovements)->select('id');
         $allocations = DB::table('wms_cost_allocations')->whereIn('stock_movement_id', $movementIds)->where('status', '!=', 'REVERSED');
         $lineProofAvailable = Schema::hasTable('wms_cost_allocation_journal_lines');
-        $missingInventory = DB::table('wms_stock_movements as movements')
+        $missingInventoryQuery = DB::table('wms_stock_movements as movements')
             ->join('wms_items as items', 'items.id', '=', 'movements.item_id')
             ->leftJoin('accounts', 'accounts.id', '=', 'items.inventory_account_id')
             ->where('movements.warehouse_id', $warehouseId)->where('movements.status', 'POSTED')
-            ->where(fn ($query) => $query->whereNull('accounts.id')->orWhere('accounts.is_active', false)->orWhere('accounts.is_postable', false)->orWhereNull('accounts.control_account_type')->orWhere('accounts.control_account_type', '!=', 'INVENTORY'))
-            ->distinct('movements.item_id')->count('movements.item_id');
+            ->where(fn ($query) => $query->whereNull('accounts.id')->orWhere('accounts.is_active', false)->orWhere('accounts.is_postable', false)->orWhereNull('accounts.control_account_type')->orWhere('accounts.control_account_type', '!=', 'INVENTORY'));
+        $missingInventory = (clone $missingInventoryQuery)->distinct('items.id')->count('items.id');
+        $missingInventoryItems = (clone $missingInventoryQuery)
+            ->select('items.id', 'items.code', 'items.name')->distinct()->orderBy('items.code')->limit(10)->get()
+            ->map(fn ($item): array => ['id' => (int) $item->id, 'code' => $item->code, 'name' => $item->name])->all();
         $missingCogs = DB::table('wms_stock_movements as movements')
             ->join('wms_items as items', 'items.id', '=', 'movements.item_id')
             ->leftJoin('accounts', 'accounts.id', '=', 'items.cogs_account_id')
@@ -78,6 +81,27 @@ final class InventoryPostingPreflightService implements InventoryPostingPrefligh
             : 0;
         $reconciliation = app(InventoryReconciliationService::class)->totals(now()->toDateString(), $warehouseId);
         $reconciliationGate = InventoryReconciliationGate::evaluate($reconciliation);
+        $unlinkedAllocationQuery = DB::table('wms_cost_allocations as allocations')
+            ->leftJoin('wms_stock_movements as movements', 'movements.id', '=', 'allocations.stock_movement_id')
+            ->join('wms_items as items', 'items.id', '=', 'allocations.item_id')
+            ->where('allocations.warehouse_id', $warehouseId)
+            ->where('allocations.business_date', '<=', now()->toDateString())
+            ->where('allocations.status', '!=', 'REVERSED')->whereNull('allocations.journal_entry_id');
+        if (Schema::hasTable('wms_cost_allocation_corrections')) {
+            $unlinkedAllocationQuery->whereNotExists(fn ($query) => $query->selectRaw('1')->from('wms_cost_allocation_corrections as corrections')->whereColumn('corrections.allocation_id', 'allocations.id'));
+        }
+        $hasMovementSourceType = Schema::hasColumn('wms_stock_movements', 'source_type');
+        $unlinkedAllocationSourceTypes = $hasMovementSourceType
+            ? (clone $unlinkedAllocationQuery)->whereNotNull('movements.source_type')->distinct()->orderBy('movements.source_type')->pluck('movements.source_type')->all()
+            : [];
+        $unlinkedAllocationDetails = (clone $unlinkedAllocationQuery)
+            ->select(['allocations.id', 'allocations.allocation_type', 'allocations.value', 'items.code as item_code'])
+            ->addSelect($hasMovementSourceType ? 'movements.source_type' : 'movements.movement_type as source_type')
+            ->addSelect(Schema::hasColumn('wms_stock_movements', 'source_reference') ? 'movements.source_reference' : 'movements.id as source_reference')
+            ->orderBy('allocations.id')->limit(10)->get()->map(fn ($row): array => [
+                'id' => (int) $row->id, 'allocation_type' => $row->allocation_type, 'value' => (string) $row->value,
+                'source_type' => $row->source_type, 'source_reference' => $row->source_reference, 'item_code' => $row->item_code,
+            ])->all();
         $blockers = compact('pending', 'unlinked', 'missingInventory', 'missingCogs', 'missingSource', 'lineUnlinked', 'lineMismatched', 'lineProofMissing', 'unresolvedLegacyReview');
 
         return [
@@ -93,6 +117,9 @@ final class InventoryPostingPreflightService implements InventoryPostingPrefligh
             'deferred_unlinked' => $deferredUnlinked,
             'deferred_unlinked_by_source' => $deferredUnlinkedBySource,
             'global_unresolved_legacy_review' => $globalUnresolvedLegacyReview,
+            'missing_inventory_items' => $missingInventoryItems,
+            'unlinked_allocation_details' => $unlinkedAllocationDetails,
+            'unlinked_allocation_source_types' => $unlinkedAllocationSourceTypes,
             'reconciliation' => $reconciliation,
             'reconciliation_ready' => $reconciliationGate['ready'],
             'reconciliation_blockers' => $reconciliationGate['blockers'],

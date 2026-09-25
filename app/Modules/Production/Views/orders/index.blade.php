@@ -2,7 +2,7 @@
 @section('title', 'ใบสั่งผลิต | Production')
 @section('content')
 <div class="container-fluid px-3 px-lg-4 py-4">
-    <div class="d-flex flex-wrap justify-content-between align-items-start gap-3 mb-4">
+    <div class="d-flex flex-wrap justify-content-between align-items-end gap-3 mb-4">
         <div><p class="eyebrow mb-2">PRODUCTION / WORK ORDERS</p><h1 class="h3 mb-1">ใบสั่งผลิต</h1><p class="text-secondary mb-0">ติดตาม WO ที่สร้างจากคำสั่งขายหรือสร้างเพื่อ Stock</p></div>
         <div class="d-flex flex-wrap gap-2">@if(auth()->user()->hasPermission('production.orders.create'))@if(auth()->user()->hasPermission('production.orders.view'))<a class="btn btn-app-soft" href="{{ route('production.demand.index') }}"><i class="bx bx-list-plus me-1" aria-hidden="true"></i>สร้างจากคำสั่งขาย</a>@endif<a class="btn btn-app-primary" href="{{ route('production.orders.create') }}"><i class="bx bx-plus me-1" aria-hidden="true"></i>สร้างใบสั่งผลิต</a>@endif</div>
     </div>

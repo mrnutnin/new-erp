@@ -43,7 +43,11 @@ class WmsItemImageContractTest extends TestCase
         self::assertStringContainsString('enctype="multipart/form-data"', $view);
         self::assertStringContainsString('name="cover_image"', $view);
         self::assertStringContainsString('name="additional_images"', $view);
+        self::assertStringContainsString(':max-files="1"', $view);
+        self::assertStringContainsString(':multiple="false"', $view);
         self::assertStringContainsString(':max-files="5"', $view);
+        self::assertStringContainsString('ข้อมูลสินค้า', $view);
+        self::assertStringContainsString('การกำหนดบัญชี', $view);
         self::assertStringContainsString('remove_additional_images[]', $view);
         self::assertStringContainsString("'maxFiles' => null", $component);
         self::assertStringContainsString('maxFiles: input.dataset.maxFiles', $script);

@@ -273,7 +273,7 @@ final class StockCostLayerService
         $metadata = is_array($movement->metadata) ? $movement->metadata : [];
         $value = $metadata['receipt_value'] ?? null;
         if ($value === null) {
-            return $quantity->multipliedBy(BigDecimal::of($unitCost));
+            return $quantity->multipliedBy(BigDecimal::of($unitCost))->toScale(8, RoundingMode::HALF_UP);
         }
         if (! is_string($value) || ! preg_match('/^\d+(?:\.\d{1,8})?$/', $value)) {
             throw ValidationException::withMessages(['receipt_value' => 'ต้นทุนรวมรับเข้าต้องเป็นทศนิยมไม่ติดลบ สูงสุด 8 ตำแหน่ง']);

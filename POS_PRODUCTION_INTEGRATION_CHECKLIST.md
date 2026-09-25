@@ -1,11 +1,11 @@
 # POS → Production: แผนและ Checklist
 
-สถานะ: **ตัดสินใจครบ / ยังไม่ implement** · วิเคราะห์เดิม: [POS_PRODUCTION_INTEGRATION_PLAN.md](POS_PRODUCTION_INTEGRATION_PLAN.md) (แนวคิดนโยบายจัดหาบังคับในเอกสารเดิมถูกแทนที่ด้วย flag `สั่งผลิตได้`)
+สถานะ: **โค้ดช่วง 1–3 และคำขอสั่งผลิตพร้อมส่ง UAT / รอผู้ใช้ทดสอบ flow จริง** (migration งานนี้รันบน local/UAT แล้ว) · วิเคราะห์เดิม: [POS_PRODUCTION_INTEGRATION_PLAN.md](POS_PRODUCTION_INTEGRATION_PLAN.md) (แนวคิดนโยบายจัดหาบังคับในเอกสารเดิมถูกแทนที่ด้วย flag `สั่งผลิตได้`)
 
 ## ข้อตกลงที่ยืนยันแล้ว
 
 - [x] **1A (ปรับความหมาย):** กำหนด flag `สั่งผลิตได้` ที่สินค้า ใช้ร่วมกันทุกสาขา; Active BOM ตรวจตามสาขาที่ผลิต Flag เป็นเพียงความสามารถในการส่ง SO line ไปสร้าง WO **ไม่ใช่คำสั่งให้ผลิต**
-- [x] **2A (ปรับความหมาย):** ไม่ต้องบันทึกตัวเลือก `ใช้สต็อก/สั่งผลิต` ใน SO; สินค้าทุกชิ้นขายจากสต็อก ผู้ใช้กดสร้าง WO เองได้แม้มีสต็อกพอ ไม่มีการสร้าง WO อัตโนมัติ
+- [x] **2A (ปรับความหมาย):** ไม่ต้องบันทึกตัวเลือก `ใช้สต็อก/สั่งผลิต` ใน SO; สินค้าทุกชิ้นขายจากสต็อก ฝ่ายขายส่งคำขอผลิตได้แม้มีสต็อกพอ ฝ่ายวางแผนเป็นผู้สร้าง WO ไม่มีการสร้าง WO อัตโนมัติ
 - [x] **3A:** ยืนยัน SO ได้แม้ยังไม่มี Active BOM; แจ้งว่า `ตั้งค่า BOM ก่อนสร้าง WO` โดยไม่ขัดขวางการขาย
 - [x] **4A:** ถ้าสร้าง WO จาก SO line จำนวนผลิต = **จำนวนเต็ม SO line** เสมอ ไม่ใช่ยอดขาดจากสต็อก; รอบนี้ไม่เพิ่ม partial fulfillment
 - [x] HS/IV จาก SO ยังคัดลอก **ทุกรายการเต็มจำนวน** ไม่ส่งบางรายการก่อน; หากมีสต็อกพร้อมครบทุกรายการ สามารถขายได้แม้ WO ที่ผูก SO ยังผลิตไม่เสร็จ
@@ -21,53 +21,82 @@
 
 **ข้อ 3A ใช้กับการสร้าง WO ใหม่เท่านั้น**: ถ้าสร้าง WO ก่อน แล้วจึงสร้าง HS/IV จาก SO ลูกค้ายังขายจากสต็อกได้แม้ WO ไม่เสร็จตามข้อตกลงเดิม
 
+## ความคืบหน้าการ implement
+
+- [x] ช่วงที่ 1 (โค้ด): เพิ่ม migration `can_manufacture` (ค่าเริ่มต้น false) และ marker `production_legacy_eligible` (บันทึกเฉพาะ SO ที่ CONFIRMED ตอน migration เพื่อแยก SO เก่าอย่างแน่นอน ไม่ใช่ snapshot flag สินค้า), พร้อม model casts และ Installer required schema
+- [x] ช่วงที่ 1 (โค้ด): เพิ่มช่อง `สั่งผลิตได้` ในฟอร์ม WMS เฉพาะเมื่อ Production เปิด; ตรวจ GOODS/ติดตามสต็อกฝั่ง server, ไม่แก้ flag เดิมเมื่อ Production ปิด; Unit Tests ที่เกี่ยวข้อง 14 ผ่าน (54 assertions)
+- [x] ผู้ใช้ยืนยัน `new_erp` เป็นทั้ง local พัฒนาและ UAT; `migrate:status` พบ pending **เฉพาะ migration งานนี้** จึงรันแบบระบุ `--path=database/migrations/2026_09_23_010000_add_pos_production_item_capability.php` เท่านั้น สำเร็จ batch 240; ไม่รัน migration อื่น
+- [x] ช่วงที่ 2 (โค้ด): ใช้ flag ล่าสุด/legacy marker ใน server gate สร้าง WO; หากมี HS/IV ไม่เป็น VOID ห้ามสร้าง WO ใหม่ (แต่กดซ้ำ WO ที่มีอยู่ยังคืนเอกสารเดิม); ล็อก SO ตอนสร้าง WO และตอนสร้าง HS/IV เพื่อกันแข่งกัน
+- [x] ช่วงที่ 2 (โค้ดเดิม): คิว Production และตัวเลข sidebar ใช้ query เดียวกัน รวม SO legacy และสินค้าเปิด flag แม้ยังไม่มี Active BOM พร้อมเหตุผล/ตัวกรอง; UI คิวบนแท็บเล็ตเป็น AJAX DataTable (รอบล่าสุดเพิ่มเงื่อนไขต้องมีคำขอจากฝ่ายขาย)
+- [x] ช่วงที่ 2: Unit Tests ที่เกี่ยวข้อง 44 ผ่าน (453 assertions), lint Blade ที่ compile แล้ว, `node --check` และ `git diff --check` ผ่าน; ไม่รัน Feature/Integration/E2E/browser
+- [ ] รอผู้ใช้ UAT หน้าคิวและ flow จริงหลังส่วน POS/FG reservation เสร็จ
+- [x] ช่วงที่ 3 (โค้ดเดิม): SO detail แสดง flag/legacy, เหตุผลที่ยังสร้าง WO ไม่ได้, WO/คลังรับผลิตตามสิทธิ์และขั้นถัดไป; POS ยังใช้ HS/IV เดิม
+- [x] ช่วงที่ 3 (โค้ด): Receipt ไม่จอง FG ให้ SO ที่ HS/IV POSTED แล้ว; หากรับผลิตก่อนขาย การขายคลังเดียวกัน consume ยอดจองเดิม หรือขายจากคลังอื่นแล้ว release เฉพาะยอดจอง FG ของ SO line หลัง POST สำเร็จใน transaction เดิม; ล็อก SO ทั้งสองทางเพื่อไม่ให้เกิดยอดจองค้างจากการแข่งกัน
+- [x] ช่วงที่ 3: Unit Tests ที่เกี่ยวข้อง 54 ผ่าน (494 assertions), compiled Blade/JS syntax และ `git diff --check` ผ่าน; ไม่รัน Feature/Integration/E2E/browser ตามที่ตกลง
+- [x] รอบแบ่งหน้าที่: POS ใช้สิทธิ์ `pos.sales-orders.confirm` ส่ง/แก้คำขอผลิตราย SO line (กำหนดส่ง, วันที่ลูกค้าขอเริ่มได้ตั้งแต่, ข้อกำหนดเฉพาะ) โดยไม่สร้าง WO; คิว Production แสดงเฉพาะคำขอที่ยังสร้าง WO ได้, ฝ่ายผลิตใช้ `production.orders.create` สร้าง WO และกำหนดวันเริ่ม/จบแผน; บันทึกข้อกำหนดใน WO และแสดงบน Shop Floor
+- [x] Migration คำขอ `2026_09_24_010000_add_sales_order_production_requests.php` ตรวจ pending พบเฉพาะไฟล์นี้ ตรวจ connection `new_erp` และรัน `--path` เฉพาะไฟล์งานนี้แล้ว; ไม่มี permission ใหม่
+- [ ] ผู้ใช้ตรวจ UAT flow จริงก่อนรับงาน; ยังไม่มีผลยืนยันจากการทดสอบ UAT
+
 ## ขอบเขต/การขออนุมัติ/การตรวจ
 
 - [ ] กระทบ flow POS/Production เดิมให้น้อยที่สุด; ใช้ stock movement, posting, audit, permission และ reservation service ที่มีอยู่ก่อนเพิ่ม abstraction/permission ใหม่
 - [x] อนุมัติ WMS เฉพาะ master สินค้า, Installer เฉพาะ schema/seed และการแก้สองกรณี reservation ของสินค้าสำเร็จรูป; **งาน WMS อื่น, Settings/Platform หรือการเปลี่ยน stock/บัญชีทั่วไปต้องถามก่อน** พร้อมแจ้งเหตุผลและไฟล์/flow ที่กระทบ
 - [x] ผู้ใช้ UAT เอง; ฝั่งพัฒนารัน **เฉพาะ Unit Tests ที่เกี่ยวข้อง** ไม่รัน Feature/Integration/E2E หรือ browser smoke test
-- [ ] หากเพิ่ม migration ตรวจ connection/ฐานข้อมูลเป้าหมายและ migration ค้างก่อนรัน `php artisan migrate --force` บนฐานข้อมูล UAT ให้ผู้ใช้; ถ้าเป็น production หรือมี migration อื่นค้างที่ไม่เกี่ยวข้องให้หยุดถามก่อน; รายงานรายการที่รัน ห้าม migrate/rollback ฐานข้อมูลผิดเครื่อง
+- [x] Migration ช่วงที่ 1: ตรวจ connection `new_erp` ตามที่ผู้ใช้ยืนยันและตรวจ pending ก่อนรัน **เฉพาะไฟล์งานนี้ด้วย `migrate --path=... --force`**; ไม่ใช้ `migrate --force` แบบทั้งหมด สำหรับ migration ที่อาจเพิ่มในช่วงถัดไปต้องตรวจ pending ใหม่และรันเฉพาะไฟล์งานนี้; ถ้ามี unrelated pending ให้หยุดถามก่อน
 
 ## 1. ข้อมูลสินค้า / อนุญาตสร้าง WO
 
-- [ ] เพิ่ม boolean `สั่งผลิตได้` ใน `wms_items` ระดับสินค้า (ค่าเริ่มต้น `ไม่` สำหรับข้อมูลเดิม/ใหม่) หรือ reuse field เดิมหากพบว่ามีจริง; migration ย้อนกลับได้, model fillable/cast, validation ฝั่ง server เฉพาะ GOODS ที่ติดตาม stock
-- [ ] WMS form วาง checkbox/สวิตช์ `สั่งผลิตได้` ใกล้ประเภทสินค้า พร้อมข้อความ “เปิดให้สร้าง WO จากใบสั่งขายได้ แต่ไม่สร้างอัตโนมัติและไม่เปลี่ยนการขายจากสต็อก”; เมื่อ Production ปิดซ่อน/ไม่แก้ flag เดิม และบันทึกช่องอื่นได้ตามปกติ
-- [ ] ต้องมี Active BOM ในสาขา, วัตถุดิบอย่างน้อยหนึ่งรายการ, หน่วยตรง base UOM, SO เป็น CONFIRMED และผู้ใช้มีสิทธิ์ก่อนสร้าง WO; ปุ่มไม่ใช่การรับประกันว่ามีวัตถุดิบพอ
-- [ ] แยก SO legacy ตาม cutover ที่แน่นอนและเช็กเงื่อนไขเดิมของ 1A; SO ใหม่ใช้ flag ล่าสุดตอนสร้าง WO ตาม 2A; ไม่มีการลบ WO/ยอดจองย้อนหลัง; หากต้องเพิ่ม field/table สำหรับ cutover ต้องทำ migration/installer ตามข้อ 4
+- [x] เพิ่ม boolean `สั่งผลิตได้` (`can_manufacture`) ใน `wms_items` ระดับสินค้า ค่าเริ่มต้น `ไม่` สำหรับข้อมูลเดิม/ใหม่; migration ย้อนกลับได้และรันบน local/UAT แล้ว, model fillable/cast, validation ฝั่ง server เฉพาะ GOODS ที่ติดตาม stock
+- [x] WMS form วาง checkbox `สั่งผลิตได้` ใกล้ประเภทสินค้า พร้อมคำอธิบายว่าไม่สร้าง WO อัตโนมัติและยังขายจาก stock; เมื่อ Production ปิดซ่อน/ไม่แก้ flag เดิม และบันทึกช่องอื่นได้ตามปกติ
+- [x] Server gate ตรวจ Active BOM ในสาขา, วัตถุดิบอย่างน้อยหนึ่งรายการ, หน่วยตรง base UOM, SO เป็น CONFIRMED, flag/legacy และ HS/IV ที่ไม่เป็น VOID; route เดิมคุมสิทธิ์; ปุ่มไม่ใช่การรับประกันว่ามีวัตถุดิบพอ
+- [x] SO ที่ CONFIRMED ณ วัน migrate ได้ `production_legacy_eligible=true` โดยไม่ต้องพึ่ง `confirmed_at`; SO ใหม่ใช้ flag ล่าสุดตอนสร้าง WO ตาม 2A; ไม่มีการลบ WO/ยอดจองย้อนหลัง; field อยู่ใน migration/Installer แล้ว
 
 ## 2. POS และ Production UX/UI
 
-- [ ] SO DRAFT: ในตารางรายการใกล้สินค้า/จำนวน แสดง `สั่งผลิตได้` หรือ `ยังไม่เปิดให้สั่งผลิต` เป็นข้อมูล ไม่ใช้ `รอผลิต`; ถ้าขาด BOM ระบุ `ตั้งค่า BOM ก่อนสร้าง WO` เห็นได้โดยไม่ต้องเปิด tooltip; ยืนยัน SO ได้ตามปกติ
-- [ ] SO CONFIRMED: แสดงปุ่ม `สร้างใบสั่งผลิต` เฉพาะเมื่อ capability เปิด, มีสิทธิ์, เป็น legacy ตาม 1A หรือ flag ล่าสุดเปิดตาม 2A, Active BOM/หน่วยพร้อม และยังไม่มี WO หรือ HS/IV ที่ไม่เป็น VOID ตาม 3A; ฝั่ง server ตรวจซ้ำภายใต้ transaction/lock; ข้อความยืนยันระบุ “สร้าง WO เต็มจำนวน X หน่วย” แม้มีสต็อก; disable ระหว่างส่งและแจ้ง error ที่ปลอดภัย
-- [ ] ไม่เพิ่มตัวเลือก/ปุ่ม `ใช้สต็อก` ใหม่: action POS `สร้าง HS/IV` เดิมยังทำงาน; ถ้ามีสต็อกพอ **ทุกรายการใน SO** ตามคลังจัดส่ง ให้ขายได้แม้มี WO ค้าง; อย่าบอกว่าการสร้าง WO จองสต็อกหรือขัดขวางการขาย
-- [ ] SO มี WO: แสดงเลข/สถานะ WO ที่อ่านได้ตามสิทธิ์, ไม่เสนอสร้างซ้ำ; WO `เสร็จแล้ว` ไม่เท่ากับ `พร้อมส่ง` — HS/IV ใช้ stock ที่พร้อมจริงและตรวจอีกครั้งตอน POST
-- [ ] Production Demand เปลี่ยนความหมายจาก `คำสั่งขายรอผลิต` เป็น `รายการจากคำสั่งขายที่สั่งผลิตได้` ไม่สื่อว่าทุกแถวต้องผลิต; รวม SO legacy ตาม 1A และแถว SO ใหม่ที่ flag เปิดแต่ BOM ยังไม่พร้อมพร้อมเหตุผล (action สร้าง WO เฉพาะแถวพร้อม), ตัดแถวที่มี HS/IV ไม่เป็น VOID ตาม 3A; คิว/ตัวเลข sidebar ใช้เงื่อนไขเดียวกัน
-- [ ] มีสถานะ/คำแนะนำสั้นสำหรับ Production ปิด, ไม่มีสิทธิ์, BOM ขาด, WO ที่มีอยู่และ HS/IV ที่สร้างแล้ว; ไม่แสดงลิงก์ 403, ไม่โหลดข้อมูล Production ที่ไม่จำเป็นเมื่อปิดโมดูล
-- [ ] คิวใช้ AJAX/server-side DataTable, filter ที่มีประโยชน์, Search ค้นข้อความที่แสดงจริง, paging, Excel ที่บอกขอบเขต export ถูกต้อง, select/eager-load เฉพาะที่ใช้และ ordering คงที่; คอลัมน์ action ไม่ค้น/เรียงและ icon-only มีชื่อภาษาไทย
+- [x] SO DRAFT: ในตารางรายการใกล้สินค้า/จำนวน แสดง `สั่งผลิตได้หลังยืนยัน SO` หรือ `ยังไม่เปิดให้สั่งผลิต` เป็นข้อมูล ไม่ใช้ `รอผลิต`; ถ้าขาด BOM ระบุ `ตั้งค่า BOM ก่อนสร้าง WO` เห็นได้โดยไม่ต้องเปิด tooltip; ยืนยัน SO ได้ตามปกติ
+- [x] SO CONFIRMED: POS แสดง `ขอสั่งผลิต` ตาม flag/legacy/สิทธิ์ `pos.sales-orders.confirm` และหน่วยพร้อม แม้ BOM ยังไม่พร้อม; modal รับกำหนดส่ง (บังคับ), วันที่ลูกค้าขอเริ่มได้ตั้งแต่ (ถ้ามี) และข้อกำหนดเฉพาะรายสินค้า; ฝั่ง server ตรวจสถานะ/สิทธิ์/การขาย/WO อีกครั้งภายใต้ lock; POS ไม่เรียก route สร้าง WO
+- [x] ไม่เพิ่มตัวเลือก/ปุ่ม `ใช้สต็อก` ใหม่: action POS `สร้าง HS/IV` เดิมยังทำงาน; ถ้ามีสต็อกพอ **ทุกรายการใน SO** ตามคลังจัดส่ง ให้ขายได้แม้มี WO ค้าง; หน้าจอแจ้งว่าการสร้าง WO ไม่ขัดขวางการขาย (รอผู้ใช้ UAT flow จริง)
+- [x] SO มี WO: แสดงเลข/สถานะ WO และคลังรับผลิตที่อ่านได้ตามสิทธิ์, ไม่เสนอสร้างซ้ำ; WO `เสร็จแล้ว` ไม่เท่ากับ `พร้อมส่ง` — HS/IV ใช้ stock ที่พร้อมจริงและตรวจอีกครั้งตอน POST
+- [x] Production Demand เป็น `คำขอสั่งผลิตจากฝ่ายขาย` เท่านั้น; รองรับ SO legacy/flag ล่าสุด, แสดงกำหนดส่ง/วันเริ่มที่ลูกค้าขอ/ข้อกำหนดเฉพาะ (fallback รายละเอียดรายการเดิม) และ BOM ไม่พร้อมพร้อมเหตุผล; ปุ่มสร้าง WO เฉพาะแถวพร้อมและสิทธิ์ Production, เลือก Active BOM/วันเริ่ม–จบแผน/เวลาเริ่ม–จบ/กำหนดส่งตามแผน และแก้หมายเหตุงานผลิตที่เริ่มจากข้อกำหนด POS ใน Bootstrap modal ก่อนสร้าง โดยเก็บวันส่ง/ข้อกำหนดต้นฉบับแยกไว้และแสดงคลังเบิก/รับผลิตจากบริบทปัจจุบัน; เวลาแผนต้องครบคู่จึงใช้ Timeline ได้; คิว/ตัวเลข sidebar ใช้เงื่อนไขเดียวกันและไม่แสดงแถวที่มี HS/IV ไม่เป็น VOID ตาม 3A
+- [x] มีสถานะ/คำแนะนำสั้นสำหรับ Production ปิด, ไม่มีสิทธิ์, BOM ขาด, WO ที่มีอยู่และ HS/IV ที่สร้างแล้ว; ไม่แสดงลิงก์ 403, ไม่โหลด WO/BOM เมื่อปิดโมดูล
+- [x] คิวใช้ AJAX/server-side DataTable, filter ความพร้อม/ช่วงกำหนดส่งและล้างตัวกรอง, Search ข้อมูล/สถานะที่แสดง, paging, Excel ที่ระบุว่าหน้าปัจจุบัน, select เฉพาะที่ใช้และ ordering คงที่; คอลัมน์ action ไม่ค้น/เรียงและ icon-only มีชื่อภาษาไทย
 - [ ] หน้ารายละเอียด/ตารางบนแท็บเล็ต: หัวข้อและสถานะเด่น, next step ตามสถานะ, action ห่อบรรทัด, ตารางเลื่อนแนวนอนในกรอบ, focus/keyboard เห็นชัด, ไม่ใช้สีอย่างเดียว; empty/loading/error/success แจ้งสิ่งที่ทำต่อได้
 
 ## 3. Reservation/stock integrity (ขอบเขตที่อนุมัติ)
 
 - [ ] HS/IV ที่อ้าง SO และมี WO ค้างยัง POST ได้จาก available stock ในคลังจัดส่ง **เมื่อสินค้าทุกรายการพร้อม**; ไม่เพิ่ม partial fulfillment หรือเปลี่ยนการคำนวณ/ลงบัญชีขาย
-- [ ] ถ้า HS/IV POSTED ก่อน WO เสร็จ: เมื่อรับผลิตเสร็จภายหลัง อย่าจอง FG ให้ SO line ที่ขายแล้ว; WO ยังเสร็จได้และสินค้าเข้าสต็อกทั่วไป; ใช้สถานะ HS/IV ที่ POSTED/เชื่อม source line จริง ไม่อนุมานเพียงมี draft
-- [ ] ถ้า WO เสร็จก่อน HS/IV: ขายจากคลังเดียวกันให้ consume FG reservation ตาม contract เดิม; ขายจากคลังอื่นในสาขาเดียวกันที่ได้รับอนุญาตตาม 4A ให้ post จาก stock ที่มีจริง แล้ว release reservation คลังรับผลิต **หลังขายสำเร็จภายในธุรกรรมเดียวกัน** ไม่ปล่อยยอดค้าง
+- [x] ถ้า HS/IV POSTED ก่อน WO เสร็จ: เมื่อรับผลิตเสร็จภายหลัง ไม่จอง FG ให้ SO ที่ขายแล้ว; WO ยังเสร็จได้และสินค้าเข้าสต็อกทั่วไป; ตรวจ HS/IV `POSTED` ของ SO ที่ผูก WO ไม่อนุมานเพียงมี DRAFT (รอ UAT)
+- [x] ถ้า WO เสร็จก่อน HS/IV: ขายจากคลังเดียวกันให้ consume FG reservation ตาม contract เดิม; ขายจากคลังอื่นในสาขาเดียวกันที่ได้รับอนุญาตตาม 4A ให้ post จาก stock ที่มีจริง แล้ว release reservation คลังรับผลิต **หลังขายสำเร็จภายในธุรกรรมเดียวกัน** ไม่ปล่อยยอดค้าง (รอ UAT)
 - [ ] ล็อก/ตรวจลำดับเหตุการณ์แข่งกันระหว่าง POST HS/IV และ POST Finished Receipt; retry/idempotency, reversal, audit และ balance available/reserved ต้องถูกต้อง ไม่มีลบยอดจองจากการคลิก UI หรือเอกสารขาย DRAFT
 - [ ] Production ปิดภายหลังยัง POST HS/IV ได้ตาม POS เดิมและยังเคารพ reservation ที่ persisted อยู่; ไม่ลบ WO/ยอดจองเอง; ไม่แก้ flow stock/GL อื่น
 
 ## 4. Migration, permission, seed, installer
 
-- [ ] **ทุก field/table ใหม่** มี migration `up()/down()`, ค่าเริ่มต้น/legacy handling, index/constraint เท่าที่จำเป็น, model fillable/cast และ table/column ใน `DatabasePreparationService::requiredSchema()`; Unit Test สำหรับ migration/installer contract
-- [ ] ใช้ `wms.items.update`, `pos.sales-orders.view`, `production.orders.view/create` เดิมก่อน; **ถ้าจำเป็นต้องเพิ่ม permission ขออนุมัติก่อน** แล้วเพิ่มใน `RbacSeeder`, guard/UI, installer seed version `core.rbac` ใน `SystemDefaultOrchestrator` และ grant role `admin` ของระบบติดตั้งใหม่/เดิม โดยไม่ reset สิทธิ์ role อื่นโดยไม่ตั้งใจ
+- [x] field ใหม่สองช่องมี migration `up()/down()`, ค่าเริ่มต้น/legacy backfill, item model fillable/cast, SO marker มี cast แต่ **ไม่ fillable** (ห้ามผู้ใช้เปลี่ยน), และ `DatabasePreparationService::requiredSchema()`; Unit Test ตรวจ schema contract; migration รันแล้วบน local/UAT batch 240
+- [x] ใช้ `wms.items.update`, `pos.sales-orders.view/confirm`, `production.orders.view/create` เดิม; **ไม่ได้เพิ่ม permission** จึงไม่เปลี่ยน `RbacSeeder` หรือ Installer seed version (ถ้าจะเพิ่ม permission ภายหลังต้องถามก่อน)
 - [ ] เตรียม Unit Tests สำหรับ schema, permission seed/idempotency และ admin ได้สิทธิ์; หากไม่เพิ่ม permission ไม่ seed ใหม่โดยไม่จำเป็น
 
 ## 5. เกณฑ์ยอมรับและส่ง UAT
 
-- [ ] Production ปิด/สินค้าไม่มี flag: POS ขายจาก stock ได้ตามปกติ ไม่เห็น action WO; SO/WO เดิมยังอ่านได้ตามสิทธิ์ที่เกี่ยวข้อง
-- [ ] flag เปิดแต่ไม่มี BOM: ยืนยัน SO/ขายจาก stock ได้; ไม่สร้าง WO จนตั้ง Active BOM; flag เปิดและ BOM พร้อม: สร้าง WO ได้เต็ม SO line แม้มี stock และคลิกซ้ำไม่สร้างเพิ่ม
+- [ ] Production ปิด/สินค้าไม่มี flag: POS ขายจาก stock ได้ตามปกติ ไม่เห็น action WO; WO/ยอดจองเดิมคงอยู่ เมื่อเปิด Production กลับจึงดู WO ได้ตามสิทธิ์
+- [ ] flag เปิดแต่ไม่มี BOM: ยืนยัน SO/ขายจาก stock และส่งคำขอผลิตได้; ไม่สร้าง WO จนตั้ง Active BOM; flag เปิดและ BOM พร้อม: ฝ่ายวางแผนสร้าง WO ได้เต็ม SO line หลังฝ่ายขายส่งคำขอ แม้มี stock และคลิกซ้ำไม่สร้างเพิ่ม
 - [ ] HS/IV จาก SO คัดลอก **ทุกบรรทัดเต็มจำนวน**; ถ้ามี stock ครบและ WO ยังทำอยู่ ขายได้; WO เสร็จภายหลังไม่มี FG reservation ค้างกับ SO ที่ขายแล้ว
 - [ ] WO เสร็จก่อนขาย: HS/IV จากคลังเดียวกันใช้ FG reservation; จากคลังอื่นที่อนุญาตใช้ stock ที่มีจริงและปล่อยยอดจองเก่าหลัง POST; ถ้าขายไม่สำเร็จยอดจองเดิมไม่หาย
 - [ ] BOM ต่างสาขา, หน่วยไม่ตรง, ไม่มีสิทธิ์, legacy cutover, flag เปลี่ยน, HS/IV DRAFT/POSTED/VOID ก่อนและหลัง WO, WO ถูกยกเลิก/สร้างซ้ำ, Production ปิด และ race/rollback ไม่ทำข้อมูล stock/accounting เสีย
 - [ ] รันเฉพาะ Unit Tests ที่เกี่ยวข้องและ `git diff --check` (ตรวจรูปแบบ diff ไม่ใช่การทดสอบระบบ); ส่งรายการตรวจ UAT ให้ผู้ใช้ เช่น แท็บเล็ต, สต็อกพอ/ไม่พอ, HS/IV ก่อน/หลัง WO, คนละคลัง, เปิด/ปิด Production; ผู้ใช้ UAT flow จริงเอง
+
+### รายการ UAT ให้ผู้ใช้ตรวจเอง (local/UAT `new_erp`; ฝั่งพัฒนาไม่รัน flow จริง)
+
+**เตรียมข้อมูล:** ใช้สินค้า GOODS ที่ติดตามสต็อกและเปิด `สั่งผลิตได้`, Active BOM ของสาขานั้น (มีวัตถุดิบ), หน่วย SO ตรงหน่วยหลัก และผู้ใช้ที่มีสิทธิ์ POS/Production/WMS ตามงาน; ทำ SO แยกแต่ละกรณี อย่าใช้ SO เดียววนซ้ำ **ทุกกรณีต้องกด `ขอสั่งผลิต` ที่ POS ก่อน** แล้วให้ฝ่ายวางแผนสร้าง WO จาก `/production/demand`; เมื่อเริ่ม WO ยังต้องเบิกวัตถุดิบและ **ลง Stock ใบเบิก** ตาม flow เดิมก่อนเริ่ม/รับผลิต
+
+- [ ] **คำขอและสิทธิ์:** ใช้ผู้ใช้ POS ที่มี `pos.sales-orders.confirm` แต่ไม่มี `production.orders.create` ส่งคำขอราย SO line พร้อมกำหนดส่ง/ข้อกำหนดเช่น “ห้ามตัดส่วน A” และแก้ก่อนมี WO ได้; SO ที่ยังไม่ขอต้องไม่อยู่ในคิวแม้มี flag/BOM; ผู้ใช้ Production สร้าง WO จากคำขอและตรวจข้อกำหนดที่หน้า WO/Shop Floor; ลอง BOM ขาด, flag เปลี่ยน, SO legacy, สิทธิ์ไม่ครบ, WO ซ้ำ, HS/IV DRAFT/POSTED/VOID และปิด Production
+- [ ] **ขายก่อนรับผลิต:** ใน SO ใหม่ 1 บรรทัด จำนวน 5 ให้คลัง A มีสต็อกเดิมพร้อมขาย 5; สร้าง WO เต็ม 5 แล้วสร้าง HS/IV จาก SO และ POST ขายคลัง A ก่อน WO เสร็จ; หลังรับผลิตเข้า A อีก 5 ตรวจ Stock Card ของสินค้า/คลัง A: `on_hand=5, reserved=0, available=5` (ถ้าไม่มีธุรกรรมอื่น) และ WO ยัง COMPLETED ได้
+- [ ] **รับผลิตก่อนขายจากคลังเดียวกัน:** SO ใหม่ 5, คลัง A มีสต็อกเดิม 5; สร้างและรับ WO 5 เข้า A ก่อนขาย → `on_hand=10, reserved=5, available=5`; POST HS/IV จาก A 5 → `on_hand=5, reserved=0, available=5`, reservation ของ SO line เป็น `CONSUMED`
+- [ ] **รับผลิตก่อนขายจากอีกคลังในสาขาเดียวกัน:** SO ใหม่ 5, คลัง A รับ WO 5, คลัง B มีสต็อกพร้อมขาย 5; หลังรับผลิต A มี `reserved=5`; POST HS/IV จาก B 5 → A `reserved=0` และ `available` เพิ่ม 5, B `on_hand` ลด 5, reservation ของ SO line เป็น `RELEASED`; ถ้า B มีสต็อกไม่พอ ให้ POST ล้มเหลวและ A ยัง `reserved=5` โดยไม่มี stock movement/GL ใหม่
+- [ ] **แก้ไข WO ร่าง:** WO จาก SO (เช่น #64) ที่อยู่คลังปัจจุบันแก้เวลาแผน/กำหนดส่งตามแผน/หมายเหตุได้ แต่แก้จำนวน BOM ข้อกำหนดลูกค้าและวันส่งลูกค้าไม่ได้; Release แล้วหรืออยู่ต่างคลังไม่แสดงปุ่มแก้ไข/แก้ผ่าน URL ไม่ได้; WO Make to Stock แก้เวลาแล้วต้องบันทึกใน Timeline โดยไม่ลบวัตถุดิบ/Operations เดิมเมื่อไม่เปลี่ยน BOM/จำนวน/วัตถุดิบทดแทน
+- [ ] **ลบร่างแล้วขอผลิตใหม่:** ลบ WO ร่างที่ผูก SO line แล้วสร้างใหม่จากคิว; WO ใหม่ต้องได้ `source_revision` ถัดไป ไม่ชน unique key ของร่างที่ soft-delete (เช่น SO line 65 ใน UAT); ห้ามลบข้อมูลเดิมจากฐานเพื่อแก้ error
+- [ ] **วางแผนบน Timeline:** ใน modal จาก `/production/demand` เลือก BOM กรอกเวลาเริ่ม/จบให้ครบและจบหลังเริ่ม (ข้ามวันได้), เลือกกำหนดส่งตามแผนถ้าต้องการ; ตรวจหน้า WO/`/production/planning` ว่าเวลาเข้าช่อง Timeline จริง และวันส่งลูกค้าจาก POS ไม่ถูกเปลี่ยน; ลองกรอกเวลาข้างเดียว/ก่อนวันที่ลูกค้าระบุ ต้องแจ้งข้อผิดพลาดข้างช่องและไม่สร้าง WO; หมายเหตุแก้ได้โดยข้อกำหนดลูกค้าต้นฉบับยังอยู่
+- [ ] **หลายรายการและหน้าจอ:** SO หลายบรรทัดต้องคัดลอกทุกรายการเต็มจำนวนเข้า HS/IV ไม่แยกขายบางบรรทัด; ตรวจหน้า SO/คิวบนแท็บเล็ต, ชื่อคลัง, สิทธิ์ลิงก์, ตัวกรอง/ล้าง/Search จากข้อความที่คัดลอกในตาราง, Excel ที่ระบุว่าเฉพาะหน้านี้, และสถานะ/ข้อความเมื่อเปิด–ปิด Production; ตรวจ Stock Card รายสินค้าในคลัง A/B ด้วยสิทธิ์ `wms.stock.view`
 
 ## นอกขอบเขตรอบนี้
 

@@ -13,11 +13,11 @@ class Item extends Model
 
     protected $table = 'wms_items';
 
-    protected $fillable = ['category_id', 'code', 'name', 'cover_image_disk', 'cover_image_path', 'additional_images', 'item_type', 'base_uom', 'base_uom_id', 'is_stock_item', 'is_asset_capitalizable', 'default_asset_category_id', 'inventory_account_id', 'sales_account_id', 'cogs_account_id', 'is_active', 'created_by'];
+    protected $fillable = ['category_id', 'code', 'name', 'cover_image_disk', 'cover_image_path', 'additional_images', 'item_type', 'base_uom', 'base_uom_id', 'is_stock_item', 'can_manufacture', 'can_receive_production_scrap', 'is_asset_capitalizable', 'default_asset_category_id', 'inventory_account_id', 'sales_account_id', 'cogs_account_id', 'is_active', 'created_by'];
 
     protected function casts(): array
     {
-        return ['category_id' => 'integer', 'base_uom_id' => 'integer', 'default_asset_category_id' => 'integer', 'inventory_account_id' => 'integer', 'sales_account_id' => 'integer', 'cogs_account_id' => 'integer', 'additional_images' => 'array', 'is_stock_item' => 'boolean', 'is_asset_capitalizable' => 'boolean', 'is_active' => 'boolean'];
+        return ['category_id' => 'integer', 'base_uom_id' => 'integer', 'default_asset_category_id' => 'integer', 'inventory_account_id' => 'integer', 'sales_account_id' => 'integer', 'cogs_account_id' => 'integer', 'additional_images' => 'array', 'is_stock_item' => 'boolean', 'can_manufacture' => 'boolean', 'can_receive_production_scrap' => 'boolean', 'is_asset_capitalizable' => 'boolean', 'is_active' => 'boolean'];
     }
 
     public function category()

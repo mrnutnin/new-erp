@@ -17,6 +17,24 @@
                             <i class="bx bx-info-circle me-1" aria-hidden="true"></i>
                             {{ $decision['block_reason'] }}
                         </p>@endif
+                        @if(($decision['status_code'] ?? null) === 'NOT_READY' && !empty($decision['next_action']))<p class="small mb-2"><strong>ขั้นตอนถัดไป:</strong> {{ $decision['next_action'] }}</p>@endif
+                        @if(!empty($decision['missing_inventory_items']))
+                            <ul class="small mb-2 ps-4">@foreach($decision['missing_inventory_items'] as $item)<li><strong>{{ $item['code'] }}</strong> · {{ $item['name'] }} @if(auth()->user()->hasPermission('wms.items.update'))<a href="{{ route('wms.items.edit', $item['id']) }}" aria-label="แก้ไขข้อมูลสินค้า {{ $item['code'] }}">แก้ข้อมูลสินค้า</a>@else<span class="text-secondary">ให้ผู้ดูแลแก้บัญชีสินค้าคงเหลือ</span>@endif</li>@endforeach</ul>
+                            @if(($decision['missing_inventory_count'] ?? 0) > count($decision['missing_inventory_items']))<p class="small text-secondary">แสดง {{ count($decision['missing_inventory_items']) }} จาก {{ $decision['missing_inventory_count'] }} รายการ</p>@endif
+                        @endif
+                        @if(!empty($decision['reconciliation_metrics']))
+                            @php($metrics = $decision['reconciliation_metrics'])
+                            <ul class="small mb-2 ps-4">
+                                <li>ผลต่าง Allocation ↔ GL: {{ number_format((float) ($metrics['allocation_vs_gl_difference'] ?? 0), 2) }} บาท</li>
+                                <li>ผลต่าง Stock Balance ↔ Allocation: {{ number_format((float) ($metrics['balance_vs_allocation_difference'] ?? 0), 2) }} บาท</li>
+                                <li>Allocation ไม่มี Journal: {{ number_format((int) ($metrics['unlinked_allocations'] ?? 0)) }} รายการ · Journal Line ไม่มี link: {{ number_format((int) ($metrics['line_unlinked'] ?? 0)) }} รายการ</li>
+                            </ul>
+                            @if(!empty($decision['unlinked_allocation_details']))
+                                <p class="small fw-semibold mb-1">ตัวอย่าง Allocation ที่ยังไม่มี Journal:</p>
+                                <ul class="small mb-2 ps-4">@foreach($decision['unlinked_allocation_details'] as $allocation)<li>#{{ $allocation['id'] }} · {{ $allocation['source_reference'] ?: $allocation['source_type'] }} · {{ $allocation['item_code'] }} · {{ $allocation['allocation_type'] }}</li>@endforeach</ul>
+                                @if(($metrics['unlinked_allocations'] ?? 0) > count($decision['unlinked_allocation_details']))<p class="small text-secondary">แสดง {{ count($decision['unlinked_allocation_details']) }} จาก {{ $metrics['unlinked_allocations'] }} รายการ</p>@endif
+                            @endif
+                        @endif
                         @if(!empty($decision['url']))
                             <a class="btn btn-sm btn-outline-secondary" href="{{ $decision['url'] }}">เปิดหน้าตรวจสอบ</a>
                         @elseif(!empty($decision['recovery_url']) && (!isset($decision['recovery_permission']) || auth()->user()->hasPermission($decision['recovery_permission'])))
@@ -76,6 +94,11 @@
                                 <p class="small text-warning-emphasis mb-0 mt-2">
                                     <i class="bx bx-info-circle me-1" aria-hidden="true"></i>{{ $step['block_reason'] }}
                                 </p>
+                            @endif
+                            @if(($step['status_code'] ?? null) === 'NOT_READY' && !empty($step['next_action']))<p class="small mb-0 mt-2"><strong>ขั้นตอนถัดไป:</strong> {{ $step['next_action'] }}</p>@endif
+                            @if(!empty($step['missing_inventory_items']))
+                                <ul class="small mb-2 mt-2 ps-4">@foreach($step['missing_inventory_items'] as $item)<li><strong>{{ $item['code'] }}</strong> · {{ $item['name'] }} @if(auth()->user()->hasPermission('wms.items.update'))<a href="{{ route('wms.items.edit', $item['id']) }}" aria-label="แก้ไขข้อมูลสินค้า {{ $item['code'] }}">แก้ข้อมูลสินค้า</a>@else<span class="text-secondary">ให้ผู้ดูแลแก้บัญชีสินค้าคงเหลือ</span>@endif</li>@endforeach</ul>
+                                @if(($step['missing_inventory_count'] ?? 0) > count($step['missing_inventory_items']))<p class="small text-secondary">แสดง {{ count($step['missing_inventory_items']) }} จาก {{ $step['missing_inventory_count'] }} รายการ</p>@endif
                             @endif
                             @if(!empty($step['recovery_hint']))
                                 <details class="small mt-2">

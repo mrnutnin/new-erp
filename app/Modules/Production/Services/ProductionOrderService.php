@@ -53,6 +53,7 @@ final class ProductionOrderService
             $quantity = BigDecimal::of((string) $values['planned_quantity'])->toScale(8, RoundingMode::HALF_UP);
             if (! $quantity->isPositive()) throw ValidationException::withMessages(['planned_quantity' => 'จำนวนผลิตต้องมากกว่า 0']);
             $date = Carbon::today();
+            $this->assertPlanDates($values, $values['planned_start_date'] ?? $date->format('Y-m-d'));
             $productionOrder = ProductionOrder::query()->create([
                 'branch_id' => $warehouse->branch_id,
                 'issue_warehouse_id' => $warehouse->id,
@@ -66,6 +67,9 @@ final class ProductionOrderService
                 'bom_revision_id' => $revision->id,
                 'planned_start_date' => $values['planned_start_date'] ?? $date->format('Y-m-d'),
                 'planned_finish_date' => $values['planned_finish_date'] ?? null,
+                'planned_start_at' => $values['planned_start_at'] ?? null,
+                'planned_finish_at' => $values['planned_finish_at'] ?? null,
+                'required_delivery_at' => $values['required_delivery_at'] ?? null,
                 'notes' => $values['notes'] ?? null,
                 'responsible_user_id' => $actor->id,
                 'created_by' => $actor->id,
@@ -93,17 +97,53 @@ final class ProductionOrderService
     public function updateDraft(ProductionOrder $order, array $values, Warehouse $warehouse, User $actor, Request $request): ProductionOrder
     {
         return DB::transaction(function () use ($order, $values, $warehouse, $actor, $request): ProductionOrder {
-            $locked = ProductionOrder::query()->with('materials')->lockForUpdate()->findOrFail($order->id);
-            if ((int) $locked->branch_id !== (int) $warehouse->branch_id || $locked->status !== 'DRAFT' || $locked->order_type !== 'MAKE_TO_STOCK') {
-                throw ValidationException::withMessages(['status' => 'แก้ไขได้เฉพาะ WO Make to Stock สถานะร่างในสาขาปัจจุบัน']);
+            $locked = ProductionOrder::query()->with(['materials', 'salesOrderLine'])->lockForUpdate()->findOrFail($order->id);
+            if ((int) $locked->branch_id !== (int) $warehouse->branch_id || (int) $locked->issue_warehouse_id !== (int) $warehouse->id || $locked->status !== 'DRAFT') {
+                throw ValidationException::withMessages(['status' => 'แก้ไขได้เฉพาะใบสั่งผลิตสถานะร่างในคลัง/สาขาปัจจุบัน']);
             }
+            if ($locked->order_type === 'MAKE_TO_ORDER') {
+                $this->assertPlanDates($values, $values['planned_start_date'], $locked->salesOrderLine?->requested_start_date?->format('Y-m-d'));
+                $before = $locked->toArray();
+                $locked->forceFill([
+                    'planned_start_date' => $values['planned_start_date'],
+                    'planned_finish_date' => $values['planned_finish_date'] ?? null,
+                    'planned_start_at' => $values['planned_start_at'] ?? null,
+                    'planned_finish_at' => $values['planned_finish_at'] ?? null,
+                    'required_delivery_at' => $values['required_delivery_at'] ?? null,
+                    'notes' => $values['notes'] ?? null,
+                    'updated_by' => $actor->id,
+                ])->save();
+                $locked->events()->create(['event_type' => 'updated', 'payload' => ['source' => 'MAKE_TO_ORDER'], 'occurred_at' => now(), 'created_by' => $actor->id]);
+                $this->audit->record('production.order.updated', $locked, $before, $locked->fresh()->toArray(), $actor, $request);
+
+                return $locked->fresh(['materials', 'salesOrder']);
+            }
+            if ($locked->order_type !== 'MAKE_TO_STOCK') throw ValidationException::withMessages(['order_type' => 'ประเภทใบสั่งผลิตไม่ถูกต้อง']);
             $revision = BomRevision::query()->with(['bom', 'lines.substitutes'])->lockForUpdate()->findOrFail((int) $values['bom_revision_id']);
             if ($revision->status !== 'ACTIVE' || ! $revision->bom?->is_active || (int) $revision->bom->branch_id !== (int) $warehouse->branch_id) {
                 throw ValidationException::withMessages(['bom_revision_id' => 'ต้องเลือก Active BOM ในสาขาปัจจุบัน']);
             }
             $quantity = BigDecimal::of((string) $values['planned_quantity'])->toScale(8, RoundingMode::HALF_UP);
             if (! $quantity->isPositive()) throw ValidationException::withMessages(['planned_quantity' => 'จำนวนผลิตต้องมากกว่า 0']);
+            $this->assertPlanDates($values, $values['planned_start_date'] ?? $locked->planned_start_date?->format('Y-m-d') ?? today()->toDateString());
             $before = $locked->load('materials')->toArray();
+            $preserveMaterials = ! $actor->hasPermission('production.orders.substitute.use')
+                && (int) $locked->bom_revision_id === (int) $revision->id
+                && BigDecimal::of((string) $locked->planned_quantity)->isEqualTo($quantity);
+            $newMaterials = $preserveMaterials
+                ? $locked->materials->map(fn ($material) => $material->only(['line_number', 'source_bom_line_id', 'item_id', 'uom_id', 'required_quantity']))
+                : $revision->lines->values()->map(function ($bomLine, int $index) use ($values, $quantity): array {
+                $component = $this->selectedComponent($bomLine, $values);
+                return [
+                    'line_number' => $index + 1,
+                    'source_bom_line_id' => $bomLine->id,
+                    'item_id' => $component['item_id'],
+                    'uom_id' => $component['uom_id'],
+                    'required_quantity' => $this->decimal(BigDecimal::of((string) $bomLine->quantity)->multipliedBy($quantity)->multipliedBy($component['factor'])),
+                ];
+            });
+            $oldMaterials = $locked->materials->map(fn ($material) => $material->only(['line_number', 'source_bom_line_id', 'item_id', 'uom_id', 'required_quantity']));
+            $materialsChanged = (int) $locked->bom_revision_id !== (int) $revision->id || $newMaterials->all() != $oldMaterials->all();
             $locked->forceFill([
                 'finished_item_id' => $revision->bom->finished_item_id,
                 'uom_id' => $revision->bom->base_uom_id,
@@ -111,22 +151,18 @@ final class ProductionOrderService
                 'bom_revision_id' => $revision->id,
                 'planned_start_date' => $values['planned_start_date'] ?? $locked->planned_start_date,
                 'planned_finish_date' => $values['planned_finish_date'] ?? null,
+                'planned_start_at' => $values['planned_start_at'] ?? null,
+                'planned_finish_at' => $values['planned_finish_at'] ?? null,
+                'required_delivery_at' => $values['required_delivery_at'] ?? null,
                 'notes' => $values['notes'] ?? null,
                 'updated_by' => $actor->id,
             ])->save();
-            $locked->materials()->delete();
-            foreach ($revision->lines as $index => $bomLine) {
-                $component = $this->selectedComponent($bomLine, $values);
-                $locked->materials()->create([
-                    'line_number' => $index + 1,
-                    'source_bom_line_id' => $bomLine->id,
-                    'item_id' => $component['item_id'],
-                    'uom_id' => $component['uom_id'],
-                    'required_quantity' => $this->decimal(BigDecimal::of((string) $bomLine->quantity)->multipliedBy($quantity)->multipliedBy($component['factor'])),
-                ]);
+            if ($materialsChanged) {
+                $locked->materials()->delete();
+                foreach ($newMaterials as $material) $locked->materials()->create($material);
+                $locked->operations()->delete();
+                $this->ensureDefaultOperation($locked);
             }
-            $locked->operations()->delete();
-            $this->ensureDefaultOperation($locked);
             $locked->events()->create(['event_type' => 'updated', 'payload' => ['source' => 'MAKE_TO_STOCK'], 'occurred_at' => now(), 'created_by' => $actor->id]);
             $this->audit->record('production.order.updated', $locked, $before, $locked->fresh(['materials'])->toArray(), $actor, $request);
 
@@ -148,20 +184,21 @@ final class ProductionOrderService
         }, 3);
     }
 
-    public function createFromSalesOrderLine(int $lineId, Warehouse $warehouse, User $actor, Request $request): ProductionOrder
+    public function createFromSalesOrderLine(int $lineId, Warehouse $warehouse, User $actor, Request $request, array $plan = []): ProductionOrder
     {
         $warehouse->loadMissing('branch');
 
-        return DB::transaction(function () use ($lineId, $warehouse, $actor, $request): ProductionOrder {
+        return DB::transaction(function () use ($lineId, $warehouse, $actor, $request, $plan): ProductionOrder {
+            $orderId = SalesOrderLine::query()->whereKey($lineId)->value('sales_order_id');
+            $order = SalesOrder::query()->lockForUpdate()->findOrFail($orderId);
             $line = SalesOrderLine::query()
-                ->with(['order', 'item:id,base_uom_id,is_active,is_stock_item', 'uom:id'])
+                ->with(['item:id,base_uom_id,item_type,is_active,is_stock_item,can_manufacture'])
                 ->lockForUpdate()
                 ->findOrFail($lineId);
-            $order = SalesOrder::query()->lockForUpdate()->findOrFail($line->sales_order_id);
             if ((int) $order->branch_id !== (int) $warehouse->branch_id || $order->status !== 'CONFIRMED') {
                 throw ValidationException::withMessages(['sales_order_line_id' => 'สร้าง WO ได้เฉพาะรายการจากใบสั่งขายที่ยืนยันแล้วในสาขาปัจจุบัน']);
             }
-            if (! $line->item || ! $line->item->is_active || ! $line->item->is_stock_item || ! $line->item->base_uom_id || (int) $line->uom_id !== (int) $line->item->base_uom_id) {
+            if (! $line->item || ! $line->item->is_active || $line->item->item_type !== 'GOODS' || ! $line->item->is_stock_item || ! $line->item->base_uom_id || (int) $line->uom_id !== (int) $line->item->base_uom_id) {
                 throw ValidationException::withMessages(['sales_order_line_id' => 'MVP รองรับเฉพาะสินค้าคงคลังที่ใช้ Stock UOM ตรงกับ Sales Order']);
             }
             $existing = ProductionOrder::query()
@@ -171,6 +208,15 @@ final class ProductionOrderService
                 ->first();
             if ($existing) {
                 return $existing->fresh(['materials', 'salesOrder']);
+            }
+            if (! $line->production_requested_at) {
+                throw ValidationException::withMessages(['sales_order_line_id' => 'ฝ่ายขายยังไม่ได้ส่งคำขอสั่งผลิตรายการนี้']);
+            }
+            if (! $order->production_legacy_eligible && ! $line->item->can_manufacture) {
+                throw ValidationException::withMessages(['sales_order_line_id' => 'สินค้านี้ไม่ได้เปิดให้สั่งผลิตจากใบสั่งขาย']);
+            }
+            if ($order->physicalSales()->where('status', '!=', 'VOID')->exists()) {
+                throw ValidationException::withMessages(['sales_order_line_id' => 'ใบสั่งขายมี HS/IV ที่ยังไม่ยกเลิกแล้ว ไม่สามารถสร้าง WO ใหม่ได้']);
             }
 
             $activeQuantity = ProductionOrder::query()
@@ -186,7 +232,8 @@ final class ProductionOrderService
                 ->with(['bom', 'lines'])
                 ->where('status', 'ACTIVE')
                 ->whereHas('bom', fn ($q) => $q->where('branch_id', $warehouse->branch_id)->where('finished_item_id', $line->item_id)->where('base_uom_id', $line->uom_id)->where('is_active', true))
-                ->lockForUpdate()
+                ->when(isset($plan['bom_revision_id']), fn ($q) => $q->whereKey($plan['bom_revision_id']))
+                ->orderBy('id')->lockForUpdate()
                 ->first();
             if (! $revision) {
                 throw ValidationException::withMessages(['bom_revision_id' => 'ไม่พบ Active BOM สำหรับสินค้านี้ในสาขาปัจจุบัน']);
@@ -199,6 +246,8 @@ final class ProductionOrderService
                 throw ValidationException::withMessages(['document_number' => 'ยังไม่ได้ตั้งค่าเลขเอกสารใบสั่งผลิต']);
             }
             $date = Carbon::today();
+            $plannedStart = $plan['planned_start_date'] ?? max($date->format('Y-m-d'), $line->requested_start_date?->format('Y-m-d') ?? '');
+            $this->assertPlanDates($plan, $plannedStart, $line->requested_start_date?->format('Y-m-d'));
             $productionOrder = ProductionOrder::query()->create([
                 'branch_id' => $warehouse->branch_id,
                 'issue_warehouse_id' => $warehouse->id,
@@ -208,14 +257,19 @@ final class ProductionOrderService
                 'status' => 'DRAFT',
                 'sales_order_id' => $order->id,
                 'sales_order_line_id' => $line->id,
-                'source_revision' => ((int) ProductionOrder::query()->where('sales_order_line_id', $line->id)->max('source_revision')) + 1,
-                'required_delivery_date' => $order->required_delivery_date,
-                'customer_specification' => $line->description,
+                'source_revision' => ((int) ProductionOrder::withTrashed()->where('sales_order_line_id', $line->id)->max('source_revision')) + 1,
+                'required_delivery_date' => $line->requested_delivery_date ?? $order->required_delivery_date,
+                'required_delivery_at' => $plan['required_delivery_at'] ?? null,
+                'customer_specification' => $line->production_specification ?: $line->description,
                 'finished_item_id' => $line->item_id,
                 'uom_id' => $line->uom_id,
                 'planned_quantity' => $this->decimal($line->quantity),
                 'bom_revision_id' => $revision->id,
-                'planned_start_date' => $date->format('Y-m-d'),
+                'planned_start_date' => $plannedStart,
+                'planned_finish_date' => $plan['planned_finish_date'] ?? null,
+                'planned_start_at' => $plan['planned_start_at'] ?? null,
+                'planned_finish_at' => $plan['planned_finish_at'] ?? null,
+                'notes' => $plan['notes'] ?? null,
                 'responsible_user_id' => $actor->id,
                 'created_by' => $actor->id,
                 'updated_by' => $actor->id,
@@ -307,6 +361,7 @@ final class ProductionOrderService
             if ($locked->status !== 'IN_PROGRESS') throw ValidationException::withMessages(['status' => 'ยืนยันเริ่มงานได้เมื่อ WO กำลังผลิต']);
             if ($locked->held_at) throw ValidationException::withMessages(['status' => 'ต้องเปิดงานผลิตต่อก่อนยืนยันเริ่มงาน']);
             if ($locked->started_at) return $locked;
+            $this->assertCustomerStartDate($locked);
             $issueIds = $locked->events()->where('event_type', 'material_issue_created')->pluck('source_id');
             if (! IssueDocument::query()->whereIn('id', $issueIds)->where('issue_type', 'PRODUCTION')->where('warehouse_id', $warehouse->id)->where('status', 'POSTED')->exists()) {
                 throw ValidationException::withMessages(['material_issue' => 'ต้องลง Stock ใบเบิกวัตถุดิบก่อนยืนยันเริ่มงานผลิต']);
@@ -353,6 +408,25 @@ final class ProductionOrderService
 
             return $locked->fresh(['materials', 'salesOrder']);
         }, 3);
+    }
+
+    private function assertPlanDates(array $values, string $start, ?string $earliest = null): void
+    {
+        if ($earliest && $start < $earliest) throw ValidationException::withMessages(['planned_start_date' => 'วันเริ่มแผนต้องไม่ก่อนวันที่ลูกค้าระบุ']);
+        if (isset($values['planned_finish_date']) && $values['planned_finish_date'] < $start) throw ValidationException::withMessages(['planned_finish_date' => 'วันจบแผนต้องไม่ก่อนวันเริ่มแผน']);
+        if (isset($values['planned_start_at']) !== isset($values['planned_finish_at'])) throw ValidationException::withMessages(['planned_start_at' => 'ระบุเวลาเริ่มและจบแผนให้ครบทั้งคู่']);
+        if (isset($values['planned_start_at'], $values['planned_finish_at']) && $values['planned_finish_at'] <= $values['planned_start_at']) throw ValidationException::withMessages(['planned_finish_at' => 'เวลาจบแผนต้องหลังเวลาเริ่มแผน']);
+        if (isset($values['planned_start_at']) && substr($values['planned_start_at'], 0, 10) !== $start) throw ValidationException::withMessages(['planned_start_at' => 'วันในเวลาเริ่มต้องตรงกับวันเริ่มแผน']);
+        if (isset($values['planned_finish_at']) && substr($values['planned_finish_at'], 0, 10) !== ($values['planned_finish_date'] ?? null)) throw ValidationException::withMessages(['planned_finish_at' => 'วันในเวลาจบต้องตรงกับวันจบแผน']);
+    }
+
+    private function assertCustomerStartDate(ProductionOrder $order): void
+    {
+        if ($order->order_type !== 'MAKE_TO_ORDER' || ! $order->sales_order_line_id) return;
+        $earliest = SalesOrderLine::query()->whereKey($order->sales_order_line_id)->value('requested_start_date');
+        if ($earliest && today()->toDateString() < (string) $earliest) {
+            throw ValidationException::withMessages(['requested_start_date' => 'ลูกค้ากำหนดให้เริ่มผลิตได้ตั้งแต่วันที่ '.date('d/m/Y', strtotime((string) $earliest))]);
+        }
     }
 
     private function selectedComponent($bomLine, array $values): array
@@ -412,6 +486,7 @@ final class ProductionOrderService
             $locked = ProductionOrderOperation::query()->lockForUpdate()->findOrFail($operation->id);
             if ((int) $locked->production_order_id !== (int) $order->id || (int) $order->branch_id !== (int) $warehouse->branch_id || (int) $order->issue_warehouse_id !== (int) $warehouse->id || $order->held_at || $order->status !== 'IN_PROGRESS') throw ValidationException::withMessages(['operation' => 'ไม่สามารถเริ่ม Operation นี้ได้']);
             if ($locked->status !== 'PENDING') throw ValidationException::withMessages(['operation' => 'เริ่มได้เฉพาะ Operation ที่รอดำเนินการ']);
+            $this->assertCustomerStartDate($order);
             $locked->update(['status' => 'IN_PROGRESS', 'started_at' => now(), 'started_by' => $actor->id]);
             $order->events()->create(['event_type' => 'operation_started', 'source_type' => ProductionOrderOperation::class, 'source_id' => (string) $locked->id, 'occurred_at' => now(), 'created_by' => $actor->id]);
             $this->audit->record('production.operation.started', $locked, [], $locked->fresh()->toArray(), $actor, $request);
@@ -526,7 +601,6 @@ final class ProductionOrderService
         $values = $request->validate([
             'source_material_line_id' => ['nullable', 'integer'],
             'scrap_item_id' => ['required', 'integer', 'exists:wms_items,id'],
-            'uom_id' => ['required', 'integer', 'exists:wms_uoms,id'],
             'quantity' => ['required', 'numeric', 'gt:0'],
             'recovery_total_value' => ['required', 'numeric', 'gt:0'],
             'reason' => ['required', 'string', 'min:10', 'max:500'],
@@ -540,6 +614,11 @@ final class ProductionOrderService
             if (! in_array($locked->status, ['RELEASED', 'IN_PROGRESS'], true)) {
                 throw ValidationException::withMessages(['status' => 'รับเศษผลิตได้เฉพาะ WO ที่ Release หรือกำลังผลิต']);
             }
+            $scrapItem = Item::query()->whereKey($values['scrap_item_id'])->lockForUpdate()->first();
+            if (! $scrapItem || ! $scrapItem->is_active || ! $scrapItem->is_stock_item || $scrapItem->item_type !== 'GOODS' || ! $scrapItem->can_receive_production_scrap || ! $scrapItem->base_uom_id) {
+                throw ValidationException::withMessages(['scrap_item_id' => 'เลือกสินค้าเศษผลิตที่กำหนดไว้ในข้อมูลสินค้า']);
+            }
+            $scrapUomId = (int) $scrapItem->base_uom_id;
             if (! empty($values['source_material_line_id']) && ! $locked->materials->contains('id', (int) $values['source_material_line_id'])) {
                 throw ValidationException::withMessages(['source_material_line_id' => 'Material line ไม่อยู่ใน WO นี้']);
             }
@@ -575,7 +654,7 @@ final class ProductionOrderService
                 'line_number' => 1,
                 'warehouse_id' => $warehouse->id,
                 'item_id' => (int) $values['scrap_item_id'],
-                'uom_id' => (int) $values['uom_id'],
+                'uom_id' => $scrapUomId,
                 'direction' => 'GAIN',
                 'status' => 'DRAFT',
                 'quantity' => $this->decimal($values['quantity']),
@@ -589,7 +668,7 @@ final class ProductionOrderService
                 'source_material_line_id' => $values['source_material_line_id'] ?? null,
                 'scrap_type' => 'RECOVERABLE_SCRAP',
                 'scrap_item_id' => (int) $values['scrap_item_id'],
-                'uom_id' => (int) $values['uom_id'],
+                'uom_id' => $scrapUomId,
                 'quantity' => $this->decimal($values['quantity']),
                 'recovery_total_value' => $this->decimal($value),
                 'recovery_unit_value' => $this->decimal($value->dividedBy((string) $values['quantity'], 8, RoundingMode::HALF_UP)),

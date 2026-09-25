@@ -10,10 +10,22 @@ final class InventoryPreflightUiContractTest extends TestCase
     {
         $service = file_get_contents(base_path('app/Modules/Wms/Services/InventoryPostingPreflightService.php'));
         $view = file_get_contents(base_path('app/Modules/Wms/Views/stock-valuation/index.blade.php'));
+        $workflowRuntime = file_get_contents(base_path('app/Modules/Platform/Services/WorkflowRuntimeResolver.php'));
+        $workflowCard = file_get_contents(base_path('app/Modules/Platform/Views/workflow/_workflow-card.blade.php'));
 
         $this->assertStringContainsString("'posting_enabled' => (bool) config('erp.inventory.purchase_posting_enabled', false)", $service);
         $this->assertStringContainsString('global_unresolved_legacy_review', $service);
         $this->assertStringContainsString('reconciliation_blockers', $service);
+        $this->assertStringContainsString("'missing_inventory_items' => \$missingInventoryItems", $service);
+        $this->assertStringContainsString("'unlinked_allocation_details' => \$unlinkedAllocationDetails", $service);
+        $this->assertStringContainsString("'missing_inventory_items' => \$summary['missing_inventory_items'] ?? []", $workflowRuntime);
+        $this->assertStringContainsString("'reconciliation_metrics' => \$summary['reconciliation'] ?? []", $workflowRuntime);
+        $this->assertStringContainsString('InventoryGlScope::DEFERRED_SOURCES', $workflowRuntime);
+        $this->assertStringContainsString('ขั้นตอนถัดไป:', $workflowCard);
+        $this->assertStringContainsString("route('wms.items.edit', \$item['id'])", $workflowCard);
+        $this->assertStringContainsString('ผลต่าง Allocation ↔ GL', $workflowCard);
+        $this->assertStringContainsString('ตัวอย่าง Allocation ที่ยังไม่มี Journal', $workflowCard);
+        $this->assertStringContainsString('Inventory→GL posting scope', $workflowRuntime);
         $this->assertStringContainsString('โหมด Preview เท่านั้น', $view);
         $this->assertStringContainsString('Global มี Legacy review', $view);
         $this->assertStringContainsString('preflight-legacy-review-link', $view);

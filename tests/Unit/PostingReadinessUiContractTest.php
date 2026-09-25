@@ -6,6 +6,19 @@ use PHPUnit\Framework\TestCase;
 
 final class PostingReadinessUiContractTest extends TestCase
 {
+    public function test_wms_document_views_do_not_render_inline_php_terminator_semicolons(): void
+    {
+        $root = dirname(__DIR__, 2);
+        foreach ([
+            'app/Modules/Wms/Views/production/finished-receipts/show.blade.php',
+            'app/Modules/Wms/Views/inventory-adjustments/documents/show.blade.php',
+        ] as $path) {
+            $view = (string) file_get_contents($root.'/'.$path);
+            self::assertStringNotContainsString('); @php(', $view, $path);
+            self::assertStringNotContainsString(')); @php(', $view, $path);
+        }
+    }
+
     public function test_live_document_pages_use_readiness_without_replacing_server_posting(): void
     {
         $root = dirname(__DIR__, 2);

@@ -3,6 +3,7 @@
 use App\Modules\Production\Controllers\BomController;
 use App\Modules\Production\Controllers\EntryController;
 use App\Modules\Production\Controllers\OrderController;
+use App\Modules\Production\Controllers\WorkflowController;
 use Illuminate\Support\Facades\Route;
 
 Route::middleware(['auth', 'program:production', 'capability:production', 'warehouse'])
@@ -12,9 +13,11 @@ Route::middleware(['auth', 'program:production', 'capability:production', 'wareh
         Route::get('/', EntryController::class)
             ->middleware('permission:production.dashboard.view')
             ->name('index');
+        Route::get('/workflow', [WorkflowController::class, 'index'])->name('workflow.index');
 
         Route::get('/demand', [OrderController::class, 'demand'])->middleware('permission:production.orders.view')->name('demand.index');
         Route::get('/demand/data', [OrderController::class, 'demandData'])->middleware('permission:production.orders.view')->name('demand.data');
+        Route::get('/demand/{line}/boms', [OrderController::class, 'demandBoms'])->middleware('permission:production.orders.view')->name('demand.boms');
         Route::post('/demand/{line}/orders', [OrderController::class, 'storeFromDemand'])->middleware('permission:production.orders.create')->name('orders.store-from-demand');
         Route::get('/shop-floor', [OrderController::class, 'shopFloor'])->middleware('permission:production.shop_floor.use')->name('shop-floor.index');
         Route::get('/shop-floor/issues', [OrderController::class, 'shopFloorIssues'])->middleware('permission:production.shop_floor.use')->name('shop-floor.issues');
@@ -36,12 +39,14 @@ Route::middleware(['auth', 'program:production', 'capability:production', 'wareh
         Route::get('/orders/create', [OrderController::class, 'create'])->middleware('permission:production.orders.create')->name('orders.create');
         Route::post('/orders', [OrderController::class, 'store'])->middleware('permission:production.orders.create')->name('orders.store');
         Route::get('/orders/{order}', [OrderController::class, 'show'])->middleware('permission:production.orders.view')->name('orders.show');
+        Route::get('/orders/{order}/items/{item}/cover-image', [OrderController::class, 'shopFloorItemImage'])->middleware('permission:production.orders.view')->name('orders.item-image');
         Route::get('/orders/{order}/edit', [OrderController::class, 'edit'])->middleware('permission:production.orders.update')->name('orders.edit');
         Route::put('/orders/{order}', [OrderController::class, 'update'])->middleware('permission:production.orders.update')->name('orders.update');
         Route::delete('/orders/{order}', [OrderController::class, 'destroy'])->middleware('permission:production.orders.delete')->name('orders.destroy');
         Route::get('/orders/{order}/journal-preview/{journalEntry}', [OrderController::class, 'journalPreview'])->middleware('permission:production.orders.gl.view')->name('orders.journal-preview');
         Route::post('/orders/{order}/release', [OrderController::class, 'release'])->middleware('permission:production.orders.release')->name('orders.release');
         Route::post('/orders/{order}/cancel', [OrderController::class, 'cancel'])->middleware('permission:production.orders.cancel')->name('orders.cancel');
+        Route::get('/orders/{order}/scrap-items', [OrderController::class, 'scrapItemOptions'])->middleware('permission:production.shop_floor.use|production.execution.prepare')->name('orders.scrap-items');
         Route::post('/orders/{order}/recoverable-scrap-receipt', [OrderController::class, 'createRecoverableScrapReceipt'])->middleware('permission:production.shop_floor.use|production.execution.prepare')->name('orders.recoverable-scrap-receipt');
         Route::delete('/orders/{order}/recoverable-scrap-receipts/{document}', [OrderController::class, 'deleteRecoverableScrapReceipt'])->middleware('permission:production.shop_floor.use|production.execution.prepare')->name('orders.recoverable-scrap-receipts.destroy');
         Route::post('/orders/{order}/recoverable-scrap-receipts/{document}/approve', [OrderController::class, 'approveRecoverableScrapReceipt'])->middleware('permission:production.shop_floor.use|production.execution.prepare')->name('orders.recoverable-scrap-receipts.approve');
@@ -68,6 +73,7 @@ Route::middleware(['auth', 'program:production', 'capability:production', 'wareh
         Route::post('/orders/{order}/material-issues/{document}/approve', [OrderController::class, 'approveMaterialIssue'])->middleware('permission:production.shop_floor.use|production.execution.approve')->name('orders.material-issues.approve');
         Route::post('/orders/{order}/material-issues/{document}/post', [OrderController::class, 'postMaterialIssue'])->middleware('permission:production.shop_floor.use|production.execution.post')->name('orders.material-issues.post');
         Route::post('/orders/{order}/material-issues/{document}/reverse', [OrderController::class, 'reverseMaterialIssue'])->middleware('permission:production.shop_floor.use|production.execution.reverse')->name('orders.material-issues.reverse');
+        Route::post('/orders/{order}/finished-receipts/{document}/reverse', [OrderController::class, 'reverseFinishedReceipt'])->middleware('permission:production.shop_floor.use|production.execution.reverse')->name('orders.finished-receipts.reverse');
 
         Route::get('/boms', [BomController::class, 'index'])->middleware('permission:production.boms.view')->name('boms.index');
         Route::get('/boms/data', [BomController::class, 'data'])->middleware('permission:production.boms.view')->name('boms.data');

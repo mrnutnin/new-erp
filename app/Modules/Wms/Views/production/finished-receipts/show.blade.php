@@ -24,7 +24,7 @@
         }
     }
 )
-@php($normalizeText($document, ['document_number', 'reason'])); @php($normalizeText($sourceIssue ?? null, ['document_number', 'reason'])); @php(
+@php($normalizeText($document, ['document_number', 'reason'])) @php($normalizeText($sourceIssue ?? null, ['document_number', 'reason'])) @php(
     $document->lines->each(function ($line) use ($normalizeText): void {
         $normalizeText($line, ['direction', 'quantity', 'value', 'reason']);
         $normalizeText($line->item, ['code', 'name']);
@@ -33,7 +33,7 @@
         $normalizeText($line->allocation, ['method', 'value']);
         $normalizeText($line->allocation?->journalEntry, ['entry_number']);
     })
-); @php(
+) @php(
     $history->each(function ($event) use ($normalizeText): void {
         $normalizeText($event->user, ['name']);
     })

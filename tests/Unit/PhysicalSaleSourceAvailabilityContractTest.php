@@ -16,7 +16,8 @@ final class PhysicalSaleSourceAvailabilityContractTest extends TestCase
         self::assertStringContainsString("whereDoesntHave('physicalSales'", $controller);
         self::assertStringContainsString("where('status', '!=', 'VOID')", $controller);
         self::assertStringContainsString('$canCreatePhysicalSale', $view);
-        self::assertStringContainsString("physicalSales->where('status', '!=', 'VOID')->isEmpty()", $view);
+        self::assertStringContainsString("$"."order->physicalSales->first(fn (\$sale) => \$sale->status !== 'VOID')", $view);
+        self::assertStringContainsString("$"."canCreatePhysicalSale = \$order->status === 'CONFIRMED' && ! \$activeSale", $view);
         self::assertStringContainsString("where(['source_type' => \$values['source_type'], 'source_id' => \$source->id])->where('status', '!=', 'VOID')->exists()", $controller);
         self::assertStringContainsString("dropUnique('pos_physical_sales_source_unique')", $migration);
     }

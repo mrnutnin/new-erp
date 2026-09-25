@@ -7,6 +7,7 @@ use App\Modules\Wms\Models\StockMovement;
 use App\Modules\Wms\Models\StockReservation;
 use App\Modules\Wms\Services\StockReservationService;
 use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Tests\TestCase;
 
@@ -104,6 +105,31 @@ final class StockReservationConsumptionTest extends TestCase
         self::assertSame('CONSUMED', $reservation->fresh()->status);
         self::assertSame('0.00000000', (string) $balance->fresh()->reserved);
         self::assertDatabaseHas('wms_stock_reservation_consumptions', ['stock_reservation_id' => $reservation->id, 'stock_movement_id' => $movement->id, 'quantity' => '5.00000000']);
+    }
+
+    public function test_release_of_other_warehouse_reservation_rolls_back_with_failed_sale(): void
+    {
+        $balance = StockBalance::query()->create(['warehouse_id' => 1, 'item_id' => 9, 'uom_id' => 1, 'on_hand' => '5', 'reserved' => '0', 'available' => '5']);
+        $service = app(StockReservationService::class);
+        $reservation = $service->reserve(['warehouse_id' => 1, 'item_id' => 9, 'uom_id' => 1, 'quantity' => '5', 'source_type' => StockReservation::SOURCE_SALES_ORDER_LINE, 'source_id' => '77', 'idempotency_key' => 'sales-order-line:77:finished-goods', 'created_by' => 1]);
+
+        try {
+            DB::transaction(function () use ($service, $reservation): void {
+                $service->release($reservation);
+                throw new \RuntimeException('sale posting failed');
+            });
+            self::fail('sale must roll back');
+        } catch (\RuntimeException $exception) {
+            self::assertSame('sale posting failed', $exception->getMessage());
+        }
+        self::assertSame('OPEN', $reservation->fresh()->status);
+        self::assertSame('5.00000000', (string) $balance->fresh()->reserved);
+
+        DB::transaction(fn () => $service->release($reservation));
+        $service->release($reservation);
+        self::assertSame('RELEASED', $reservation->fresh()->status);
+        self::assertSame('0.00000000', (string) $balance->fresh()->reserved);
+        self::assertSame('5.00000000', (string) $balance->fresh()->available);
     }
 
     public function test_partial_and_full_consumption_are_atomic_and_idempotent(): void

@@ -1757,7 +1757,7 @@ form:has(#allocation-rows) .table-responsive td:nth-child(2) { min-width: 170px;
 
 .planning-day-page { --planning-label-width: 240px; background: var(--app-selection-background); padding: .85rem clamp(.75rem, 2vw, 1.5rem); min-height: calc(100dvh - 5rem); }
 .planning-day-page :is(a,button,input,select,summary,.planning-day-scroll):focus-visible { outline: 3px solid var(--app-accent-info); outline-offset: 2px; }
-.planning-day-header { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: .7rem; margin-bottom: .75rem; }
+.planning-day-header { display: flex; justify-content: space-between; align-items: flex-end; flex-wrap: wrap; gap: .7rem; margin-bottom: .75rem; }
 .planning-day-header h1 { font-weight: 800; font-size: clamp(1.3rem, 2.4vw, 1.85rem); margin: 0 0 .15rem; }
 .planning-day-header p { font-size: .85rem; }
 .planning-day-toolbar { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: .65rem; padding: .65rem .8rem; border-radius: .9rem; background: var(--app-glass-strong); border: 1px solid var(--app-border); }
@@ -1922,6 +1922,8 @@ form:has(#allocation-rows) .table-responsive td:nth-child(2) { min-width: 170px;
 .sf-job.is-held { border-top-color: var(--app-accent-danger); }
 .sf-job-heading { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: .4rem; }
 .sf-job-heading h2 { font-size: 1rem; font-weight: 800; margin: 0; overflow-wrap: anywhere; }
+.sf-job-product { display: flex; align-items: flex-start; gap: .7rem; }
+.sf-job-image { flex: 0 0 3.5rem; width: 3.5rem; height: 3.5rem; }
 .sf-job-product strong { display: block; font-size: 1.02rem; overflow-wrap: anywhere; }
 .sf-job-product span { display: block; font-size: .78rem; color: var(--sf-muted); overflow-wrap: anywhere; }
 .sf-job-figures { display: flex; justify-content: space-between; gap: .5rem; }
@@ -2008,4 +2010,14 @@ form:has(#allocation-rows) .table-responsive td:nth-child(2) { min-width: 170px;
 
 @media (prefers-reduced-motion: reduce) {
     .module-dashboard-summary .card { transition: none; }
+}
+
+.wo-more-actions { position: relative; }
+.wo-more-actions > summary { list-style: none; cursor: pointer; }
+.wo-more-actions > summary::-webkit-details-marker { display: none; }
+.wo-more-actions[open] > .dropdown-menu { display: block; }
+.wo-more-actions .dropdown-item { white-space: nowrap; }
+@media (max-width: 575.98px) {
+    .wo-more-actions[open] > .dropdown-menu { right: 0; left: auto; }
+    .wo-more-actions .dropdown-item { white-space: normal; }
 }

@@ -82,6 +82,10 @@ final class PhysicalSalePostingService
     public function post(PhysicalSale $sale, string $postingDate, Warehouse $warehouse, User $actor, Request $request, array $tenders = []): PhysicalSale
     {
         return DB::transaction(function () use ($sale, $postingDate, $warehouse, $actor, $request, $tenders): PhysicalSale {
+            // Lock the SO before the sale so a finished receipt can safely check its latest status.
+            if ($sale->source_type === 'SALES_ORDER' && $sale->source_id) {
+                DB::table('sales_orders')->where('id', $sale->source_id)->lockForUpdate()->first();
+            }
             $sale = PhysicalSale::query()->lockForUpdate()->findOrFail($sale->id);
             if ((int) $sale->warehouse_id !== (int) $warehouse->id) {
                 throw ValidationException::withMessages(['warehouse' => 'HS/IV ไม่ได้อยู่ในคลังที่เลือก']);
@@ -173,6 +177,7 @@ final class PhysicalSalePostingService
                 'journal_entry_id' => $journal?->id, 'cogs_journal_entry_id' => $cogs->id,
                 'posted_by' => $actor->id, 'posted_at' => now(), 'updated_by' => $actor->id,
             ])->save();
+            $this->releaseFinishedGoodsAtOtherWarehouses($sale, $lines);
             $this->commissions->calculatePostedSale($sale);
             $this->audit->record('pos.physical-sale.posted', $sale, $before, $sale->only(array_keys($before)), $actor, $request);
             $this->crmLifecycle->markWon($sale,$actor,$request);
@@ -180,6 +185,22 @@ final class PhysicalSalePostingService
 
             return $sale->fresh();
         }, 3);
+    }
+
+    private function releaseFinishedGoodsAtOtherWarehouses(PhysicalSale $sale, $lines): void
+    {
+        if ($sale->source_type !== 'SALES_ORDER') return;
+        foreach ($lines as $line) {
+            if (! $line->source_line_id) continue;
+            $reservation = StockReservation::query()
+                ->where('source_type', StockReservation::SOURCE_SALES_ORDER_LINE)
+                ->where('source_id', (string) $line->source_line_id)
+                ->where('idempotency_key', 'sales-order-line:'.$line->source_line_id.':finished-goods')
+                ->where('item_id', $line->item_id)->where('uom_id', $line->stock_uom_id)
+                ->where('warehouse_id', '!=', $sale->warehouse_id)->where('status', 'OPEN')
+                ->lockForUpdate()->first();
+            if ($reservation) $this->reservations->release($reservation);
+        }
     }
 
     private function usesProductionReservations(PhysicalSale $sale, $lines): bool

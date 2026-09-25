@@ -2,7 +2,7 @@
 @section('title', 'BOM | การผลิต')
 @section('content')
 <div class="container-fluid px-3 px-lg-4 py-4">
-    <div class="d-flex flex-wrap justify-content-between align-items-start gap-3 mb-4">
+    <div class="d-flex flex-wrap justify-content-between align-items-end gap-3 mb-4">
         <div><p class="eyebrow mb-2">PRODUCTION / BOM</p><h1 class="h3 mb-2">โครงสร้างการผลิต (BOM)</h1><p class="text-secondary mb-0">กำหนดสินค้าสำเร็จรูป วัตถุดิบ และ Revision ที่ใช้สร้างใบสั่งผลิต</p></div>
         @if(auth()->user()->hasPermission('production.boms.create'))<a class="btn btn-app-primary" href="{{ route('production.boms.create') }}"><i class="bx bx-plus me-1" aria-hidden="true"></i>สร้าง BOM</a>@endif
     </div>

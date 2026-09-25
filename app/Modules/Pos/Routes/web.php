@@ -81,6 +81,7 @@ Route::middleware(['auth', 'program:pos', 'warehouse'])->prefix('pos')->name('po
     Route::post('/sales-quotations/{salesQuotation}/to-order', [SalesOrderController::class, 'fromQuotation'])->middleware('permission:pos.sales-orders.create')->name('sales-orders.from-quotation');
     Route::post('/sales-rfqs/{salesRfq}/to-order', [SalesOrderController::class, 'fromRfq'])->middleware('permission:pos.sales-orders.create')->name('sales-orders.from-rfq');
     Route::post('/sales-orders/{salesOrder}/confirm', [SalesOrderController::class, 'confirm'])->middleware('permission:pos.sales-orders.confirm')->name('sales-orders.confirm');
+    Route::post('/sales-orders/{salesOrder}/lines/{line}/production-request', [SalesOrderController::class, 'requestProduction'])->middleware('permission:pos.sales-orders.confirm')->name('sales-orders.production-request');
     Route::post('/sales-orders/{salesOrder}/cancel', [SalesOrderController::class, 'cancel'])->middleware('permission:pos.sales-orders.cancel')->name('sales-orders.cancel');
     Route::get('/sales-quotations/{salesQuotation}/pdf', [SalesQuotationPdfController::class, 'show'])->middleware('permission:pos.sales-quotations.print')->name('sales-quotations.pdf');
     Route::get('/sales-orders/{salesOrder}/pdf', [SalesOrderPdfController::class, 'show'])->middleware('permission:pos.sales-orders.print')->name('sales-orders.pdf');

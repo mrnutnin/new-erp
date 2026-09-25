@@ -34,6 +34,8 @@ final class ProductionModuleFoundationContractTest extends TestCase
         $roles = file_get_contents($root.'/app/Modules/Settings/Controllers/RoleController.php');
         $dashboard = file_get_contents($root.'/app/Modules/Production/Views/dashboard.blade.php');
         $routes = file_get_contents($root.'/app/Modules/Production/Routes/web.php');
+        $sidebar = file_get_contents($root.'/app/Modules/Production/Views/partials/sidebar.blade.php');
+        $workflow = file_get_contents($root.'/app/Modules/Production/Views/workflow/index.blade.php');
         $show = file_get_contents($root.'/app/Modules/Production/Views/orders/show.blade.php');
         $checklist = file_get_contents($root.'/PRODUCTION_MVP_CHECKLIST.md');
 
@@ -54,6 +56,9 @@ final class ProductionModuleFoundationContractTest extends TestCase
         self::assertStringContainsString('production.*', $dashboard);
         self::assertStringContainsString('production.execution.approve', $routes);
         self::assertStringContainsString('production.execution.reverse', $routes);
+        self::assertStringContainsString("route('production.workflow.index')", $sidebar);
+        self::assertStringContainsString("Route::get('/workflow', [WorkflowController::class, 'index'])", $routes);
+        self::assertStringContainsString('Platform::workflow._workflow-card', $workflow);
         self::assertStringContainsString('permission:production.orders.gl.view', $routes);
         self::assertStringNotContainsString('permission:wms.', $routes);
         self::assertStringNotContainsString('permission:accounting.', $routes);

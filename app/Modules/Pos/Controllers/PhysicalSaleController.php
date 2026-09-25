@@ -470,7 +470,7 @@ final class PhysicalSaleController extends Controller
             return null;
         }
 
-        return SalesOrder::query()->with(['lines.item', 'lines.uom', 'sourceIntake.lines', 'quotation.sourceIntake.lines', 'quotation.rfq.sourceIntake.lines', 'rfq.sourceIntake.lines'])->whereKey($id)->where('branch_id', $branchId)->where('status', 'CONFIRMED')->first();
+        return SalesOrder::query()->with(['lines.item', 'lines.uom', 'sourceIntake.lines', 'quotation.sourceIntake.lines', 'quotation.rfq.sourceIntake.lines', 'rfq.sourceIntake.lines'])->whereKey($id)->where('branch_id', $branchId)->where('status', 'CONFIRMED')->lockForUpdate()->first();
     }
 
     private function fulfillmentWarehouse(Request $request, int $warehouseId): Warehouse

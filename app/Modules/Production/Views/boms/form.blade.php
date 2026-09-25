@@ -4,7 +4,7 @@
 @php($editing = $bom->exists)
 @php($rows = $lines->isEmpty() ? collect([(object)[]]) : $lines)
 <div class="container-fluid px-3 px-lg-4 py-4">
-    <div class="d-flex flex-wrap justify-content-between align-items-start gap-3 mb-4"><div><p class="eyebrow mb-2">PRODUCTION / BOM</p><h1 class="h3 mb-2">{{ $editing ? 'แก้ไข BOM Revision '.$revision->revision_number : 'สร้าง BOM' }}</h1><p class="text-secondary mb-0">บันทึกเป็นร่างก่อนตรวจสอบและเปิดใช้ Revision</p></div><a class="btn btn-outline-secondary" href="{{ $editing ? route('production.boms.show',$bom) : route('production.boms.index') }}"><i class="bx bx-arrow-back me-1" aria-hidden="true"></i>กลับหน้ารายการ</a></div>
+    <div class="d-flex flex-wrap justify-content-between align-items-end gap-3 mb-4"><div><p class="eyebrow mb-2">PRODUCTION / BOM</p><h1 class="h3 mb-2">{{ $editing ? 'แก้ไข BOM Revision '.$revision->revision_number : 'สร้าง BOM' }}</h1><p class="text-secondary mb-0">บันทึกเป็นร่างก่อนตรวจสอบและเปิดใช้ Revision</p></div><a class="btn btn-outline-secondary" href="{{ $editing ? route('production.boms.show',$bom) : route('production.boms.index') }}"><i class="bx bx-arrow-back me-1" aria-hidden="true"></i>กลับหน้ารายการ</a></div>
     <form id="bom-form" method="POST" action="{{ $editing ? route('production.boms.revisions.update',[$bom,$revision]) : route('production.boms.store') }}">@csrf @if($editing) @method('PUT') @endif
         <div class="card border-0 shadow-sm mb-4"><div class="card-body p-3 p-lg-4"><h2 class="h5 mb-3">ข้อมูล BOM</h2><div class="row g-3">
             @if($editing)

@@ -46,6 +46,19 @@ final class ShopFloorResponsiveAccessibilityContractTest extends TestCase
         }
     }
 
+    public function test_shop_floor_lists_twelve_jobs_with_sales_order_and_customer(): void
+    {
+        $controller = file_get_contents(__DIR__.'/../../app/Modules/Production/Controllers/OrderController.php');
+        $index = file_get_contents(__DIR__.'/../../app/Modules/Production/Views/shop-floor/index.blade.php');
+
+        self::assertStringContainsString('paginate(12)->withQueryString()', $controller);
+        self::assertStringContainsString('SO: {{ $order->salesOrder->document_number }}', $index);
+        self::assertStringContainsString('ลูกค้า: {{ $order->salesOrder->party_name', $index);
+        self::assertStringContainsString('finishedItem:id,code,name,cover_image_disk,cover_image_path', $controller);
+        self::assertStringContainsString("route('production.shop-floor.item-image'", $index);
+        self::assertStringContainsString('loading="lazy" decoding="async"', $index);
+    }
+
     public function test_shop_floor_script_has_valid_javascript(): void
     {
         exec('node --check '.escapeshellarg(__DIR__.'/../../public/js/production-shop-floor.js').' 2>&1', $output, $status);
@@ -106,8 +119,16 @@ final class ShopFloorResponsiveAccessibilityContractTest extends TestCase
         self::assertStringContainsString('role="status"', $show);
         self::assertStringContainsString('aria-live="polite"', $show);
         self::assertStringContainsString('shop-floor-network-status', $show);
+        self::assertStringContainsString('scrollIntoView', $script);
+        self::assertStringContainsString('showTab(id)', $script);
         self::assertStringContainsString('sf-board-header', $index);
         self::assertStringContainsString('sf-queue', $index);
+        self::assertStringContainsString("'salesOrder:id,document_number,party_name'", file_get_contents(__DIR__.'/../../app/Modules/Production/Controllers/OrderController.php'));
+        self::assertStringContainsString('เลขที่ SO', $show);
+        self::assertStringContainsString('ลูกค้า: {{ $order->salesOrder->party_name', $show);
+        self::assertStringContainsString('target="_blank"', $show);
+        self::assertStringContainsString('rel="noopener noreferrer"', $show);
+        self::assertStringContainsString("'document_number', 'status'", file_get_contents(__DIR__.'/../../app/Modules/Production/Controllers/OrderController.php'));
         self::assertStringContainsString('sf-job-next', $index);
         self::assertStringNotContainsString('shop-floor-action-modal', $index);
         self::assertStringContainsString('aria-current="page"', $index);

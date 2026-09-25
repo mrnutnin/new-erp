@@ -30,6 +30,7 @@
 
     <section class="sf-detail-strip" aria-label="สรุปงานผลิต">
         <div class="sf-product-summary"><div class="sf-detail-cover">@if($order->finishedItem?->cover_image_path)<img src="{{ route('production.shop-floor.item-image', [$order, $order->finishedItem]) }}" alt="ภาพสินค้า {{ $order->finishedItem->name }}">@else<i class="bx bx-package" aria-hidden="true"></i>@endif</div><div><strong>{{ $order->finishedItem?->name ?: 'ไม่ระบุสินค้า' }}</strong><small>{{ $order->finishedItem?->code }}</small></div></div>
+        @if($order->salesOrder)<div><small>เลขที่ SO</small><strong>{{ $order->salesOrder->document_number }}</strong><small>ลูกค้า: {{ $order->salesOrder->party_name ?: 'ไม่ระบุ' }}</small></div>@else<div><small>แหล่งงาน</small><strong>Make to Stock</strong></div>@endif
         <div><small>เป้าหมาย</small><strong>{{ number_format((float)$order->planned_quantity, 2) }} {{ $order->uom?->code }}</strong></div>
         <div><small>กำหนดเสร็จ</small><strong>{{ $order->planned_finish_at?->format('d/m/Y H:i') ?: ($order->planned_finish_date?->format('d/m/Y') ?: 'ไม่ระบุ') }}</strong></div>
         <div><small>เวลาผลิต (รวมพัก)</small><strong class="js-production-elapsed" data-started-at="{{ $order->started_at?->toIso8601String() }}" data-ended-at="{{ $order->completed_at?->toIso8601String() }}">{{ $order->started_at ? 'กำลังคำนวณ...' : 'ยังไม่เริ่ม' }}</strong></div>
@@ -37,6 +38,7 @@
     </section>
     <div id="shop-floor-network-status" class="alert alert-warning d-none" role="status" aria-live="polite">เครือข่ายขัดข้อง กรุณาตรวจสอบการเชื่อมต่อก่อนทำรายการ</div>
     <div id="shop-floor-feedback" class="alert alert-danger d-none" role="status" aria-live="polite"></div>
+    @if($order->customer_specification)<div class="alert alert-warning" role="note"><strong>ข้อกำหนดจากลูกค้า:</strong> {{ $order->customer_specification }}</div>@endif
     @include('Production::shop-floor._next-action')
 
     <div class="sf-detail-grid">
@@ -86,9 +88,9 @@
             <section class="tab-pane" id="info" role="tabpanel" aria-labelledby="sf-tab-info" tabindex="0">
                 <div class="sf-panel-heading"><h2>ข้อมูลเอกสารและงานเพิ่มเติม</h2><span>ไม่ต้องทำส่วนนี้ทุกครั้ง</span></div>
                 <div class="sf-panel-scroll sf-info-grid">
-                    <div><h3>ข้อมูลแผนผลิต</h3><dl class="sf-metadata"><div><dt>คลัง</dt><dd>{{ request()->attributes->get('selectedWarehouse')?->name ?: '-' }}</dd></div><div><dt>เริ่มตามแผน</dt><dd>{{ $order->planned_start_at?->format('d/m/Y H:i') ?: ($order->planned_start_date?->format('d/m/Y') ?: 'ไม่ระบุ') }}</dd></div><div><dt>กำหนดส่ง</dt><dd>{{ $order->required_delivery_at?->format('d/m/Y H:i') ?: ($order->required_delivery_date?->format('d/m/Y') ?: 'ไม่ระบุ') }}</dd></div><div><dt>เริ่มจริง</dt><dd>{{ $order->started_at?->format('d/m/Y H:i') ?: 'ยังไม่เริ่ม' }}</dd></div></dl>
-                        @if($order->notes)<h3>คำแนะนำจากหัวหน้างาน</h3><p class="sf-note">{{ $order->notes }}</p>@endif
-                        <h3>สถานะเอกสารที่เกี่ยวข้อง</h3><dl class="sf-metadata">@foreach(['ใบเบิกวัตถุดิบ'=>$issue, 'ใบรับผลิต'=>$receiptDocument, 'ใบรับคืน'=>$returnDocument, 'ใบรับเศษผลิต'=>$scrapDocument] as $label=>$document)<div><dt>{{ $label }}</dt><dd><span class="badge app-status-{{ $documentClasses[$document?->status] ?? 'neutral' }}">{{ $document ? ($documentLabels[$document->status] ?? $document->status) : 'ยังไม่มี' }}</span></dd></div>@endforeach</dl>
+                    <div><h3>ข้อมูลแผนผลิต</h3><dl class="sf-metadata"><div><dt>คลัง</dt><dd>{{ request()->attributes->get('selectedWarehouse')?->name ?: '-' }}</dd></div><div><dt>เริ่มตามแผน</dt><dd>{{ $order->planned_start_at?->format('d/m/Y H:i') ?: ($order->planned_start_date?->format('d/m/Y') ?: 'ไม่ระบุ') }}</dd></div><div><dt>ลูกค้าต้องการส่ง</dt><dd>{{ $order->required_delivery_date?->format('d/m/Y') ?: 'ไม่ระบุ' }}</dd></div><div><dt>ส่งตามแผน</dt><dd>{{ $order->required_delivery_at?->format('d/m/Y H:i') ?: 'ไม่ระบุ' }}</dd></div><div><dt>เริ่มจริง</dt><dd>{{ $order->started_at?->format('d/m/Y H:i') ?: 'ยังไม่เริ่ม' }}</dd></div></dl>
+                        @if($order->notes)<h3>หมายเหตุสำหรับงานผลิต</h3><p class="sf-note">{{ $order->notes }}</p>@endif
+                        <h3>สถานะเอกสารที่เกี่ยวข้อง</h3><dl class="sf-metadata">@foreach(['ใบเบิกวัตถุดิบ'=>$issue, 'ใบรับผลิต'=>$receiptDocument, 'ใบรับคืน'=>$returnDocument, 'ใบรับเศษผลิต'=>$scrapDocument] as $label=>$document)<div><dt>{{ $label }}</dt><dd>@if($document)@php($documentUrl = match ($label) {'ใบเบิกวัตถุดิบ' => auth()->user()->hasPermission('wms.issues.view') ? route('wms.production.material-issues.show', $document) : null, 'ใบรับผลิต' => auth()->user()->hasPermission('wms.inventory-adjustments.view') ? route('wms.production.finished-receipts.show', $document) : null, 'ใบรับคืน' => auth()->user()->hasPermission('wms.issue-returns.view') ? route('wms.production.issue-returns.show', $document) : null, 'ใบรับเศษผลิต' => auth()->user()->hasPermission('wms.inventory-adjustments.view') ? route('wms.inventory-adjustments.documents.show', $document) : null, default => null})@if($documentUrl)<a href="{{ $documentUrl }}" target="_blank" rel="noopener noreferrer">{{ $document->document_number }}</a>@else{{ $document->document_number ?: '—' }}@endif <span class="badge app-status-{{ $documentClasses[$document->status] ?? 'neutral' }}">{{ $documentLabels[$document->status] ?? $document->status }}</span>@else<span class="badge app-status-neutral">ยังไม่มี</span>@endif</dd></div>@endforeach</dl>
                     </div>
                     <div>
                         @if($order->status === 'IN_PROGRESS' && $order->started_at && ! $order->held_at)

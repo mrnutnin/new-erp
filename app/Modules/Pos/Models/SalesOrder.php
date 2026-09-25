@@ -19,7 +19,7 @@ class SalesOrder extends Model
 
     protected function casts(): array
     {
-        return ['document_date' => 'date', 'valid_until' => 'date', 'required_delivery_date' => 'date', 'subtotal' => 'decimal:2', 'discount_amount' => 'decimal:2', 'promotion_snapshot' => 'array', 'promotion_discount_amount' => 'decimal:2', 'total_amount' => 'decimal:2'];
+        return ['document_date' => 'date', 'valid_until' => 'date', 'required_delivery_date' => 'date', 'subtotal' => 'decimal:2', 'discount_amount' => 'decimal:2', 'promotion_snapshot' => 'array', 'production_legacy_eligible' => 'boolean', 'promotion_discount_amount' => 'decimal:2', 'total_amount' => 'decimal:2'];
     }
 
     public function lines(): HasMany

@@ -304,7 +304,7 @@ class WorkflowCatalogTest extends TestCase
         $this->assertSame([], WorkflowCatalog::for('production', new ModuleCapability($settings)));
     }
 
-    public function test_enabled_production_catalog_exposes_live_bom_route(): void
+    public function test_enabled_production_catalog_exposes_live_routes(): void
     {
         $settings = Mockery::mock(GlobalSettings::class);
         $settings->shouldReceive('value')->with('business_profile')->andReturn('MANUFACTURING');
@@ -316,6 +316,7 @@ class WorkflowCatalogTest extends TestCase
         $this->assertCount(1, $catalog[0]['steps']);
         $this->assertCount(3, $catalog[1]['steps']);
         $this->assertSame('production.boms.index', $catalog[0]['steps'][0]['route']);
+        $this->assertSame(['production.demand.index', 'production.shop-floor.index', 'production.orders.index'], array_column($catalog[1]['steps'], 'route'));
     }
 
     public function test_optional_workflows_keep_setup_and_daily_modes_and_asset_exposes_real_routes(): void
@@ -330,8 +331,11 @@ class WorkflowCatalogTest extends TestCase
 
             $this->assertSame(['daily', 'setup'], $modes, $program);
             foreach (collect($catalog)->flatMap(fn (array $workflow) => $workflow['steps']) as $step) {
-                if ($program === 'logistics' || ($program === 'production' && $step['label'] !== 'Item / BOM')) {
+                if ($program === 'logistics') {
                     $this->assertNull($step['route'], $program.': '.$step['label']);
+                }
+                if ($program === 'production') {
+                    $this->assertNotNull($step['route'], $program.': '.$step['label']);
                 }
                 $this->assertNotSame('', trim((string) ($step['recovery_hint'] ?? '')), $program.': '.$step['label']);
             }

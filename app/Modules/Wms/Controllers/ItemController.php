@@ -7,6 +7,7 @@ use App\Modules\Accounting\Models\Account;
 use App\Modules\Asset\Models\AssetCategory;
 use App\Modules\Platform\Services\AuditLogger;
 use App\Modules\Platform\Services\FileStorageService;
+use App\Modules\Platform\Services\ModuleCapability;
 use App\Modules\Settings\Services\GlobalSettings;
 use App\Modules\Wms\Models\Item;
 use App\Modules\Wms\Models\ItemCategory;
@@ -235,6 +236,7 @@ class ItemController extends Controller
     {
         return [
             'item' => $item,
+            'productionEnabled' => app(ModuleCapability::class)->isEnabled(ModuleCapability::PRODUCTION),
             'selectedCategory' => $item->category_id ? ItemCategory::query()->find($item->category_id) : null,
             'selectedUom' => $item->base_uom_id ? Uom::query()->find($item->base_uom_id) : null,
             'selectedAssetCategory' => $item->default_asset_category_id ? AssetCategory::query()->find($item->default_asset_category_id) : null,

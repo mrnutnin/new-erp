@@ -8,7 +8,6 @@ use App\Modules\Accounting\Models\JournalEntry;
 use App\Modules\Finance\Services\DocumentSequenceService;
 use App\Modules\Platform\Services\AuditLogger;
 use App\Modules\Platform\Services\FileStorageService;
-use App\Modules\Pos\Models\SalesOrderLine;
 use App\Modules\Production\Models\BomRevision;
 use App\Modules\Production\Models\ProductionOrder;
 use App\Modules\Production\Models\ProductionOrderIssue;
@@ -16,6 +15,7 @@ use App\Modules\Production\Models\ProductionOrderOperation;
 use App\Modules\Production\Notifications\ProductionIssueReportedNotification;
 use App\Modules\Production\Services\ProductionOrderService;
 use App\Modules\Production\Support\ProductionDayTimeline;
+use App\Modules\Production\Support\ProductionDemandQuery;
 use App\Modules\Wms\Models\CostAllocation;
 use App\Modules\Wms\Models\InventoryAdjustmentDocument;
 use App\Modules\Wms\Models\IssueDocument;
@@ -26,6 +26,7 @@ use App\Modules\Wms\Models\Item;
 use App\Modules\Wms\Services\IssueReturnService;
 use App\Modules\Wms\Services\ManualProductionReceiptPostingService;
 use App\Modules\Wms\Services\ProductionFinishedReceiptDocumentService;
+use App\Modules\Wms\Services\ProductionFinishedReceiptReversalService;
 use App\Modules\Wms\Services\ProductionReceiptSourceAllocator;
 use App\Modules\Wms\Services\ProductionScrapReceiptService;
 use App\Modules\Wms\Services\StockReservationService;
@@ -134,7 +135,7 @@ final class OrderController extends Controller
         $search = trim((string) ($filters['q'] ?? ''));
         $status = $filters['status'] ?? null;
         $orders = ProductionOrder::query()
-            ->with(['finishedItem:id,code,name', 'uom:id,code', 'salesOrder:id,document_number,party_name', 'events:id,production_order_id,event_type,source_id'])
+            ->with(['finishedItem:id,code,name,cover_image_disk,cover_image_path', 'uom:id,code', 'salesOrder:id,document_number,party_name', 'events:id,production_order_id,event_type,source_id'])
             ->where('branch_id', $this->branchId($request))
             ->where('issue_warehouse_id', $warehouseId)
             ->whereIn('status', ['RELEASED', 'IN_PROGRESS'])
@@ -144,7 +145,7 @@ final class OrderController extends Controller
                 ->orWhereHas('finishedItem', fn ($item) => $item->where('code', 'like', "%{$search}%")->orWhere('name', 'like', "%{$search}%"))
                 ->orWhereHas('salesOrder', fn ($salesOrder) => $salesOrder->where('document_number', 'like', "%{$search}%")->orWhere('party_name', 'like', "%{$search}%"))))
             ->orderByRaw("FIELD(status, 'IN_PROGRESS', 'RELEASED')")
-            ->orderBy('planned_finish_date')->orderBy('id')->paginate(4)->withQueryString();
+            ->orderBy('planned_finish_date')->orderBy('id')->paginate(12)->withQueryString();
         $issueIds = $orders->flatMap(fn (ProductionOrder $order) => $order->events->where('event_type', 'material_issue_created')->pluck('source_id'))->filter()->unique()->values();
         $issueStatuses = $issueIds->isEmpty() ? collect() : IssueDocument::query()->whereIn('id', $issueIds)->pluck('status', 'id');
         $receiptDocuments = $issueIds->isEmpty() ? collect() : InventoryAdjustmentDocument::query()->whereIn('source_issue_id', $issueIds)->where('document_context', ManualProductionReceiptContract::CONTEXT)->latest('id')->get(['id', 'source_issue_id', 'status'])->groupBy('source_issue_id');
@@ -155,15 +156,15 @@ final class OrderController extends Controller
     public function shopFloorShow(Request $request, ProductionOrder $order, ProductionOrderService $service): View
     {
         abort_unless((int) $order->branch_id === $this->branchId($request) && (int) $order->issue_warehouse_id === (int) $request->attributes->get('selectedWarehouse')->id, 404);
-        $order->load(['finishedItem:id,code,name,cover_image_disk,cover_image_path', 'uom:id,code', 'bomRevision:id,bom_id,revision_number', 'bomRevision.bom:id,code', 'events:id,production_order_id,event_type,source_id,occurred_at']);
+        $order->load(['finishedItem:id,code,name,cover_image_disk,cover_image_path', 'salesOrder:id,document_number,party_name', 'uom:id,code', 'bomRevision:id,bom_id,revision_number', 'bomRevision.bom:id,code', 'events:id,production_order_id,event_type,source_id,occurred_at']);
         $order->loadCount(['materials', 'operations', 'operations as completed_operations_count' => fn ($query) => $query->where('status', 'COMPLETED')]);
         $materials = $order->materials()->with(['item:id,code,name,cover_image_disk,cover_image_path', 'uom:id,code'])->orderBy('id')->paginate(6, ['*'], 'materials_page')->withQueryString()->fragment('materials');
         $operations = $order->operations()->orderBy('id')->paginate(5, ['*'], 'routing_page')->withQueryString()->fragment('routing');
         $issueId = $order->events->firstWhere('event_type', 'material_issue_created')?->source_id;
         $issue = $issueId ? IssueDocument::query()->where('issue_type', 'PRODUCTION')->find($issueId) : null;
-        $returnDocument = $issue ? IssueReturn::query()->where('issue_document_id', $issue->id)->latest('id')->first(['id', 'status']) : null;
-        $scrapDocument = $issue ? InventoryAdjustmentDocument::query()->where('source_issue_id', $issue->id)->where('document_context', 'PRODUCTION_SCRAP_RECEIPT')->latest('id')->first(['id', 'status']) : null;
-        $receiptDocument = $issue ? InventoryAdjustmentDocument::query()->where('source_issue_id', $issue->id)->where('document_context', ManualProductionReceiptContract::CONTEXT)->latest('id')->first(['id', 'status']) : null;
+        $returnDocument = $issue ? IssueReturn::query()->where('issue_document_id', $issue->id)->latest('id')->first(['id', 'document_number', 'status']) : null;
+        $scrapDocument = $issue ? InventoryAdjustmentDocument::query()->where('source_issue_id', $issue->id)->where('document_context', 'PRODUCTION_SCRAP_RECEIPT')->latest('id')->first(['id', 'document_number', 'status']) : null;
+        $receiptDocument = $issue ? InventoryAdjustmentDocument::query()->where('source_issue_id', $issue->id)->where('document_context', ManualProductionReceiptContract::CONTEXT)->latest('id')->first(['id', 'document_number', 'status']) : null;
         $focusedIssueId = $request->validate(['issue_id' => ['nullable', 'integer', 'min:1']])['issue_id'] ?? null;
         $productionIssues = ProductionOrderIssue::query()->with(['reporter:id,name', 'resolver:id,name'])->where('production_order_id', $order->id)
             ->when($focusedIssueId, fn ($query) => $query->orderByRaw('CASE WHEN id = ? THEN 0 ELSE 1 END', [$focusedIssueId]))
@@ -289,6 +290,7 @@ final class OrderController extends Controller
             ->with(['finishedItem:id,code,name', 'uom:id,code', 'salesOrder:id,document_number,party_name', 'responsibleUser:id,name'])
             ->where('branch_id', $this->branchId($request))
             ->where('issue_warehouse_id', $warehouseId)
+            ->where('status', '!=', 'CANCELLED')
             ->when($filters['status'] ?? null, fn ($query, $status) => $query->where('status', $status))
             ->when($filters['responsible_user_id'] ?? null, fn ($query, $userId) => $query->where('responsible_user_id', $userId))
             ->when($filters['finished_item_id'] ?? null, fn ($query, $itemId) => $query->where('finished_item_id', $itemId))
@@ -338,8 +340,8 @@ final class OrderController extends Controller
             'planned_quantity' => ['required', 'numeric', 'gt:0'],
             'planned_start_date' => ['nullable', 'date_format:Y-m-d'],
             'planned_finish_date' => ['nullable', 'date_format:Y-m-d', 'after_or_equal:planned_start_date'],
-            'planned_start_at' => ['nullable', 'date_format:Y-m-d\\TH:i'],
-            'planned_finish_at' => ['nullable', 'date_format:Y-m-d\\TH:i', 'after_or_equal:planned_start_at'],
+            'planned_start_at' => ['nullable', 'required_with:planned_finish_at', 'date_format:Y-m-d\\TH:i'],
+            'planned_finish_at' => ['nullable', 'required_with:planned_start_at', 'date_format:Y-m-d\\TH:i', 'after:planned_start_at'],
             'required_delivery_at' => ['nullable', 'date_format:Y-m-d\\TH:i'],
             'notes' => ['nullable', 'string', 'max:1000'],
             'substitutes' => ['nullable', 'array', 'max:100'],
@@ -348,40 +350,48 @@ final class OrderController extends Controller
         $values['substitutes'] = array_filter($values['substitutes'] ?? [], fn ($value) => filled($value));
         abort_unless($values['substitutes'] === [] || $request->user()->hasPermission('production.orders.substitute.use'), 403);
         $order = $service->createMakeToStock($values, $request->attributes->get('selectedWarehouse'), $request->user(), $request);
+        $request->session()->flash('success', 'สร้างร่างใบสั่งผลิต '.$order->document_number.' แล้ว ตรวจแผนและความพร้อมวัตถุดิบก่อน Release');
 
         return response()->json(['status' => true, 'msg' => 'สร้างใบสั่งผลิต Make to Stock แล้ว', 'redirect' => route('production.orders.show', $order)]);
     }
 
     public function edit(Request $request, ProductionOrder $order): View
     {
-        abort_unless((int) $order->branch_id === $this->branchId($request) && $order->status === 'DRAFT' && $order->order_type === 'MAKE_TO_STOCK', 404);
-        $revisions = BomRevision::query()->with(['bom.finishedItem:id,code,name', 'bom.baseUom:id,code,name', 'lines.componentItem:id,code,name', 'lines.uom:id,code,name', 'lines.substitutes.substituteItem:id,code,name'])
+        abort_unless((int) $order->branch_id === $this->branchId($request)
+            && (int) $order->issue_warehouse_id === (int) $request->attributes->get('selectedWarehouse')->id
+            && $order->status === 'DRAFT', 404);
+        $revisions = $order->order_type === 'MAKE_TO_STOCK' ? BomRevision::query()->with(['bom.finishedItem:id,code,name', 'bom.baseUom:id,code,name', 'lines.componentItem:id,code,name', 'lines.uom:id,code,name', 'lines.substitutes.substituteItem:id,code,name'])
             ->where('status', 'ACTIVE')
             ->whereHas('bom', fn ($q) => $q->where('branch_id', $this->branchId($request))->where('is_active', true))
-            ->orderByDesc('id')
-            ->get();
+            ->orderByDesc('id')->get() : collect();
+        $order->load(['salesOrder', 'salesOrderLine', 'finishedItem', 'uom', 'bomRevision.bom', 'issueWarehouse:id,code,name', 'receiptWarehouse:id,code,name', 'materials']);
 
         return view('Production::orders.form', ['order' => $order, 'revisions' => $revisions]);
     }
 
     public function update(Request $request, ProductionOrder $order, ProductionOrderService $service): JsonResponse
     {
-        abort_unless((int) $order->branch_id === $this->branchId($request), 404);
+        abort_unless((int) $order->branch_id === $this->branchId($request)
+            && (int) $order->issue_warehouse_id === (int) $request->attributes->get('selectedWarehouse')->id, 404);
+        $makeToOrder = $order->order_type === 'MAKE_TO_ORDER';
         $values = $request->validate([
-            'bom_revision_id' => ['required', 'integer', 'exists:production_bom_revisions,id'],
-            'planned_quantity' => ['required', 'numeric', 'gt:0'],
-            'planned_start_date' => ['nullable', 'date_format:Y-m-d'],
+            'bom_revision_id' => $makeToOrder ? ['prohibited'] : ['required', 'integer', 'exists:production_bom_revisions,id'],
+            'planned_quantity' => $makeToOrder ? ['prohibited'] : ['required', 'numeric', 'gt:0'],
+            'planned_start_date' => [$makeToOrder ? 'required' : 'nullable', 'date_format:Y-m-d'],
             'planned_finish_date' => ['nullable', 'date_format:Y-m-d', 'after_or_equal:planned_start_date'],
-            'planned_start_at' => ['nullable', 'date_format:Y-m-d\\TH:i'],
-            'planned_finish_at' => ['nullable', 'date_format:Y-m-d\\TH:i', 'after_or_equal:planned_start_at'],
+            'planned_start_at' => ['nullable', 'required_with:planned_finish_at', 'date_format:Y-m-d\\TH:i'],
+            'planned_finish_at' => ['nullable', 'required_with:planned_start_at', 'date_format:Y-m-d\\TH:i', 'after:planned_start_at'],
             'required_delivery_at' => ['nullable', 'date_format:Y-m-d\\TH:i'],
-            'notes' => ['nullable', 'string', 'max:1000'],
-            'substitutes' => ['nullable', 'array', 'max:100'],
-            'substitutes.*' => ['nullable', 'integer', 'exists:production_bom_line_substitutes,id'],
+            'notes' => ['nullable', 'string', 'max:'.($makeToOrder ? 2000 : 1000)],
+            'substitutes' => $makeToOrder ? ['prohibited'] : ['nullable', 'array', 'max:100'],
+            'substitutes.*' => $makeToOrder ? ['prohibited'] : ['nullable', 'integer', 'exists:production_bom_line_substitutes,id'],
         ]);
-        $values['substitutes'] = array_filter($values['substitutes'] ?? [], fn ($value) => filled($value));
-        abort_unless($values['substitutes'] === [] || $request->user()->hasPermission('production.orders.substitute.use'), 403);
+        if (! $makeToOrder) {
+            $values['substitutes'] = array_filter($values['substitutes'] ?? [], fn ($value) => filled($value));
+            abort_unless($values['substitutes'] === [] || $request->user()->hasPermission('production.orders.substitute.use'), 403);
+        }
         $updated = $service->updateDraft($order, $values, $request->attributes->get('selectedWarehouse'), $request->user(), $request);
+        $request->session()->flash('success', 'บันทึกแผนใบสั่งผลิต '.$updated->document_number.' แล้ว ตรวจรายละเอียดก่อน Release');
 
         return response()->json(['status' => true, 'msg' => 'บันทึกใบสั่งผลิตแล้ว', 'redirect' => route('production.orders.show', $updated)]);
     }
@@ -411,7 +421,7 @@ final class OrderController extends Controller
             ->addColumn('quantity_label', fn (ProductionOrder $row) => WmsDecimal::format($row->planned_quantity).' '.($row->uom?->code ?? ''))
             ->addColumn('status_label', fn (ProductionOrder $row) => ['DRAFT' => 'ร่าง', 'RELEASED' => 'พร้อมผลิต', 'IN_PROGRESS' => 'กำลังผลิต', 'COMPLETED' => 'เสร็จแล้ว', 'CANCELLED' => 'ยกเลิกเอกสาร'][$row->status] ?? $row->status)
             ->addColumn('show_url', fn (ProductionOrder $row) => route('production.orders.show', $row))
-            ->addColumn('edit_url', fn (ProductionOrder $row) => $row->status === 'DRAFT' && $row->order_type === 'MAKE_TO_STOCK' && $request->user()->hasPermission('production.orders.update') ? route('production.orders.edit', $row) : null)
+            ->addColumn('edit_url', fn (ProductionOrder $row) => $row->status === 'DRAFT' && (int) $row->issue_warehouse_id === (int) $request->attributes->get('selectedWarehouse')->id && $request->user()->hasPermission('production.orders.update') ? route('production.orders.edit', $row) : null)
             ->toJson();
     }
 
@@ -422,41 +432,114 @@ final class OrderController extends Controller
 
     public function demandData(Request $request): JsonResponse
     {
+        $filters = $request->validate(['readiness' => ['nullable', 'in:READY,NEEDS_BOM,INVALID'], 'date_from' => ['nullable', 'date_format:Y-m-d'], 'date_to' => ['nullable', 'date_format:Y-m-d', 'after_or_equal:date_from']]);
         $branchId = $this->branchId($request);
-        $query = SalesOrderLine::query()
-            ->join('sales_orders', 'sales_orders.id', '=', 'sales_order_lines.sales_order_id')
-            ->leftJoin('wms_items', 'wms_items.id', '=', 'sales_order_lines.item_id')
-            ->leftJoin('wms_uoms', 'wms_uoms.id', '=', 'sales_order_lines.uom_id')
-            ->where('sales_orders.branch_id', $branchId)
-            ->where('sales_orders.status', 'CONFIRMED')
-            ->whereExists(fn ($exists) => $exists->selectRaw('1')->from('production_boms')
-                ->join('production_bom_revisions', 'production_bom_revisions.bom_id', '=', 'production_boms.id')
-                ->whereColumn('production_boms.finished_item_id', 'sales_order_lines.item_id')
-                ->whereColumn('production_boms.base_uom_id', 'sales_order_lines.uom_id')
-                ->where('production_boms.branch_id', $branchId)
-                ->where('production_boms.is_active', true)
-                ->where('production_bom_revisions.status', 'ACTIVE'))
-            ->whereNotExists(fn ($exists) => $exists->selectRaw('1')->from('production_orders')
-                ->whereColumn('production_orders.sales_order_line_id', 'sales_order_lines.id')
-                ->where('production_orders.status', '!=', 'CANCELLED')
-                ->whereNull('production_orders.deleted_at'))
+        $query = ProductionDemandQuery::eligible($branchId)
+            ->when($filters['date_from'] ?? null, fn ($q, $date) => $q->whereRaw('COALESCE(sales_order_lines.requested_delivery_date, sales_orders.required_delivery_date) >= ?', [$date]))
+            ->when($filters['date_to'] ?? null, fn ($q, $date) => $q->whereRaw('COALESCE(sales_order_lines.requested_delivery_date, sales_orders.required_delivery_date) <= ?', [$date]))
             ->select([
-                'sales_order_lines.*', 'sales_orders.document_number as sales_order_number', 'sales_orders.party_code', 'sales_orders.party_name', 'sales_orders.required_delivery_date',
-                'wms_items.code as item_code', 'wms_items.name as item_name', 'wms_uoms.code as uom_code',
-            ]);
+                'sales_order_lines.*', 'sales_orders.document_number as sales_order_number', 'sales_orders.party_code', 'sales_orders.party_name',
+                'wms_items.code as item_code', 'wms_items.name as item_name', 'wms_items.item_type', 'wms_items.is_active as item_active',
+                'wms_items.is_stock_item', 'wms_items.base_uom_id', 'wms_items.deleted_at as item_deleted_at', 'wms_uoms.code as uom_code',
+            ])
+            ->selectRaw(ProductionDemandQuery::bomReadySql().' AS has_active_bom', [$branchId]);
+        $itemReady = ProductionDemandQuery::itemReadySql();
+        $bomReady = ProductionDemandQuery::bomReadySql();
+        match ($filters['readiness'] ?? null) {
+            'READY' => $query->whereRaw('('.$itemReady.') AND ('.$bomReady.')', [$branchId]),
+            'NEEDS_BOM' => $query->whereRaw('('.$itemReady.') AND NOT ('.$bomReady.')', [$branchId]),
+            'INVALID' => $query->whereRaw('NOT ('.$itemReady.')'),
+            default => null,
+        };
 
         return DataTables::eloquent($query)
+            ->filter(function ($q) use ($request, $branchId): void {
+                $term = trim((string) $request->input('search.value'));
+                if ($term === '') return;
+                $like = '%'.str_replace(',', '', $term).'%';
+                $displayLike = '%'.$term.'%';
+                $places = WmsDecimal::places();
+                $q->where(function ($q) use ($term, $like, $displayLike, $places, $branchId): void {
+                    $q->where('sales_orders.document_number', 'like', $like)
+                        ->orWhere('sales_orders.party_code', 'like', $like)->orWhere('sales_orders.party_name', 'like', $like)
+                        ->orWhere('wms_items.code', 'like', $like)->orWhere('wms_items.name', 'like', $like)
+                        ->orWhere('wms_uoms.code', 'like', $like)
+                        ->orWhere('sales_order_lines.production_specification', 'like', $like)
+                        ->orWhere('sales_order_lines.description', 'like', $like)
+                        ->orWhereRaw("CONCAT(sales_orders.document_number, ' · ', sales_orders.party_name) LIKE ?", [$displayLike])
+                        ->orWhereRaw("CONCAT(wms_items.code, ' · ', wms_items.name) LIKE ?", [$displayLike])
+                        ->orWhereRaw("CONCAT(FORMAT(sales_order_lines.quantity, ?), ' ', COALESCE(wms_uoms.code, '')) LIKE ?", [$places, $displayLike])
+                        ->orWhereRaw('CAST(sales_order_lines.quantity AS CHAR) LIKE ?', [$like])
+                        ->orWhereRaw("DATE_FORMAT(sales_order_lines.requested_delivery_date, '%d/%m/%Y') LIKE ?", [$like])
+                        ->orWhereRaw("DATE_FORMAT(sales_order_lines.requested_start_date, '%d/%m/%Y') LIKE ?", [$like]);
+                    $ready = ProductionDemandQuery::itemReadySql();
+                    $bom = ProductionDemandQuery::bomReadySql();
+                    if (mb_stripos('สินค้า/หน่วยไม่พร้อม', $term) !== false) $q->orWhereRaw('NOT ('.$ready.')');
+                    if (mb_stripos('ตั้งค่า BOM ก่อน', $term) !== false) $q->orWhereRaw('('.$ready.') AND NOT ('.$bom.')', [$branchId]);
+                    if (mb_stripos('สร้างใบสั่งผลิตได้', $term) !== false) $q->orWhereRaw('('.$ready.') AND ('.$bom.')', [$branchId]);
+                });
+            })
+            ->order(function ($q) use ($request): void {
+                $column = match ((int) $request->input('order.0.column', 5)) {
+                    1 => 'sales_orders.document_number', 2 => 'wms_items.code', 3 => 'sales_order_lines.quantity',
+                    4 => 'sales_order_lines.production_specification', 5 => 'sales_order_lines.requested_delivery_date',
+                    default => 'sales_order_lines.requested_delivery_date',
+                };
+                $q->orderBy($column, $request->input('order.0.dir') === 'desc' ? 'desc' : 'asc')->orderBy('sales_order_lines.id');
+            })
             ->addColumn('sales_order_label', fn ($row) => $row->sales_order_number.' · '.$row->party_name)
             ->addColumn('item_label', fn ($row) => trim(($row->item_code ?? '').' · '.($row->item_name ?? ''), ' ·'))
             ->addColumn('quantity_label', fn ($row) => WmsDecimal::format($row->quantity).' '.($row->uom_code ?? ''))
-            ->addColumn('required_delivery_date_label', fn ($row) => $row->required_delivery_date ? date('d/m/Y', strtotime((string) $row->required_delivery_date)) : '-')
-            ->addColumn('create_url', fn ($row) => $request->user()->hasPermission('production.orders.create') ? route('production.orders.store-from-demand', $row->id) : null)
+            ->addColumn('required_delivery_date_label', fn ($row) => $row->requested_delivery_date ? date('d/m/Y', strtotime((string) $row->requested_delivery_date)) : '-')
+            ->addColumn('requested_start_date_label', fn ($row) => $row->requested_start_date ? date('d/m/Y', strtotime((string) $row->requested_start_date)) : '-')
+            ->addColumn('readiness_code', fn ($row) => $this->demandReadiness($row))
+            ->addColumn('readiness_label', fn ($row) => match ($this->demandReadiness($row)) {
+                'READY' => 'สร้างใบสั่งผลิตได้', 'NEEDS_BOM' => 'ตั้งค่า BOM ก่อน', default => 'สินค้า/หน่วยไม่พร้อม',
+            })
+            ->addColumn('bom_options_url', fn ($row) => route('production.demand.boms', $row->id))
+            ->addColumn('create_url', fn ($row) => $this->demandReadiness($row) === 'READY'
+                && $request->user()->hasPermission('production.orders.create') && $request->user()->hasPermission('production.orders.view')
+                ? route('production.orders.store-from-demand', $row->id) : null)
             ->toJson();
+    }
+
+    private function demandReadiness($row): string
+    {
+        if ($row->item_code === null || $row->item_deleted_at !== null || ! $row->item_active || $row->item_type !== 'GOODS'
+            || ! $row->is_stock_item || ! $row->base_uom_id || (int) $row->base_uom_id !== (int) $row->uom_id) {
+            return 'INVALID';
+        }
+
+        return $row->has_active_bom ? 'READY' : 'NEEDS_BOM';
+    }
+
+    public function demandBoms(Request $request, int $line): JsonResponse
+    {
+        $source = ProductionDemandQuery::eligible($this->branchId($request))
+            ->where('sales_order_lines.id', $line)->firstOrFail(['sales_order_lines.item_id', 'sales_order_lines.uom_id']);
+        $boms = BomRevision::query()->with('bom:id,code,finished_item_id,base_uom_id,branch_id')
+            ->where('status', 'ACTIVE')->whereHas('lines')
+            ->whereHas('bom', fn ($q) => $q->where('branch_id', $this->branchId($request))
+                ->where('finished_item_id', $source->item_id)->where('base_uom_id', $source->uom_id)->where('is_active', true))
+            ->orderBy('id')->get(['id', 'bom_id', 'revision_number']);
+
+        return response()->json(['boms' => $boms->map(fn ($revision) => [
+            'id' => $revision->id, 'label' => $revision->bom->code.' Rev '.$revision->revision_number,
+        ])->values()]);
     }
 
     public function storeFromDemand(Request $request, int $line, ProductionOrderService $service): JsonResponse
     {
-        $order = $service->createFromSalesOrderLine($line, $request->attributes->get('selectedWarehouse'), $request->user(), $request);
+        $plan = $request->validate([
+            'bom_revision_id' => ['required', 'integer', 'exists:production_bom_revisions,id'],
+            'planned_start_date' => ['required', 'date_format:Y-m-d'],
+            'planned_finish_date' => ['nullable', 'date_format:Y-m-d', 'after_or_equal:planned_start_date'],
+            'planned_start_at' => ['nullable', 'required_with:planned_finish_at', 'date_format:Y-m-d\TH:i'],
+            'planned_finish_at' => ['nullable', 'required_with:planned_start_at', 'date_format:Y-m-d\TH:i', 'after:planned_start_at'],
+            'required_delivery_at' => ['nullable', 'date_format:Y-m-d\TH:i'],
+            'notes' => ['nullable', 'string', 'max:2000'],
+        ]);
+        $order = $service->createFromSalesOrderLine($line, $request->attributes->get('selectedWarehouse'), $request->user(), $request, $plan);
 
         return response()->json(['status' => true, 'msg' => 'สร้างใบสั่งผลิตแล้ว', 'redirect' => route('production.orders.show', $order)]);
     }
@@ -464,13 +547,13 @@ final class OrderController extends Controller
     public function show(Request $request, ProductionOrder $order, ProductionOrderService $service, ManualProductionReceiptPostingService $finishedReceiptPosting): View
     {
         abort_unless((int) $order->branch_id === $this->branchId($request), 404);
-        $order->load(['salesOrder', 'salesOrderLine', 'finishedItem', 'uom', 'bomRevision.bom', 'materials.item', 'materials.uom', 'scraps.uom', 'events.creator']);
+        $order->load(['salesOrder', 'salesOrderLine', 'finishedItem:id,code,name,cover_image_disk,cover_image_path', 'uom', 'bomRevision.bom', 'issueWarehouse:id,code,name', 'receiptWarehouse:id,code,name', 'materials.item:id,code,name,cover_image_disk,cover_image_path', 'materials.uom', 'scraps.uom', 'events.creator']);
         $materialReadiness = $service->materialReadiness($order);
         $materialIssueId = $order->events->firstWhere('event_type', 'material_issue_created')?->source_id;
         $materialIssue = $materialIssueId ? IssueDocument::query()->where('issue_type', 'PRODUCTION')->find($materialIssueId) : null;
         $materialReturns = $materialIssue ? IssueReturn::query()->where('issue_document_id', $materialIssue->id)->latest('id')->get(['id', 'document_number', 'status']) : collect();
         $scrapReceipts = $materialIssue ? InventoryAdjustmentDocument::query()->where('source_issue_id', $materialIssue->id)->where('document_context', 'PRODUCTION_SCRAP_RECEIPT')->latest('id')->get(['id', 'document_number', 'status']) : collect();
-        $finishedReceipts = $materialIssue ? InventoryAdjustmentDocument::query()->with('lines')->where('source_issue_id', $materialIssue->id)->where('document_context', ManualProductionReceiptContract::CONTEXT)->latest('id')->get(['id', 'warehouse_id', 'document_number', 'document_date', 'status', 'document_context', 'source_issue_id', 'reason']) : collect();
+        $finishedReceipts = $materialIssue ? InventoryAdjustmentDocument::query()->with('lines')->where('source_issue_id', $materialIssue->id)->where('document_context', ManualProductionReceiptContract::CONTEXT)->latest('id')->get(['id', 'warehouse_id', 'document_number', 'document_date', 'status', 'document_context', 'source_issue_id', 'reason', 'reversal_status']) : collect();
         $finishedReceiptReadiness = $finishedReceipts->where('status', 'APPROVED')->mapWithKeys(function (InventoryAdjustmentDocument $receipt) use ($finishedReceiptPosting): array {
             try { return [$receipt->id => $finishedReceiptPosting->preflight($receipt->toArray())]; }
             catch (\Throwable $e) { return [$receipt->id => ['ready' => false, 'blockers' => [['message' => $e->getMessage()]]]]; }
@@ -573,9 +656,22 @@ final class OrderController extends Controller
     {
         $this->assertMaterialIssueBelongsToOrder($request, $order, $document);
         $values = $request->validate(['reason' => ['required', 'string', 'min:10', 'max:500']]);
+        $request->validate(['materials_returnable' => ['required', 'accepted']]);
         $issues->reverseIssue($document, $request->user(), (string) $values['reason'], $audit, $request);
 
         return response()->json(['status' => true, 'msg' => 'ยกเลิกเอกสารใบเบิกวัตถุดิบแล้ว', 'redirect' => route('production.orders.show', $order)]);
+    }
+
+    public function reverseFinishedReceipt(Request $request, ProductionOrder $order, InventoryAdjustmentDocument $document, ProductionFinishedReceiptReversalService $reversal): JsonResponse
+    {
+        abort_unless((int) $order->branch_id === $this->branchId($request)
+            && (int) $document->warehouse_id === (int) $request->attributes->get('selectedWarehouse')->id
+            && $document->document_context === ManualProductionReceiptContract::CONTEXT
+            && $order->events()->where('event_type', 'material_issue_created')->where('source_id', (string) $document->source_issue_id)->exists(), 404);
+        $values = $request->validate(['reversal_date' => ['required', 'date_format:Y-m-d'], 'reason' => ['required', 'string', 'min:10', 'max:500']]);
+        $reversal->reverse($document, $values['reversal_date'], trim($values['reason']), $request->user(), $request);
+
+        return response()->json(['status' => true, 'msg' => 'กลับรายการใบรับผลิตแล้ว', 'redirect' => route('production.orders.show', $order)]);
     }
 
     public function createMaterialReturn(Request $request, ProductionOrder $order, IssueReturnService $returns, DocumentSequenceService $sequences, AuditLogger $audit): JsonResponse
@@ -667,6 +763,29 @@ final class OrderController extends Controller
         return response()->json(['status' => true, 'msg' => 'ใบรับสินค้าผลิตเสร็จลง Stock และบัญชีแล้ว', 'redirect' => route('production.orders.show', $order)]);
     }
 
+    public function scrapItemOptions(Request $request, ProductionOrder $order): JsonResponse
+    {
+        abort_unless((int) $order->branch_id === $this->branchId($request)
+            && (int) $order->issue_warehouse_id === (int) $request->attributes->get('selectedWarehouse')->id, 404);
+        $term = trim((string) $request->query('q'));
+        $items = Item::query()->with('baseUom:id,code,name')
+            ->where('is_active', true)->where('is_stock_item', true)->where('item_type', 'GOODS')->where('can_receive_production_scrap', true)
+            ->whereNotNull('base_uom_id')
+            ->when($term !== '', fn ($query) => $query->where(fn ($search) => $search->where('code', 'like', '%'.addcslashes($term, '%_').'%')->orWhere('name', 'like', '%'.addcslashes($term, '%_').'%')))
+            ->orderBy('code')->orderBy('id')->forPage(max(1, $request->integer('page', 1)), 31)
+            ->get(['id', 'code', 'name', 'base_uom_id']);
+
+        return response()->json([
+            'results' => $items->take(30)->map(fn (Item $item) => [
+                'id' => $item->id,
+                'text' => $item->code.' · '.$item->name,
+                'uom_id' => $item->base_uom_id,
+                'uom_label' => $item->baseUom?->code ?: $item->baseUom?->name ?: '-',
+            ])->values(),
+            'pagination' => ['more' => $items->count() > 30],
+        ]);
+    }
+
     public function createRecoverableScrapReceipt(Request $request, ProductionOrder $order, ProductionOrderService $service): JsonResponse
     {
         abort_unless((int) $order->branch_id === $this->branchId($request), 404);
@@ -686,6 +805,8 @@ final class OrderController extends Controller
     public function cancel(Request $request, ProductionOrder $order, ProductionOrderService $service, StockReservationService $reservations): JsonResponse
     {
         abort_unless((int) $order->branch_id === $this->branchId($request), 404);
+        $values = $request->validate(['reason' => ['required', 'string', 'min:10', 'max:500']]);
+        $request->merge(['reason' => trim($values['reason'])]);
         $cancelled = $service->cancel($order, $request->attributes->get('selectedWarehouse'), $request->user(), $request, $reservations);
 
         return response()->json(['status' => true, 'msg' => 'ยกเลิกเอกสาร WO แล้ว', 'redirect' => route('production.orders.show', $cancelled)]);

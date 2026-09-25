@@ -36,7 +36,12 @@ $(function () {
     tabs.forEach(tab => tab.addEventListener('shown.bs.tab', () => {
         history.replaceState(null, '', location.pathname + location.search + '#' + tab.getAttribute('aria-controls'));
     }));
-    $('[data-sf-tab]').on('click', function () { showTab(this.dataset.sfTab); document.getElementById('sf-tab-' + this.dataset.sfTab)?.focus(); });
+    $('[data-sf-tab]').on('click', function () {
+        const id = this.dataset.sfTab, panel = document.getElementById(id);
+        showTab(id);
+        panel?.scrollIntoView({behavior: 'smooth', block: 'center'});
+        panel?.focus({preventScroll: true});
+    });
 
     $('.js-production-elapsed').each(function () {
         const el = $(this), start = Date.parse(el.data('started-at')), end = Date.parse(el.data('ended-at'));

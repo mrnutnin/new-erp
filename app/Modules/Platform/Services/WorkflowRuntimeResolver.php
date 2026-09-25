@@ -78,6 +78,11 @@ final class WorkflowRuntimeResolver
                         $decision['recovery_url'] = $runtime['recovery_url'] ?? null;
                         $decision['recovery_label'] = $runtime['recovery_label'] ?? null;
                         $decision['recovery_permission'] = $runtime['recovery_permission'] ?? null;
+                        $decision['missing_inventory_items'] = $runtime['missing_inventory_items'] ?? [];
+                        $decision['missing_inventory_count'] = $runtime['missing_inventory_count'] ?? 0;
+                        $decision['reconciliation_metrics'] = $runtime['reconciliation_metrics'] ?? [];
+                        $decision['unlinked_allocation_details'] = $runtime['unlinked_allocation_details'] ?? [];
+                        $decision['unlinked_allocation_source_types'] = $runtime['unlinked_allocation_source_types'] ?? [];
                     }
 
                     if ($route && $pending->has($route)) {
@@ -104,6 +109,11 @@ final class WorkflowRuntimeResolver
                     $step['recovery_url'] = $runtime['recovery_url'] ?? null;
                     $step['recovery_label'] = $runtime['recovery_label'] ?? null;
                     $step['recovery_permission'] = $runtime['recovery_permission'] ?? null;
+                    $step['missing_inventory_items'] = $runtime['missing_inventory_items'] ?? [];
+                    $step['missing_inventory_count'] = $runtime['missing_inventory_count'] ?? 0;
+                    $step['reconciliation_metrics'] = $runtime['reconciliation_metrics'] ?? [];
+                    $step['unlinked_allocation_details'] = $runtime['unlinked_allocation_details'] ?? [];
+                    $step['unlinked_allocation_source_types'] = $runtime['unlinked_allocation_source_types'] ?? [];
                 }
                 if ($route && $pending->has($route)) {
                     $pendingRuntime = $pending->get($route);
@@ -280,7 +290,19 @@ final class WorkflowRuntimeResolver
             foreach ($gates as $code => $blockers) {
                 $recoveryRoute = $code === 'inventory_reconciliation_resolve' && \Route::has('accounting.reports.reconciliation.index')
                     ? route('accounting.reports.reconciliation.index') : $route;
-                $readiness[] = $this->inventoryGateReadiness($code, $blockers, $recoveryRoute);
+                $details = match ($code) {
+                    'inventory_purchase_event_wiring' => [
+                        'missing_inventory_items' => $summary['missing_inventory_items'] ?? [],
+                        'missing_inventory_count' => (int) ($summary['missingInventory'] ?? 0),
+                    ],
+                    'reconciliation_zero_gate' => [
+                        'reconciliation_metrics' => $summary['reconciliation'] ?? [],
+                        'unlinked_allocation_details' => $summary['unlinked_allocation_details'] ?? [],
+                        'unlinked_allocation_source_types' => $summary['unlinked_allocation_source_types'] ?? [],
+                    ],
+                    default => [],
+                };
+                $readiness[] = $this->inventoryGateReadiness($code, $blockers, $recoveryRoute, $details);
             }
         } catch (\Throwable) {
             foreach ($codes as $code) {
@@ -290,18 +312,47 @@ final class WorkflowRuntimeResolver
     }
 
     /** @param array<int, string> $blockers */
-    private function inventoryGateReadiness(string $code, array $blockers, ?string $route): array
+    private function inventoryGateReadiness(string $code, array $blockers, ?string $route, array $details = []): array
     {
         $ready = $blockers === [];
+        $labels = [
+            'missing_source_identity' => 'Stock Movement ขาดข้อมูลเอกสารต้นทาง',
+            'missing_inventory_mapping' => 'สินค้าที่มี Movement ยังไม่มีบัญชีสินค้าคงเหลือที่ใช้งานได้',
+            'unlinked_allocations' => 'มี Cost Allocation ที่ยังไม่เชื่อม Journal',
+            'unlinked_journal_line_proof' => 'มีรายการที่ยังไม่มีหลักฐานเชื่อม Journal Line',
+            'mismatched_journal_line_proof' => 'หลักฐาน Journal Line ไม่ตรงกับรายการต้นทุน',
+            'journal_line_proof_unavailable' => 'ระบบยังไม่มีตารางหลักฐาน Journal Line',
+            'allocation_vs_gl_zero' => 'มูลค่า Cost Allocation ไม่ตรงกับบัญชี Inventory ใน GL',
+            'balance_vs_allocation_zero' => 'มูลค่า Stock Balance ไม่ตรงกับ Cost Allocation',
+            'no_unlinked_allocations' => 'มี Cost Allocation ที่ยังไม่มี Journal link',
+            'no_pending_allocations' => 'มี Cost Allocation ที่ยังรอต้นทุน',
+            'no_unlinked_journal_lines' => 'มีรายการที่ยังไม่มีหลักฐานเชื่อม Journal Line',
+            'no_mismatched_journal_lines' => 'มี Journal Line ที่เชื่อมไม่ตรงกับ Allocation',
+            'rounding_difference_zero' => 'มีผลต่างจากการปัดเศษ',
+            'no_unresolved_legacy_review' => 'มี Legacy Review ที่ยังไม่ปิด',
+            'preflight_unavailable' => 'ระบบตรวจสอบข้อมูลไม่สำเร็จ',
+            'warehouse_scope_required' => 'กรุณาเลือกคลังก่อนตรวจสอบ',
+        ];
+        $missingInventory = (int) ($details['missing_inventory_count'] ?? 0);
+        $sourceTypes = $details['unlinked_allocation_source_types'] ?? [];
+        $deferredSourcesOnly = $sourceTypes !== [] && array_diff($sourceTypes, \App\Modules\Wms\Support\InventoryGlScope::DEFERRED_SOURCES) === [];
+        $nextAction = $ready ? 'ผ่าน gate แล้ว สามารถตรวจขั้นตอนถัดไป' : ($missingInventory > 0
+            ? 'แก้ข้อมูลสินค้าแต่ละรายการด้านล่าง โดยเลือกบัญชีสินค้าคงเหลือประเภท INVENTORY ที่ใช้งานและลงบัญชีได้ แล้วตรวจ Gate นี้อีกครั้ง'
+            : ($code === 'reconciliation_zero_gate' && $deferredSourcesOnly
+                ? 'รายการที่ไม่มี Journal มาจาก Transfer/Issue Return ซึ่งยังอยู่นอก Inventory→GL posting scope; Gate จะยังไม่ผ่านจนกว่าจะรองรับ source posting นี้ ห้ามสร้างหรือเชื่อม Journal ด้วยมือ'
+                : ($code === 'reconciliation_zero_gate'
+                    ? 'ตรวจผลต่างและรายการ Allocation ที่แสดงด้านล่างใน Stock Valuation; แก้ที่เอกสารต้นทางและห้ามสร้างหรือเชื่อม Journal ด้วยมือ'
+                    : 'เปิด Stock Valuation เพื่อตรวจรายละเอียดและแก้รายการที่ระบุ')));
 
         return [
             'code' => $code, 'event_code' => $code,
             'status' => $ready ? 'READY' : 'NOT_READY', 'configuration_warning' => false,
             'missing_count' => count($blockers),
-            'block_reason' => $ready ? null : 'ตรวจพบ blocker: '.implode(', ', $blockers),
-            'next_action' => $ready ? 'ผ่าน gate แล้ว สามารถตรวจขั้นตอนถัดไป' : 'เปิด Stock Valuation เพื่อตรวจและแก้ blocker',
-            'recovery_url' => $route, 'recovery_label' => 'เปิดหน้าตรวจสอบ',
+            'block_reason' => $ready ? null : implode(' · ', array_map(fn ($blocker) => $labels[$blocker] ?? $blocker, $blockers)),
+            'next_action' => $nextAction,
+            'recovery_url' => $route, 'recovery_label' => 'เปิด Stock Valuation',
             'recovery_permission' => 'wms.stock-valuation.view', 'route' => null,
+            ...$details,
         ];
     }
 

@@ -11,6 +11,7 @@ use App\Modules\Wms\Models\InventoryAdjustmentDocument;
 use App\Modules\Wms\Models\StockBalance;
 use App\Modules\Wms\Models\StockMovement;
 use App\Modules\Wms\Models\StockReservation;
+use Brick\Math\BigDecimal;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -56,7 +57,9 @@ final class ProductionFinishedReceiptReversalService
             $journal = JournalEntry::query()->with('lines')->lockForUpdate()->findOrFail($journalIds->first());
             if ($journal->status !== 'POSTED' || $journal->source_type !== 'WMS_PRODUCTION_RECEIPT' || $journal->source_event !== 'production.finished_receipt' || (string) $journal->source_id !== (string) $locked->id || (int) $journal->warehouse_id !== (int) $locked->warehouse_id) throw ValidationException::withMessages(['journal' => 'Journal ต้นทางไม่ตรงกับ Production Receipt']);
 
+            $this->assertNoDownstreamFinishedGoodsUse($movements);
             $this->releaseFinishedGoodsReservation($locked);
+            $this->assertFinishedGoodsAvailable($movements);
             $revision = (int) $locked->reversal_revision + 1;
             $key = "reversal:production-finished-receipt:{$locked->id}:revision:{$revision}";
             $reversalJournal = $this->journals->reverseWithinTransaction($journal, ['source_type' => 'WMS_PRODUCTION_RECEIPT', 'source_id' => $key, 'reversal_date' => $date, 'reason' => $reason], $actor);
@@ -108,6 +111,48 @@ final class ProductionFinishedReceiptReversalService
             $this->costPropagation->dispatchIfEnabled('PRODUCTION_FINISHED_RECEIPT', $locked->id, $revision, [], $actor->id);
             return $locked->fresh('lines');
         }, 3);
+    }
+
+    private function assertNoDownstreamFinishedGoodsUse($movements): void
+    {
+        foreach ($movements as $movement) {
+            // ponytail: block any later outbound of this pooled SKU; add lot-level attribution if this conservative guard causes false positives.
+            StockBalance::query()->where([
+                'warehouse_id' => $movement->warehouse_id,
+                'item_id' => $movement->item_id,
+                'uom_id' => $movement->uom_id,
+            ])->lockForUpdate()->first();
+            $usedLater = StockMovement::query()->where('warehouse_id', $movement->warehouse_id)
+                ->where('item_id', $movement->item_id)->where('uom_id', $movement->uom_id)
+                ->where('direction', 'OUT')->where('status', 'POSTED')
+                ->where(fn ($query) => $query->where('created_at', '>', $movement->created_at)
+                    ->orWhere(fn ($sameTime) => $sameTime->where('created_at', $movement->created_at)->where('id', '>', $movement->id)))
+                ->exists();
+            if ($usedLater) {
+                throw ValidationException::withMessages(['status' => 'มีการเบิก/ขาย/เคลื่อนย้ายสินค้าสำเร็จรูปหลังรับผลิต จึงกลับรายการใบรับผลิตนี้ไม่ได้']);
+            }
+        }
+    }
+
+    private function assertFinishedGoodsAvailable($movements): void
+    {
+        $required = [];
+        foreach ($movements as $movement) {
+            $key = $movement->warehouse_id.':'.$movement->item_id.':'.$movement->uom_id;
+            $required[$key]['movement'] = $movement;
+            $required[$key]['quantity'] = ($required[$key]['quantity'] ?? BigDecimal::zero())->plus((string) $movement->base_quantity);
+        }
+        foreach ($required as $row) {
+            $movement = $row['movement'];
+            $balance = StockBalance::query()->where([
+                'warehouse_id' => $movement->warehouse_id,
+                'item_id' => $movement->item_id,
+                'uom_id' => $movement->uom_id,
+            ])->lockForUpdate()->first();
+            if (! $balance || BigDecimal::of((string) $balance->available)->isLessThan($row['quantity'])) {
+                throw ValidationException::withMessages(['stock' => 'สินค้าสำเร็จรูปคงเหลือพร้อมใช้ไม่พอสำหรับกลับรายการ']);
+            }
+        }
     }
 
     private function releaseFinishedGoodsReservation(InventoryAdjustmentDocument $receipt): void
