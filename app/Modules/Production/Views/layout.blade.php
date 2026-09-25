@@ -3,7 +3,7 @@
 @push('styles')
 <link rel="manifest" href="{{ asset('production-shop-floor.webmanifest') }}">
 <meta name="theme-color" content="#c45b22">
-<link rel="apple-touch-icon" href="{{ asset('images/alexiasoft-logo.png') }}">
+<link rel="apple-touch-icon" href="{{ asset('images/mint-icon-192.png') }}">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="MintERP Shop Floor">
 @endpush

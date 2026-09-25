@@ -7,7 +7,10 @@
     <div class="selection-shell container py-5">
         <div class="context-card context-card--glass card border-0 mx-auto">
             <div class="card-body p-4 p-md-5">
-                <span class="selection-icon mb-4"><i class="bx bx-map" aria-hidden="true"></i></span>
+                <div class="d-flex justify-content-between align-items-start gap-3 mb-4">
+                    <span class="selection-icon mb-0"><i class="bx bx-map" aria-hidden="true"></i></span>
+                    <img class="selection-vendor-logo" src="{{ asset('images/mint-erp-logo.png') }}" width="773" height="323" alt="MintERP">
+                </div>
                 <p class="eyebrow mb-2">STEP 2 OF 2</p>
                 <h1 class="h2 mb-2">เลือกสาขา</h1>
                 <p class="text-secondary mb-4">สาขาเป็นบริบทการทำงานหลัก ระบบจะเลือกคลังเริ่มต้นของสาขาให้เมื่อทำรายการสินค้า</p>

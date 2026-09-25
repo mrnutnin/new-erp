@@ -4,21 +4,24 @@
 @section('body-class', 'selection-page')
 
 @section('content')
-    <div class="selection-shell container py-5">
-        <div class="selection-heading mb-4 p-4 p-md-5">
-            <p class="eyebrow mb-2">STEP 1 OF 2</p>
-            <div class="program-selection-brand mb-2">
-                @if ($companyLogoDataUri)
-                    <span class="program-selection-brand__logo-wrap">
-                        <img class="program-selection-brand__logo" src="{{ $companyLogoDataUri }}" alt="โลโก้ {{ $companySetting->company_name }}">
-                    </span>
-                @endif
-                <div class="program-selection-brand__content">
-                    <p class="program-selection-brand__name mb-1">{{ $companySetting->company_name ?: config('app.name') }}</p>
-                    <h1 class="h2 mb-0">เลือกโปรแกรม</h1>
+    <div class="selection-shell container py-4">
+        <div class="selection-heading mb-3 p-3 p-md-4 d-flex justify-content-between align-items-center gap-3">
+            <div class="selection-heading__content flex-grow-1">
+                <p class="eyebrow mb-2">STEP 1 OF 2</p>
+                <div class="program-selection-brand mb-2">
+                    @if ($companyLogoDataUri)
+                        <span class="program-selection-brand__logo-wrap">
+                            <img class="program-selection-brand__logo" src="{{ $companyLogoDataUri }}" alt="โลโก้ {{ $companySetting->company_name }}">
+                        </span>
+                    @endif
+                    <div class="program-selection-brand__content">
+                        <p class="program-selection-brand__name mb-1">{{ $companySetting->company_name ?: config('app.name') }}</p>
+                        <h1 class="h2 mb-0">เลือกโปรแกรม</h1>
+                    </div>
                 </div>
+                <p class="text-secondary mb-0">เลือกส่วนงานที่ต้องการเข้าใช้งาน</p>
             </div>
-            <p class="text-secondary mb-0">เลือกส่วนงานที่ต้องการเข้าใช้งาน</p>
+            <img class="" src="{{ asset('images/mint-icon.png') }}" width="80" height="80" alt="MintERP">
         </div>
 
         @if ($programs->isEmpty())

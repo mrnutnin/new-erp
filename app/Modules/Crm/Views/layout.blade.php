@@ -7,7 +7,7 @@
 @push('styles')
 <link rel="manifest" href="{{ asset('crm-manifest.webmanifest') }}">
 <meta name="theme-color" content="#0f766e">
-<link rel="apple-touch-icon" href="{{ asset('images/crm-icon-192.png') }}">
+<link rel="apple-touch-icon" href="{{ asset('images/mint-icon-192.png') }}">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="MintERP CRM">
 <style>

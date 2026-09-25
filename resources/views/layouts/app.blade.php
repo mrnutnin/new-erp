@@ -5,6 +5,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="csrf-token" content="{{ csrf_token() }}">
     <title>@yield('title', config('app.name'))</title>
+    <link rel="icon" type="image/svg+xml" href="{{ asset('favicon.svg') }}?v={{ filemtime(public_path('favicon.svg')) }}">
+    <link rel="icon" type="image/png" sizes="32x31" href="{{ asset('favicon-32.png') }}?v={{ filemtime(public_path('favicon-32.png')) }}">
+    <link rel="icon" type="image/x-icon" href="{{ asset('favicon.ico') }}?v={{ filemtime(public_path('favicon.ico')) }}">
     <link rel="stylesheet" href="{{ asset('vendor/bootstrap/bootstrap.min.css') }}">
     <link rel="stylesheet" href="https://unpkg.com/boxicons@2.1.4/css/boxicons.min.css">
     <link rel="stylesheet" href="{{ asset('vendor/select2/select2.min.css') }}">
@@ -20,7 +23,9 @@
             <div class="app-shell">
                 <aside class="app-sidebar">
                     <div class="d-flex align-items-center justify-content-between gap-2">
-                        <a class="app-brand text-decoration-none text-dark" href="{{ route('entry') }}">MintERP</a>
+                        <a class="app-brand app-sidebar-brand text-decoration-none" href="{{ route('entry') }}" aria-label="MintERP หน้าแรก">
+                            <img src="{{ asset('images/mint-erp-logo.png') }}" alt="MintERP" width="773" height="323">
+                        </a>
                         <button id="app-sidebar-toggle" class="btn btn-sm btn-outline-secondary" type="button" aria-label="ย่อเมนู" aria-expanded="true" title="ย่อเมนู"><i class="bx bx-menu" aria-hidden="true"></i></button>
                     </div>
                     <nav class="app-sidebar-nav mt-4" aria-label="เมนูหลัก">
@@ -86,7 +91,9 @@
         @else
             <header class="app-header border-bottom bg-white">
                 <div class="container-fluid d-flex align-items-center justify-content-between py-3">
-                    <a class="app-brand text-decoration-none text-dark" href="{{ route('entry') }}">MintERP</a>
+                    <a class="app-brand app-header-brand text-decoration-none" href="{{ route('entry') }}" aria-label="MintERP หน้าแรก">
+                        <img src="{{ asset('images/mint-erp-logo.png') }}" alt="MintERP" width="773" height="323">
+                    </a>
                     <div class="d-flex align-items-center gap-3">
                         <a class="app-header-profile text-secondary small text-decoration-none" href="{{ route('profile.edit') }}">
                             <span class="app-user-avatar">

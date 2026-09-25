@@ -8,7 +8,10 @@
         <div class="auth-card card border-0">
             <div class="row g-0">
                 <div class="auth-intro col-lg-6 p-4 p-md-5" aria-hidden="true">
-                    <div class="auth-brand-mark"><i class="bx bx-grid-alt"></i></div>
+                    <div class="auth-brand-mark">
+                        {{-- <i class="bx bx-grid-alt"></i> --}}
+                        <img class="" src="{{ asset('images/mint-icon.png') }}" width="36" height="36" alt="MintERP">
+                    </div>
                     <p class="eyebrow mt-4 mb-2">MintERP</p>
                     <h2 class="display-6 fw-semibold mb-3">จัดการธุรกิจ<br>ในที่เดียว</h2>
                     <p class="text-secondary mb-0">เชื่อมโยงงานขาย คลังสินค้า การเงิน และบัญชี ให้ทีมทำงานด้วยข้อมูลชุดเดียวกัน</p>
@@ -19,7 +22,7 @@
                 </div>
                 <div class="col-lg-6 p-4 p-md-5">
                     <div class="mb-4">
-                        <img class="auth-vendor-logo" src="{{ asset('images/alexiasoft-logo.png') }}" width="566" height="194" alt="AlexiaSoft Company Limited">
+                        <img class="auth-vendor-logo" src="{{ asset('images/mint-erp-logo.png') }}" width="566" height="194" alt="MintERP">
                         <p class="eyebrow mb-2">ยินดีต้อนรับกลับ</p>
                         <h1 class="h2 mb-2">เข้าสู่ระบบ</h1>
                         <p class="text-secondary mb-0">กรอกบัญชีผู้ใช้เพื่อเข้าสู่พื้นที่ทำงาน</p>
@@ -52,7 +55,7 @@
                         </button>
                     </form>
                     <p class="auth-security-note text-secondary text-center mb-0 mt-4"><i class="bx bx-shield-quarter me-1" aria-hidden="true"></i>การเข้าถึงระบบเป็นไปตามสิทธิ์ของผู้ใช้งาน</p>
-                    <p class="auth-copyright text-center mb-0 mt-2">© {{ now()->year }} AlexiaSoft Company Limited</p>
+                    <p class="auth-copyright text-center mb-0 mt-2"><img class="auth-copyright-logo" src="{{ asset('images/alexiasoft-logo.png') }}" width="566" height="194" alt="" aria-hidden="true"> © {{ now()->year }} AlexiaSoft Company Limited</p>
                 </div>
             </div>
         </div>

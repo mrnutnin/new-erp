@@ -23,8 +23,23 @@ final class MintErpBrandingUiContractTest extends TestCase
         }));
 
         self::assertSame([], $legacyViews, 'พบ Branding เดิมใน: '.implode(', ', $legacyViews));
-        self::assertStringContainsString('MintERP', file_get_contents($root.'/resources/views/layouts/app.blade.php'));
-        self::assertStringContainsString('MintERP', file_get_contents($root.'/app/Modules/Platform/Views/auth/login.blade.php'));
+        $layout = file_get_contents($root.'/resources/views/layouts/app.blade.php');
+        self::assertStringContainsString('MintERP', $layout);
+        self::assertSame(2, substr_count($layout, "asset('images/mint-erp-logo.png')"));
+        self::assertStringNotContainsString("asset('images/mint-icon.png')", $layout);
+        self::assertStringContainsString('favicon.svg', $layout);
+        self::assertStringContainsString('favicon-32.png', $layout);
+        self::assertStringContainsString('favicon.ico', $layout);
+        self::assertStringContainsString('.app-sidebar-brand img', file_get_contents($root.'/public/css/app.css'));
+        self::assertFileExists($root.'/public/favicon.svg');
+        self::assertFileExists($root.'/public/favicon-32.png');
+        self::assertGreaterThan(0, filesize($root.'/public/favicon.ico'));
+        self::assertStringContainsString('data:image/png;base64,', file_get_contents($root.'/public/favicon.svg'));
+        self::assertStringContainsString('.app-header-brand img', file_get_contents($root.'/public/css/app.css'));
+        $login = file_get_contents($root.'/app/Modules/Platform/Views/auth/login.blade.php');
+        self::assertStringContainsString('MintERP', $login);
+        self::assertStringContainsString('images/mint-erp-logo.png', $login);
+        self::assertStringContainsString('images/alexiasoft-logo.png', $login);
         self::assertStringContainsString("env('APP_NAME', 'MintERP')", file_get_contents($root.'/config/app.php'));
     }
 

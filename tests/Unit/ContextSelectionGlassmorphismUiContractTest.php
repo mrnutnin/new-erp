@@ -16,9 +16,14 @@ class ContextSelectionGlassmorphismUiContractTest extends TestCase
         foreach ([$program, $branch] as $view) {
             self::assertStringContainsString("@section('body-class', 'selection-page')", $view);
         }
-        self::assertStringContainsString('selection-heading', $program);
+        self::assertStringContainsString('selection-shell container py-4', $program);
+        self::assertStringContainsString('selection-heading mb-3 p-3 p-md-4', $program);
+        self::assertStringContainsString('selection-vendor-logo', $program);
+        self::assertStringContainsString('.selection-vendor-logo', $css);
         self::assertStringNotContainsString('program-card card h-100 w-100 text-start border-0 shadow-sm', $program);
         self::assertStringContainsString('context-card--glass', $branch);
+        self::assertStringContainsString("asset('images/mint-erp-logo.png')", $branch);
+        self::assertStringContainsString('selection-vendor-logo', $branch);
         self::assertStringContainsString('btn-app-primary', $branch);
         self::assertStringContainsString('.selection-heading,', $css);
         self::assertStringContainsString('.selection-page { display: block; }', $css);

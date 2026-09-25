@@ -105,7 +105,12 @@ body {
     transition: color .15s ease, background-color .15s ease, box-shadow .15s ease, transform .15s ease;
 }
 
-.app-sidebar [id^="pos-"][id$="-menu"] > .list-group-item { padding-left: 2.5rem; }
+.app-sidebar [id$="-menu"] > .list-group-item {
+    padding-left: 2.5rem !important;
+    font-size: 1rem !important;
+    font-weight: 600 !important;
+}
+.app-sidebar .list-group-item.ps-4[data-bs-toggle="collapse"] { padding-left: 1rem !important; }
 
 .app-sidebar .list-group-item:hover,
 .app-sidebar .list-group-item:focus-visible {
@@ -543,6 +548,7 @@ body {
     font-size: .7rem;
     opacity: .65;
 }
+.auth-copyright-logo { width: 2.5rem; height: auto; vertical-align: middle; }
 
 .selection-page main,
 .selection-shell {
@@ -559,6 +565,9 @@ body {
     backdrop-filter: blur(1.5rem) saturate(180%);
     -webkit-backdrop-filter: blur(1.5rem) saturate(180%);
 }
+
+.selection-heading__content { min-width: 0; }
+.selection-vendor-logo { flex: 0 0 auto; width: clamp(5rem, 12vw, 7.5rem); height: auto; }
 
 .selection-icon {
     display: grid;
@@ -1311,6 +1320,9 @@ form:has(#allocation-rows) .table-responsive td:nth-child(2) { min-width: 170px;
 .dataTables_wrapper {
     width: 100%;
 }
+
+.app-sidebar-brand img { display: block; width: clamp(6rem, 9vw, 8rem); height: auto; }
+.app-header-brand img { display: block; width: clamp(4.5rem, 8vw, 7rem); height: auto; }
 
 .app-header-profile {
     display: inline-flex;

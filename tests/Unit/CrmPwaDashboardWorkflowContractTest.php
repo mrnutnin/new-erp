@@ -17,14 +17,28 @@ final class CrmPwaDashboardWorkflowContractTest extends TestCase
         self::assertSame('/crm',$manifest['scope']);
         self::assertSame('standalone',$manifest['display']);
         self::assertCount(2,$manifest['icons']);
-        self::assertFileExists(public_path('images/crm-icon-192.png'));
-        self::assertFileExists(public_path('images/crm-icon-512.png'));
-        self::assertSame([192,192],array_slice(getimagesize(public_path('images/crm-icon-192.png')),0,2));
+        self::assertSame(['/images/mint-icon-192.png', '/images/mint-icon-512.png'], array_column($manifest['icons'], 'src'));
+        self::assertFileExists(public_path('images/mint-icon-192.png'));
+        self::assertFileExists(public_path('images/mint-icon-512.png'));
+        self::assertSame([192,192],array_slice(getimagesize(public_path('images/mint-icon-192.png')),0,2));
+        self::assertSame([512,512],array_slice(getimagesize(public_path('images/mint-icon-512.png')),0,2));
+        self::assertStringContainsString('images/mint-icon-192.png', $layout);
         self::assertStringContainsString('beforeinstallprompt',$layout);
         self::assertStringContainsString('Add to Home Screen',$layout);
         self::assertStringContainsString("register('/crm-push-sw.js')",$layout);
         self::assertStringContainsString("addEventListener('fetch'",$worker);
         self::assertStringNotContainsString('caches.open',$worker);
+    }
+
+    #[Test]
+    public function production_install_uses_the_shared_mint_icons(): void
+    {
+        $manifest = json_decode(file_get_contents(public_path('production-shop-floor.webmanifest')), true, 512, JSON_THROW_ON_ERROR);
+        $layout = file_get_contents(base_path('app/Modules/Production/Views/layout.blade.php'));
+
+        self::assertSame(['/images/mint-icon-192.png', '/images/mint-icon-512.png'], array_column($manifest['icons'], 'src'));
+        self::assertStringContainsString('images/mint-icon-192.png', $layout);
+        self::assertSame('any maskable', $manifest['icons'][0]['purpose']);
     }
 
     #[Test]
