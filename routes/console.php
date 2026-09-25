@@ -2,10 +2,30 @@
 
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Support\Facades\Artisan;
+use App\Modules\Installer\Services\DatabasePreparationService;
 
 Artisan::command('inspire', function () {
     $this->comment(Inspiring::quote());
 })->purpose('Display an inspiring quote');
+
+Artisan::command('erp:setup:prepare-database', function (): int {
+    $result = app(DatabasePreparationService::class)->prepare();
+    if ($result['output'] !== '') {
+        $this->line($result['output']);
+    }
+    if ($result['status'] !== 'success') {
+        $this->error($result['message']);
+        if ($result['error']) {
+            $this->line($result['error']);
+        }
+
+        return 1;
+    }
+
+    $this->info($result['message']);
+
+    return 0;
+})->purpose('Run installer database migrations from the CLI');
 use App\Models\User;
 use App\Modules\Asset\Models\AssetMaintenanceSchedule;
 use App\Modules\Crm\Services\CrmNotificationService;

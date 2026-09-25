@@ -3,8 +3,10 @@
 namespace App\Modules\Installer\Services;
 
 use App\Modules\Installer\Models\InstallationSession;
+use Illuminate\Database\Events\MigrationEnded;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Schema;
 use Throwable;
 
@@ -13,15 +15,24 @@ class DatabasePreparationService
     public function __construct(private readonly InstallerStateStore $stateStore) {}
 
     /** @return array{status:string, message:string, output:string, error:?string} */
-    public function prepare(): array
+    public function prepare(?string $jobId = null): array
     {
-        $this->stateStore->write([
-            'status' => 'IN_PROGRESS',
-            'step_code' => 'database',
-            'message' => 'กำลังเตรียมฐานข้อมูล',
-        ]);
+        $progress = 5;
+        $this->writeProgress($jobId, $progress, 'IN_PROGRESS', 'กำลังเตรียมฐานข้อมูล');
 
         try {
+            $total = $this->pendingMigrationCount();
+            $completed = 0;
+            Event::listen(MigrationEnded::class, function (MigrationEnded $event) use (&$progress, &$completed, $total, $jobId): void {
+                if ($event->method !== 'up') {
+                    return;
+                }
+
+                $completed++;
+                $progress = min(90, 5 + (int) floor(85 * $completed / $total));
+                $this->writeProgress($jobId, $progress, 'IN_PROGRESS', "กำลังทำ Migration ({$completed}/{$total})");
+            });
+
             $exitCode = Artisan::call('migrate', ['--force' => true]);
             $output = trim(Artisan::output());
 
@@ -39,7 +50,11 @@ class DatabasePreparationService
                 throw new \RuntimeException($output !== '' ? $output : 'Migration did not complete successfully.');
             }
 
+            $progress = 93;
+            $this->writeProgress($jobId, $progress, 'IN_PROGRESS', 'กำลังตรวจสอบ schema ที่จำเป็น');
             $this->assertRequiredSchemaReady();
+            $progress = 97;
+            $this->writeProgress($jobId, $progress, 'IN_PROGRESS', 'กำลังบันทึกผลการเตรียมฐานข้อมูล');
 
             $session = DB::transaction(function () use ($output): InstallationSession {
                 $session = InstallationSession::query()->latest('id')->first();
@@ -69,10 +84,7 @@ class DatabasePreparationService
                 return $session;
             });
 
-            $this->stateStore->write([
-                'status' => 'COMPLETED',
-                'step_code' => 'database',
-                'message' => 'เตรียมฐานข้อมูลสำเร็จ',
+            $this->writeProgress($jobId, 100, 'COMPLETED', 'เตรียมฐานข้อมูลสำเร็จ', [
                 'installation_session_id' => $session->id,
             ]);
 
@@ -81,11 +93,9 @@ class DatabasePreparationService
             report($exception);
             $message = 'ไม่สามารถเตรียมฐานข้อมูลได้ กรุณาตรวจสอบการเชื่อมต่อและลองใหม่';
 
-            $this->stateStore->write([
-                'status' => 'FAILED',
-                'step_code' => 'database',
-                'message' => $message,
+            $this->writeProgress($jobId, $progress, 'FAILED', $message, [
                 'technical_detail' => $exception->getMessage(),
+                'error' => $this->safeError($exception),
             ]);
 
             if ($this->hasInstallerTables()) {
@@ -101,6 +111,30 @@ class DatabasePreparationService
 
             return ['status' => 'failed', 'message' => $message, 'output' => '', 'error' => $this->safeError($exception)];
         }
+    }
+
+    private function writeProgress(?string $jobId, int $progress, string $status, string $message, array $extra = []): void
+    {
+        $this->stateStore->write([
+            'job_id' => $jobId,
+            'status' => $status,
+            'step_code' => 'database',
+            'progress' => $progress,
+            'message' => $message,
+            ...$extra,
+        ]);
+    }
+
+    private function pendingMigrationCount(): int
+    {
+        $files = array_merge(
+            glob(database_path('migrations/*_*.php')) ?: [],
+            glob(database_path('migrations/installer/*_*.php')) ?: [],
+        );
+        $applied = Schema::hasTable('migrations') ? DB::table('migrations')->pluck('migration')->all() : [];
+        $pending = count(array_filter($files, fn (string $file): bool => ! in_array(pathinfo($file, PATHINFO_FILENAME), $applied, true)));
+
+        return max(1, $pending);
     }
 
     private function safeError(Throwable $exception): string

@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>ERP Setup | {{ config('app.name') }}</title>
     <link rel="stylesheet" href="{{ asset('vendor/bootstrap/bootstrap.min.css') }}">
+    <link rel="stylesheet" href="{{ asset('css/app.css') }}?v={{ filemtime(public_path('css/app.css')) }}">
     <style>
         body { background: #f3f5f8; color: #20252b; }
         .setup-shell { max-width: 1040px; margin: 4rem auto; }
@@ -89,14 +90,19 @@
                         @endif
                     @endif
                 @else
-                    ขั้นถัดไปคือ <strong>Prepare Database</strong> ระบบจะทำ migration ผ่าน Web UI แบบ retry-safe โดยไม่ต้องให้ผู้ใช้รัน Artisan เอง
+                    ขั้นตอนติดตั้งฐานข้อมูล
                     @if ($databaseReady && ! $failed)
-                        <form id="prepare-database-form" class="mt-3" action="{{ route('installer.prepare-database', ['token' => $token]) }}" method="post">
-                            <button id="prepare-database-button" class="btn btn-dark" type="submit"><span class="js-button-label">Prepare Database</span><span class="js-button-loading d-none"><span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>กำลังเตรียมฐานข้อมูล…</span></button>
+                        <ol class="mt-3 mb-2">
+                            <li><strong>Prepare Job</strong> — ระบบสร้าง background job เมื่อกดเริ่มงาน</li>
+                            <li><strong>Prepare Database</strong> — job รัน migrations และแสดงความคืบหน้าด้านล่าง</li>
+                        </ol>
+                        <p class="small text-secondary mb-0">หลังสำเร็จ ให้ทำ Initialize System Defaults → Company Information / Default Organization / Administrator → Seed Master Data UAT ตามลำดับ</p>
+                        <form id="prepare-database-form" class="mt-3" action="{{ route('installer.prepare-database', ['token' => $token]) }}" data-status-url="{{ route('installer.prepare-database.status', ['token' => $token]) }}" method="post">
+                            <button id="prepare-database-button" class="btn btn-app-primary" type="submit"><span class="js-button-label">Prepare Database</span><span class="js-button-loading d-none"><span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>กำลังสร้าง Prepare Job…</span></button>
                         </form>
                         <div id="prepare-database-progress" class="mt-3 d-none">
                             <div class="d-flex justify-content-between small text-secondary mb-1"><span id="prepare-database-stage">กำลังเริ่มต้น…</span><span id="prepare-database-percent">0%</span></div>
-                            <div class="installer-progress" role="progressbar" aria-label="Prepare Database progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div id="prepare-database-progress-bar" class="installer-progress-bar"></div></div>
+                            <div class="installer-progress" role="progressbar" aria-label="Prepare Database progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div id="prepare-database-progress-bar" class="installer-progress-bar progress-bar progress-bar-striped progress-bar-animated"></div></div>
                         </div>
                         <div id="prepare-database-result" class="mt-3 d-none" role="alert"></div>
                     @endif
@@ -181,7 +187,13 @@
                                 <div class="col-md-6"><label class="form-label">สกุลเงิน</label><input name="base_currency" maxlength="3" class="form-control" value="{{ old('base_currency', $company?->base_currency ?? 'THB') }}"></div>
                                 <div class="col-md-6"><label class="form-label">ภาษา</label><select name="locale" class="form-select"><option value="th" @selected(($company?->locale ?? 'th') === 'th')>ไทย</option><option value="en" @selected($company?->locale === 'en')>English</option></select></div>
                                 <div class="col-md-6"><label class="form-label">Timezone</label><select name="timezone" class="form-select"><option value="Asia/Bangkok" @selected(($company?->timezone ?? 'Asia/Bangkok') === 'Asia/Bangkok')>Asia/Bangkok</option><option value="UTC" @selected($company?->timezone === 'UTC')>UTC</option></select></div>
-                                <div class="col-12"><button class="btn btn-dark" type="submit">บันทึกข้อมูลบริษัท</button></div>
+                                <div class="col-12"><label class="form-label" for="production_enabled">Production</label><select id="production_enabled" name="production_enabled" class="form-select" required><option value="0" @selected((string) old('production_enabled', (int) ($company?->production_enabled ?? false)) === '0')>ไม่เปิดใช้ Production (Trading)</option><option value="1" @selected((string) old('production_enabled', (int) ($company?->production_enabled ?? false)) === '1')>เปิดใช้ Production (Manufacturing)</option></select><div class="form-text">ตัวเลือกนี้เปิด Production capability และเปลี่ยนประเภทธุรกิจเป็น Manufacturing; ตรวจให้เลือก Production ไว้ในส่วน Modules ด้วย</div></div>
+                                <div class="col-12"><hr class="my-1"><h4 class="h6 mb-0">Global Settings สำหรับ readiness</h4><p class="small text-secondary mb-0">ค่าเริ่มต้นปรับได้ตามนโยบายบริษัท และแก้ไขภายหลังใน Company Settings</p></div>
+                                <div class="col-md-6"><label class="form-label" for="posting_sla_minutes">SLA การลงบัญชี (นาที)</label><input id="posting_sla_minutes" name="posting_sla_minutes" type="number" min="1" max="10080" required class="form-control" value="{{ old('posting_sla_minutes', $company?->posting_sla_minutes ?? 60) }}"><div class="form-text">ค่าเริ่มต้น 60 นาที</div></div>
+                                <div class="col-md-6"><label class="form-label" for="recost_sla_minutes">SLA การคำนวณต้นทุนใหม่ (นาที)</label><input id="recost_sla_minutes" name="recost_sla_minutes" type="number" min="1" max="10080" required class="form-control" value="{{ old('recost_sla_minutes', $company?->recost_sla_minutes ?? 60) }}"><div class="form-text">ค่าเริ่มต้น 60 นาที</div></div>
+                                <div class="col-md-6"><label class="form-label" for="audit_retention_days">อายุการเก็บ Audit (วัน)</label><input id="audit_retention_days" name="audit_retention_days" type="number" min="1" max="36500" required class="form-control" value="{{ old('audit_retention_days', $company?->audit_retention_days ?? 3650) }}"><div class="form-text">ค่าเริ่มต้น 3,650 วัน; ตั้งตามนโยบายองค์กร</div></div>
+                                <div class="col-md-6"><label class="form-label" for="file_retention_days">อายุการเก็บไฟล์ (วัน)</label><input id="file_retention_days" name="file_retention_days" type="number" min="1" max="36500" required class="form-control" value="{{ old('file_retention_days', $company?->file_retention_days ?? 3650) }}"><div class="form-text">ค่าเริ่มต้น 3,650 วัน; ตั้งตามนโยบายองค์กร</div></div>
+                                <div class="col-12"><button class="btn btn-dark" type="submit">บันทึกข้อมูลบริษัทและ Global Settings</button></div>
                             </form>
                         </div>
                     </div>
@@ -231,6 +243,35 @@
                     </div>
                 </div>
             </section>
+
+            @if ($uatSeedEnabled)
+                <section class="setup-card bg-white p-4 p-md-5 mt-4">
+                    <div class="d-flex flex-wrap align-items-start justify-content-between gap-3 mb-3">
+                        <div><h2 class="h4 mb-1">UAT Demo Data</h2><p class="text-secondary mb-0">สร้าง Master Data สำหรับทดลองใช้งานในสาขา/คลัง UAT แยกจากข้อมูลเดิม</p></div>
+                        <span class="badge text-bg-info px-3 py-2">ไม่สร้างหรือ Post Stock / Journal</span>
+                    </div>
+                    <p class="small text-secondary">เพิ่มสินค้าและหน่วยพร้อม Conversion, ลูกค้า/ผู้ขาย, เงื่อนไขชำระเงิน, บัญชีรับ–จ่าย, Price List และข้อมูลเริ่มต้นของ Production/Asset ตาม Module ที่เปิดใช้ รันซ้ำได้โดยไม่สร้างซ้ำ หลังเข้าสู่ระบบให้เลือกสาขา UAT และคลัง UAT เพื่อดู readiness ของบริบทนี้</p>
+                    @if (! $administrator)
+                        <div class="alert alert-warning mb-0">สร้าง Administrator ก่อน แล้วจึงสร้างข้อมูลตัวอย่าง UAT ได้</div>
+                    @elseif (! $company?->company_name || ! $defaultBranch?->is_active || ! $defaultWarehouse?->is_active)
+                        <div class="alert alert-warning mb-0">บันทึก Company Information และสร้าง Default Organization ก่อน แล้วจึงสร้างข้อมูลตัวอย่าง UAT ได้</div>
+                    @else
+                        <form action="{{ route('installer.seed-uat-demo-data', ['token' => $token]) }}" method="post" onsubmit="return confirm('ยืนยันสร้าง UAT Demo Data? ระบบจะไม่แก้ข้อมูลคลังเดิมและไม่สร้าง Stock Movement หรือ Journal')"><button class="btn btn-dark" type="submit">สร้าง/ตรวจสอบข้อมูลตัวอย่าง UAT</button></form>
+                    @endif
+                    @if ($uatSeedReport)
+                        <div class="alert {{ $uatSeedReport['all_gates_ready'] ? 'alert-success' : 'alert-warning' }} mt-3 mb-3">
+                            UAT: สาขา <strong>{{ $uatSeedReport['branch']->code }}</strong> · คลัง <strong>{{ $uatSeedReport['warehouse']->code }}</strong> — ผ่าน {{ $uatSeedReport['readiness_ready'] }} / {{ $uatSeedReport['readiness_total'] }} readiness checks
+                            <div class="small mt-1">ไม่มีการตั้งยอด Stock เริ่มต้น; คลังว่างเริ่มจากยอดศูนย์ได้ และไม่กระทบข้อมูลคลังเดิม</div>
+                            <div class="small mt-1">สร้าง/ตรวจสอบ: {{ $uatSeedReport['counts']['uoms'] }} หน่วย · {{ $uatSeedReport['counts']['conversions'] }} Conversion · {{ $uatSeedReport['counts']['items'] }} สินค้า · {{ $uatSeedReport['counts']['parties'] }} คู่ค้า · {{ $uatSeedReport['counts']['bank_accounts'] }} บัญชีรับ–จ่าย</div>
+                        </div>
+                        <div class="table-responsive"><table class="table table-sm align-middle mb-0"><thead><tr><th>Module</th><th>Gate</th><th>สถานะ</th><th>รายละเอียด</th></tr></thead><tbody>
+                            @foreach ($uatSeedReport['readiness'] as $check)
+                                <tr><td>{{ strtoupper($check['module']) }}</td><td>{{ $check['code'] }}</td><td><span class="badge {{ $check['status'] === 'READY' ? 'text-bg-success' : 'text-bg-warning' }}">{{ $check['status'] === 'READY' ? 'ผ่าน' : 'ตรวจสอบ' }}</span></td><td>{{ $check['block_reason'] ?: 'พร้อมใช้งาน' }}</td></tr>
+                            @endforeach
+                        </tbody></table></div>
+                    @endif
+                </section>
+            @endif
 
             <section class="setup-card bg-white p-4 p-md-5 mt-4">
                 <div class="d-flex flex-wrap align-items-start justify-content-between gap-3 mb-4">
@@ -383,60 +424,92 @@ document.addEventListener('DOMContentLoaded', function () {
     const progressPercent = document.getElementById('prepare-database-percent');
     const progressStage = document.getElementById('prepare-database-stage');
     const progressTrack = progress.querySelector('[role="progressbar"]');
-    let progressTimer;
     let progressValue = 0;
-    const stages = [[8, 'กำลังตรวจสอบคำขอ…'], [25, 'กำลังตรวจสอบการเชื่อมต่อ…'], [55, 'กำลังทำ Migration…'], [78, 'กำลังตรวจสอบตารางระบบ…'], [92, 'กำลังสรุปผล…']];
+
     function setProgress(value, stage) {
-        progressValue = Math.max(progressValue, value);
+        progressValue = Math.max(progressValue, Math.min(100, Number(value) || 0));
         progressBar.style.width = progressValue + '%';
         progressPercent.textContent = progressValue + '%';
         progressStage.textContent = stage;
         progressTrack.setAttribute('aria-valuenow', progressValue);
     }
-    function startProgress() {
-        progress.classList.remove('d-none');
-        let index = 0;
-        setProgress(stages[0][0], stages[0][1]);
-        progressTimer = window.setInterval(function () {
-            if (index < stages.length - 1) {
-                index += 1;
-                setProgress(stages[index][0], stages[index][1]);
-            }
-        }, 900);
+    function showError(message, detail) {
+        result.replaceChildren();
+        const heading = document.createElement('strong');
+        heading.textContent = 'เตรียมฐานข้อมูลไม่สำเร็จ';
+        const text = document.createElement('div');
+        text.className = 'mt-1';
+        text.textContent = message || 'เกิดข้อผิดพลาด';
+        result.append(heading, text);
+        if (detail) {
+            const details = document.createElement('details');
+            details.className = 'mt-3';
+            details.open = true;
+            const summary = document.createElement('summary');
+            summary.className = 'fw-semibold';
+            summary.textContent = 'SQL / Technical Error สำหรับ Developer';
+            const pre = document.createElement('pre');
+            pre.className = 'small text-wrap bg-dark text-light rounded p-3 mt-2 mb-0';
+            pre.textContent = detail;
+            details.append(summary, pre);
+            result.append(details);
+        }
+        result.className = 'alert alert-danger mt-3';
+        progressStage.textContent = 'Prepare Database ไม่สำเร็จ';
+        button.disabled = false;
+        label.textContent = 'Prepare Database';
+        label.classList.remove('d-none');
+        loading.classList.add('d-none');
     }
-    function stopProgress() { if (progressTimer) window.clearInterval(progressTimer); }
+    async function poll(jobId, startedAt) {
+        try {
+            const url = new URL(form.dataset.statusUrl, window.location.href);
+            url.searchParams.set('job_id', jobId);
+            const response = await fetch(url, { headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' } });
+            const state = await response.json();
+            if (!response.ok) throw new Error(state.message || 'ไม่สามารถอ่านสถานะ Prepare Job ได้');
+            setProgress(state.status === 'QUEUED' ? Math.max(4, state.progress) : state.progress, state.message);
+            if (state.status === 'COMPLETED') {
+                setProgress(100, 'เตรียมฐานข้อมูลสำเร็จ');
+                result.className = 'alert alert-success mt-3';
+                result.textContent = state.message + ' กำลังโหลดขั้นตอนถัดไป…';
+                window.setTimeout(function () { window.location.reload(); }, 700);
+                return;
+            }
+            if (state.status === 'FAILED') {
+                showError(state.message, state.error);
+                return;
+            }
+            if (state.status === 'QUEUED' && Date.now() - startedAt > 60000) {
+                throw new Error('Prepare Job ยังไม่เริ่มทำงาน กรุณาตรวจสอบ PHP proc_open และ Server Log');
+            }
+            window.setTimeout(function () { poll(jobId, startedAt); }, 1000);
+        } catch (error) {
+            showError(error.message || 'ไม่สามารถรับสถานะจาก Installer ได้ กรุณาตรวจสอบ Server Log แล้วลองใหม่');
+        }
+    }
     form.addEventListener('submit', async function (event) {
         event.preventDefault();
         button.disabled = true;
         label.classList.add('d-none');
         loading.classList.remove('d-none');
         result.className = 'mt-3 d-none';
-        startProgress();
+        progress.classList.remove('d-none');
+        setProgress(0, 'กำลังสร้าง Prepare Job…');
         try {
             const response = await fetch(form.action, { method: 'POST', body: new FormData(form), headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' } });
             const payload = await response.json();
-            if (!response.ok || payload.status !== 'success') {
-                stopProgress();
-                progressStage.textContent = 'Prepare Database ไม่สำเร็จ';
-                result.className = 'alert alert-danger mt-3';
-                result.innerHTML = '<strong>เตรียมฐานข้อมูลไม่สำเร็จ</strong><div class="mt-1">' + (payload.message || 'เกิดข้อผิดพลาด') + '</div>' + (payload.error ? '<details class="mt-3" open><summary class="fw-semibold">SQL / Technical Error สำหรับ Developer</summary><pre class="small text-wrap bg-dark text-light rounded p-3 mt-2 mb-0">' + String(payload.error).replace(/[&<>]/g, function (char) { return {'&':'&amp;','<':'&lt;','>':'&gt;'}[char]; }) + '</pre></details>' : '');
+            if (!response.ok || payload.status !== 'queued' || !payload.job_id) {
+                showError(payload.message, payload.error);
                 return;
             }
-            stopProgress();
-            setProgress(100, 'เตรียมฐานข้อมูลสำเร็จ');
-            result.className = 'alert alert-success mt-3';
-            result.textContent = payload.message || 'เตรียมฐานข้อมูลสำเร็จแล้ว กำลังโหลดขั้นตอนถัดไป…';
-            window.setTimeout(function () { window.location.reload(); }, 700);
-        } catch (error) {
-            stopProgress();
-            progressStage.textContent = 'หยุดการทำงานเนื่องจากไม่สามารถรับผลลัพธ์จาก Server ได้';
-            result.className = 'alert alert-danger mt-3';
-            result.textContent = 'ไม่สามารถรับผลลัพธ์จาก Installer ได้ กรุณาตรวจสอบ Server Log แล้วลองใหม่';
-        } finally {
-            stopProgress();
-            button.disabled = false;
-            label.classList.remove('d-none');
             loading.classList.add('d-none');
+            label.textContent = 'กำลังเตรียมฐานข้อมูล…';
+            label.classList.remove('d-none');
+            const startedAt = Date.now();
+            poll(payload.job_id, startedAt);
+        } catch (error) {
+            showError('ไม่สามารถเริ่ม Prepare Job ได้ กรุณาตรวจสอบ Server Log แล้วลองใหม่');
         }
     });
 });

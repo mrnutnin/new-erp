@@ -93,6 +93,24 @@
                                     </select>
                                     <div class="invalid-feedback" data-error-for="date_format"></div>
                                 </div>
+                                <div class="col-12"><hr class="my-2"><h3 class="h6 mb-0">ประเภทธุรกิจและ Production</h3></div>
+                                <div class="col-12 col-md-6">
+                                    <label class="form-label" for="business_profile">ประเภทธุรกิจ</label>
+                                    <select class="form-select" id="business_profile" name="business_profile" required @disabled(! $canUpdate)>
+                                        <option value="TRADING" @selected(old('business_profile', $setting->business_profile ?? 'TRADING') === 'TRADING')>Trading — ซื้อมาขายไป</option>
+                                        <option value="MANUFACTURING" @selected(old('business_profile', $setting->business_profile ?? 'TRADING') === 'MANUFACTURING')>Manufacturing — มีการผลิต</option>
+                                    </select>
+                                    <div class="invalid-feedback" data-error-for="business_profile"></div>
+                                </div>
+                                <div class="col-12 col-md-6">
+                                    <label class="form-label" for="production_enabled">โมดูล Production</label>
+                                    <select class="form-select" id="production_enabled" name="production_enabled" required @disabled(! $canUpdate)>
+                                        <option value="0" @selected((string) old('production_enabled', (int) ($setting->production_enabled ?? false)) === '0')>ปิดใช้งาน</option>
+                                        <option value="1" @selected((string) old('production_enabled', (int) ($setting->production_enabled ?? false)) === '1')>เปิดใช้งาน</option>
+                                    </select>
+                                    <div class="form-text">เปิดได้เมื่อเลือกประเภทธุรกิจ Manufacturing และเปิดโปรแกรม Production ไว้</div>
+                                    <div class="invalid-feedback" data-error-for="production_enabled"></div>
+                                </div>
                             </div>
 
                             <hr class="my-4">

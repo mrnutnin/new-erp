@@ -29,6 +29,22 @@ class UpdateCompanySettingRequestTest extends TestCase
         $this->assertTrue($validator->errors()->has('negative_stock_cost_method'));
     }
 
+    public function test_production_requires_a_manufacturing_business_profile_and_is_configurable_in_company_settings(): void
+    {
+        $request = UpdateCompanySettingRequest::create('/', 'PUT', [
+            'business_profile' => 'TRADING',
+            'production_enabled' => '1',
+        ]);
+        $validator = (new Factory(new Translator(new ArrayLoader, 'en')))->make($request->all(), $request->rules());
+        $request->withValidator($validator);
+
+        $this->assertTrue($validator->errors()->has('production_enabled'));
+
+        $view = file_get_contents(dirname(__DIR__, 2).'/app/Modules/Settings/Views/company/edit.blade.php');
+        $this->assertStringContainsString('name="business_profile"', $view);
+        $this->assertStringContainsString('name="production_enabled"', $view);
+    }
+
     public function test_manual_discount_approval_threshold_must_be_a_percentage(): void
     {
         $request = UpdateCompanySettingRequest::create('/', 'PUT', [

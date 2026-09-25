@@ -10,6 +10,7 @@ return [
     'setup' => [
         'enabled' => (bool) env('ERP_SETUP_ENABLED', false),
         'token' => (string) env('ERP_SETUP_TOKEN', ''),
+        'uat_seed_enabled' => (bool) env('ERP_SETUP_UAT_SEED_ENABLED', in_array(env('APP_ENV', 'production'), ['local', 'testing'], true)),
     ],
     'inventory' => [
         // Manual WMS Finished Receipt is a supported MVP flow. Set the env

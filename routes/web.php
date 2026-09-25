@@ -10,7 +10,9 @@ use Illuminate\Support\Facades\Route;
 Route::withoutMiddleware([VerifyCsrfToken::class, StartSession::class, ShareErrorsFromSession::class])->group(function (): void {
     Route::get('/setup', [SetupController::class, 'index'])->name('installer.index');
     Route::post('/setup/prepare-database', [SetupController::class, 'prepareDatabase'])->name('installer.prepare-database');
+    Route::get('/setup/prepare-database/status', [SetupController::class, 'prepareDatabaseStatus'])->name('installer.prepare-database.status');
     Route::post('/setup/initialize-defaults', [SetupController::class, 'initializeDefaults'])->name('installer.initialize-defaults');
+    Route::post('/setup/seed-uat-demo-data', [SetupController::class, 'seedUatDemoData'])->name('installer.seed-uat-demo-data');
     Route::post('/setup/company', [SetupController::class, 'saveCompany'])->name('installer.company');
     Route::post('/setup/modules', [SetupController::class, 'selectModules'])->name('installer.modules');
     Route::post('/setup/organization', [SetupController::class, 'ensureOrganization'])->name('installer.organization');

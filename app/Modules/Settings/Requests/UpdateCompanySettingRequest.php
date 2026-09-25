@@ -4,6 +4,7 @@ namespace App\Modules\Settings\Requests;
 
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\Validator;
 
 class UpdateCompanySettingRequest extends FormRequest
 {
@@ -24,6 +25,15 @@ class UpdateCompanySettingRequest extends FormRequest
         ]);
     }
 
+    public function withValidator(Validator $validator): void
+    {
+        $validator->after(function (Validator $validator): void {
+            if ($this->boolean('production_enabled') && $this->input('business_profile') !== 'MANUFACTURING') {
+                $validator->errors()->add('production_enabled', 'เปิด Production ได้เมื่อประเภทธุรกิจเป็น Manufacturing');
+            }
+        });
+    }
+
     public function rules(): array
     {
         return [
@@ -35,8 +45,8 @@ class UpdateCompanySettingRequest extends FormRequest
             'timezone' => ['required', 'timezone:all'],
             'base_currency' => ['required', 'alpha', 'size:3'],
             'date_format' => ['required', 'in:d/m/Y,Y-m-d'],
-            'business_profile' => ['nullable', 'in:TRADING,MANUFACTURING'],
-            'production_enabled' => ['nullable', 'boolean'],
+            'business_profile' => ['required', 'in:TRADING,MANUFACTURING'],
+            'production_enabled' => ['required', 'boolean'],
             'asset_enabled' => ['nullable', 'boolean'],
             'asset_depreciation_proration' => ['required', 'in:DAILY,FULL_MONTH'],
             'accounting_profile' => ['nullable', 'in:PAE,NPAE'],

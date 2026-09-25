@@ -10,9 +10,9 @@ use App\Models\User;
 use App\Models\Warehouse;
 use App\Modules\Accounting\Services\JournalPostingService;
 use App\Modules\Finance\Services\OpenItemService;
+use App\Modules\Installer\Jobs\PrepareDatabaseJob;
 use App\Modules\Installer\Models\InstallationSession;
 use App\Modules\Installer\Services\CustomerSetupService;
-use App\Modules\Installer\Services\DatabasePreparationService;
 use App\Modules\Installer\Services\EmployeeImportService;
 use App\Modules\Installer\Services\GoLiveService;
 use App\Modules\Installer\Services\InstallationValidationService;
@@ -23,6 +23,8 @@ use App\Modules\Installer\Services\PartyImportService;
 use App\Modules\Installer\Services\SystemDefaultOrchestrator;
 use App\Modules\Platform\Models\MigrationImportBatch;
 use App\Modules\Platform\Services\SpreadsheetService;
+use App\Modules\Platform\Services\WorkflowRuntimeResolver;
+use Database\Seeders\UatDemoDataSeeder;
 use App\Modules\Wms\Services\OpeningBalanceImportService;
 use App\Modules\Wms\Services\OpeningBalanceService;
 use App\Modules\Wms\Support\OpeningBalanceTemplate;
@@ -31,7 +33,9 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Str;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\View\View;
@@ -45,23 +49,83 @@ class SetupController extends Controller
         return $this->render($request);
     }
 
-    public function prepareDatabase(Request $request, DatabasePreparationService $preparation): View|JsonResponse
+    public function prepareDatabase(Request $request, InstallerStateStore $stateStore): View|JsonResponse
     {
         abort_unless((bool) config('erp.setup.enabled'), 404);
         abort_unless($this->authorized($request), 403);
         $this->assertInstallerOpen();
 
-        $result = $preparation->prepare();
+        if (! $this->databaseIsReachable()) {
+            return response()->json(['status' => 'failed', 'message' => 'เชื่อมต่อฐานข้อมูลไม่ได้ กรุณาตรวจสอบค่า .env'], 422);
+        }
+
+        if (! function_exists('proc_open')) {
+            return response()->json(['status' => 'failed', 'message' => 'PHP ปิด proc_open จึงเริ่ม Background Job ไม่ได้ กรุณาเปิดใช้ proc_open'], 422);
+        }
+
+        $current = $stateStore->read();
+        $activeWindow = ($current['status'] ?? '') === 'QUEUED' ? 45 : 1800;
+        if (in_array($current['status'] ?? '', ['QUEUED', 'IN_PROGRESS'], true)
+            && isset($current['updated_at'])
+            && \Illuminate\Support\Carbon::parse($current['updated_at'])->gt(now()->subSeconds($activeWindow))) {
+            return response()->json([
+                'status' => 'queued',
+                'job_id' => $current['job_id'] ?? null,
+                'message' => $current['message'] ?? 'กำลังเตรียมฐานข้อมูล',
+            ], 202);
+        }
+
+        $jobId = (string) Str::uuid();
+        $stateStore->write([
+            'job_id' => $jobId,
+            'status' => 'QUEUED',
+            'step_code' => 'prepare-job',
+            'progress' => 0,
+            'message' => 'สร้าง Prepare Job แล้ว กำลังเริ่มเตรียมฐานข้อมูล',
+        ]);
+
+        try {
+            Queue::connection('background')->push(new PrepareDatabaseJob($jobId));
+        } catch (Throwable $exception) {
+            $message = 'ไม่สามารถเริ่ม Prepare Job ได้';
+            $stateStore->write([
+                'job_id' => $jobId,
+                'status' => 'FAILED',
+                'step_code' => 'prepare-job',
+                'progress' => 0,
+                'message' => $message,
+                'error' => $this->safeExceptionDetail($exception),
+            ]);
+
+            return response()->json(['status' => 'failed', 'message' => $message, 'error' => $this->safeExceptionDetail($exception)], 503);
+        }
 
         if ($request->expectsJson() || $request->ajax()) {
             return response()->json([
-                'status' => $result['status'],
-                'message' => $result['message'],
-                'error' => $result['error'],
-            ], $result['status'] === 'success' ? 200 : 422);
+                'status' => 'queued',
+                'job_id' => $jobId,
+                'message' => 'สร้าง Prepare Job แล้ว กำลังเตรียมฐานข้อมูล',
+            ], 202);
         }
 
-        return $this->render($request, $result['message'].($result['error'] ? ' รายละเอียด: '.$result['error'] : ''));
+        return $this->render($request, 'สร้าง Prepare Job แล้ว กำลังเตรียมฐานข้อมูล');
+    }
+
+    public function prepareDatabaseStatus(Request $request, InstallerStateStore $stateStore): JsonResponse
+    {
+        abort_unless((bool) config('erp.setup.enabled'), 404);
+        abort_unless($this->authorized($request), 403);
+        $jobId = (string) $request->query('job_id', '');
+        $state = $stateStore->read();
+        abort_unless($jobId !== '' && hash_equals((string) ($state['job_id'] ?? ''), $jobId), 404);
+
+        return response()->json([
+            'job_id' => $jobId,
+            'status' => $state['status'] ?? 'QUEUED',
+            'progress' => (int) ($state['progress'] ?? 0),
+            'message' => $state['message'] ?? 'กำลังเริ่มงาน',
+            'error' => $state['error'] ?? null,
+        ]);
     }
 
     public function initializeDefaults(Request $request, SystemDefaultOrchestrator $orchestrator): View
@@ -79,6 +143,47 @@ class SetupController extends Controller
         return $this->render($request, $result['message']);
     }
 
+    public function seedUatDemoData(Request $request, UatDemoDataSeeder $seeder, WorkflowRuntimeResolver $runtime): View
+    {
+        abort_unless((bool) config('erp.setup.enabled'), 404);
+        abort_unless((bool) config('erp.setup.uat_seed_enabled'), 404);
+        abort_unless($this->authorized($request), 403);
+        $this->assertInstallerOpen();
+
+        if (! $this->hasInstallerTables() || ! $this->hasSeedVersionTable()) {
+            return $this->render($request, 'กรุณา Prepare Database และ Initialize System Defaults ก่อนสร้าง UAT Demo Data');
+        }
+        if (! CompanySetting::query()->whereNotNull('company_name')->where('company_name', '!=', '')->exists()
+            || ! Branch::query()->where('code', '00000')->where('is_active', true)->exists()
+            || ! Warehouse::query()->where('code', 'WH001')->where('is_active', true)->exists()) {
+            return $this->render($request, 'กรุณาบันทึก Company Information และสร้าง Default Organization ก่อนสร้าง UAT Demo Data');
+        }
+
+        try {
+            $result = $seeder->run();
+            $admin = User::query()->whereHas('roles', fn ($query) => $query->where('roles.code', 'admin'))->latest('id')->firstOrFail();
+            $checks = collect();
+            foreach (['settings', 'wms', 'pos', 'finance', 'accounting', 'asset'] as $module) {
+                foreach ($runtime->snapshot($module, $admin, (int) $result['warehouse']->id)->readiness as $check) {
+                    $checks->push([
+                        'module' => $module, 'code' => $check['code'] ?? $check['event_code'] ?? $module,
+                        'status' => $check['status'] ?? 'UNKNOWN', 'block_reason' => $check['block_reason'] ?? null,
+                    ]);
+                }
+            }
+            $result['readiness'] = $checks->all();
+            $result['readiness_total'] = $checks->count();
+            $result['readiness_ready'] = $checks->where('status', 'READY')->count();
+            $result['all_gates_ready'] = $checks->isNotEmpty() && $checks->every(fn (array $check): bool => $check['status'] === 'READY');
+
+            return $this->render($request, 'สร้าง UAT Demo Data แล้ว'.($result['all_gates_ready'] ? ' และ readiness gates ผ่านครบ' : ' กรุณาตรวจรายการ readiness ที่ยังไม่ผ่าน'), null, $result);
+        } catch (Throwable $exception) {
+            report($exception);
+
+            return $this->render($request, 'ไม่สามารถสร้าง UAT Demo Data ได้ กรุณาตรวจสอบรายละเอียดสำหรับ Developer แล้วลองใหม่: '.$this->safeExceptionDetail($exception));
+        }
+    }
+
     public function saveCompany(Request $request, CustomerSetupService $setup): View
     {
         return $this->runCustomerAction($request, function () use ($request, $setup): string {
@@ -89,6 +194,11 @@ class SetupController extends Controller
                 'locale' => ['required', 'in:th,en'],
                 'timezone' => ['required', 'timezone'],
                 'base_currency' => ['required', 'string', 'size:3'],
+                'posting_sla_minutes' => ['required', 'integer', 'between:1,10080'],
+                'recost_sla_minutes' => ['required', 'integer', 'between:1,10080'],
+                'audit_retention_days' => ['required', 'integer', 'between:1,36500'],
+                'file_retention_days' => ['required', 'integer', 'between:1,36500'],
+                'production_enabled' => ['required', 'boolean'],
             ])->validate();
             $setup->saveCompany($data);
 
@@ -458,7 +568,7 @@ class SetupController extends Controller
         return $spreadsheets->download('installer-errors-'.$batch->id.'.xlsx', [['title' => 'Errors', 'headings' => ['row_number', 'errors', 'source'], 'rows' => $rows]]);
     }
 
-    private function render(Request $request, ?string $notice = null, ?array $validation = null): View
+    private function render(Request $request, ?string $notice = null, ?array $validation = null, ?array $uatSeedReport = null): View
     {
         abort_unless((bool) config('erp.setup.enabled'), 404);
 
@@ -492,6 +602,8 @@ class SetupController extends Controller
             'isLive' => $isLive,
             'liveSession' => $session,
             'availableUpdates' => $availableUpdates,
+            'uatSeedEnabled' => (bool) config('erp.setup.uat_seed_enabled'),
+            'uatSeedReport' => $uatSeedReport,
         ]);
     }
 

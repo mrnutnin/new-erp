@@ -8,6 +8,7 @@ use App\Models\Program;
 use App\Models\Role;
 use App\Models\User;
 use App\Models\Warehouse;
+use App\Modules\Settings\Services\GlobalSettings;
 use Database\Seeders\WmsIssueTypeSeeder;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
@@ -16,8 +17,10 @@ class CustomerSetupService
 {
     public function saveCompany(array $values): CompanySetting
     {
-        return DB::transaction(function () use ($values): CompanySetting {
+        $previousVersion = 0;
+        $company = DB::transaction(function () use ($values, &$previousVersion): CompanySetting {
             $company = CompanySetting::query()->firstOrNew(['id' => 1]);
+            $previousVersion = (int) ($company->settings_version ?: 0);
             $company->fill([
                 'company_name' => $values['company_name'],
                 'company_address' => $values['company_address'] ?? null,
@@ -26,8 +29,8 @@ class CustomerSetupService
                 'timezone' => $values['timezone'] ?? 'Asia/Bangkok',
                 'base_currency' => $values['base_currency'] ?? 'THB',
                 'date_format' => 'd/m/Y',
-                'business_profile' => 'TRADING',
-                'production_enabled' => false,
+                'business_profile' => ($values['production_enabled'] ?? false) ? 'MANUFACTURING' : 'TRADING',
+                'production_enabled' => (bool) ($values['production_enabled'] ?? false),
                 'asset_enabled' => true,
                 'accounting_profile' => 'PAE',
                 'inventory_costing_method' => 'AVG',
@@ -38,8 +41,12 @@ class CustomerSetupService
                 'default_withholding_tax_rate' => 3,
                 'tax_decimal_places' => 2,
                 'document_sequence_reset' => 'MONTHLY',
+                'posting_sla_minutes' => $values['posting_sla_minutes'] ?? 60,
+                'recost_sla_minutes' => $values['recost_sla_minutes'] ?? 60,
+                'audit_retention_days' => $values['audit_retention_days'] ?? 3650,
+                'file_retention_days' => $values['file_retention_days'] ?? 3650,
                 'effective_from' => now()->toDateString(),
-                'settings_version' => max(1, (int) ($company->settings_version ?: 1)),
+                'settings_version' => max(1, $previousVersion + 1),
             ]);
             $company->save();
 
@@ -58,6 +65,10 @@ class CustomerSetupService
 
             return $company;
         });
+
+        app(GlobalSettings::class)->forget($previousVersion);
+
+        return $company;
     }
 
     /** @param array<int, string> $moduleCodes */

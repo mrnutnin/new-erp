@@ -215,13 +215,18 @@ final class WorkflowRuntimeResolver
             $readiness[] = $this->readiness('wms.items', Item::query()->where('is_active', true)->count(), 'สร้างข้อมูลสินค้าให้พร้อมก่อนทำรายการ', 'wms.items.index', 'wms.items.view', true);
         }
         if ($warehouseId !== null && $user->hasPermission('wms.opening-balances.view')) {
+            // A zero starting balance is valid; require a posting only after an opening batch has been drafted.
+            $hasPostedOpening = OpeningBalanceBatch::query()->where('warehouse_id', $warehouseId)->where('status', 'POSTED')->exists();
+            $hasDraftOpening = OpeningBalanceBatch::query()->where('warehouse_id', $warehouseId)->where('status', 'DRAFT')->exists();
+            $openingReady = $hasPostedOpening || ! $hasDraftOpening;
             $readiness[] = $this->readiness(
                 'wms.opening-balances',
-                OpeningBalanceBatch::query()->where('warehouse_id', $warehouseId)->where('status', 'POSTED')->count(),
-                'สร้างหรือนำเข้า Opening Balance แล้ว Post ให้เรียบร้อยก่อนเริ่มรับ–จ่าย',
+                $openingReady ? 0 : 1,
+                $hasPostedOpening
+                    ? 'Opening Balance ถูก Post แล้ว'
+                    : ($hasDraftOpening ? 'ตรวจสอบและ Post หรือยกเลิกร่าง Opening Balance ก่อนเริ่มงาน' : 'คลังนี้เริ่มจากยอดศูนย์ได้; หากมี Stock ยกมาจริง ให้นำเข้าและ Post Opening Balance ก่อนรับ–จ่าย'),
                 'wms.opening-balances.index',
                 'wms.opening-balances.view',
-                true,
             );
         }
         if ($warehouseId !== null && $user->hasPermission('purchasing.purchase-documents.view')) {

@@ -30,7 +30,7 @@ class SystemDefaultOrchestrator
         'wms.production_finished_receipt_mapping' => '1.1',
         'core.document_sequences' => '1.1',
         'core.role_templates' => '1.2',
-        'wms.issue_types' => '1.2',
+        'wms.issue_types' => '1.3',
     ];
 
     public function __construct(private readonly InstallerStateStore $stateStore) {}
